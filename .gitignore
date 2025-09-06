@@ -1,0 +1,17 @@
+# Node / React
+node_modules/
+build/
+dist/
+.cache/
+*.log
+*.env
+
+# VSCode / Windows
+.vscode/
+*.code-workspace
+Thumbs.db
+.DS_Store
+
+# Ignore backend/test folders if not needed
+app/
+tests/
