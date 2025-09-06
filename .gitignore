@@ -26,4 +26,3 @@ Thumbs.db
 # Optional backend/frontend ignores
 agenda frontend/node_modules/
 tests/
-agenda frontend/package-lock.json
