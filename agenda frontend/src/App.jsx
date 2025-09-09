@@ -7,6 +7,8 @@ import MainFeature from "./features/MainFeature/MainFeature";
 import ImageRecognition from "./features/ImageRecognition/ImageRecognition";
 import KeyInsights from "./features/KeyInsights/KeyInsights";
 import HandsFree from "./features/HandsFree/HandsFree";
+import Overlay from "./features/MainFeature/Overlay";
+import HiddenTest from "./HiddenTest";
 
 function App() {
   return (
@@ -22,6 +24,8 @@ function App() {
             <Route path="/image-recognition" element={<ImageRecognition />} />
             <Route path="/key-insights" element={<KeyInsights />} />
             <Route path="/hands-free" element={<HandsFree />} />
+            <Route path="/overlay" element={<Overlay />} />
+            <Route path="/hidden-test" element={<HiddenTest />} />
 
             <Route
               path="/"
