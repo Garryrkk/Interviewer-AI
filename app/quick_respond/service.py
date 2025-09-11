@@ -1,142 +1,157 @@
-# service.py
-import os
-import asyncio
 import logging
-from typing import Tuple, List
+import asyncio
+import random
+from typing import Optional
+import re
 
-try:
-    import httpx
-except Exception:
-    httpx = None
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-logger = logging.getLogger("quickrespond.service")
-logger.setLevel(logging.INFO)
+class QuickResponseService:
 
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")  # optional
-OPENAI_API_URL = os.getenv("OPENAI_API_URL", "https://api.openai.com/v1/chat/completions")
-OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")  # change as needed
+    def __init__(self):
+        self.response_templates = {
+            "professional": [
+                "Thank you for your question. Based on my analysis, {}",
+                "I appreciate your inquiry. Here's my professional assessment: {}",
+                "After careful consideration, I believe {}",
+            ],
+            "casual": [
+                "Hey! So from what I can see, {}",
+                "Good question! I think {}",
+                "Hmm, here's what I'm thinking: {}",
+            ],
+            "technical": [
+                "From a technical perspective, {}",
+                "The technical analysis shows that {}",
+                "Based on the specifications, {}",
+            ],
+            "general": [
+                "Here's my response: {}",
+                "Based on your input, {}",
+                "My suggestion would be: {}",
+            ]
+        }
+    
+    def preprocess_prompt(self, prompt: str) -> str:
+        prompt = re.sub(r'\s+', ' ', prompt.strip())
+        prompt = re.sub(r'[<>{}[\]\\]', '', prompt)
+        if len(prompt) > 2000:
+            prompt = prompt[:2000] + "..."
+        
+        return prompt
+    
+    def postprocess_response(self, response: str, max_length: int = 200) -> str:
+        response = response.strip()
 
-async def call_openai_chat(prompt: str, max_tokens: int = 80) -> str:
-    """
-    Call OpenAI ChatCompletions (if key available).
-    This function uses the standard API shape for chat completions.
-    If you use another LLM provider, adapt headers/payload here.
-    """
-    if not OPENAI_API_KEY:
-        raise RuntimeError("OPENAI_API_KEY not configured")
+        if response and not response.endswith(('.', '!', '?')):
+            response += '.'
 
-    if httpx is None:
-        raise RuntimeError("httpx is required to call external APIs. `pip install httpx`")
-
-    headers = {
-        "Authorization": f"Bearer {OPENAI_API_KEY}",
-        "Content-Type": "application/json",
-    }
-
-    payload = {
-        "model": OPENAI_MODEL,
-        "messages": [
-            {"role": "system", "content": "You are a helpful interview-coach assistant. Provide concise, actionable responses."},
-            {"role": "user", "content": prompt}
-        ],
-        "max_tokens": max_tokens,
-        "temperature": 0.3,
-    }
-
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        r = await client.post(OPENAI_API_URL, json=payload, headers=headers)
-        r.raise_for_status()
-        data = r.json()
-
-    # This parsing may vary depending on provider. For OpenAI: choices[0].message.content
-    if "choices" in data and len(data["choices"]) > 0:
-        return data["choices"][0]["message"]["content"].strip()
-    # fallback
-    return data.get("text") or str(data)
-
-def _simple_style_guidelines(simplify: bool) -> str:
-    if simplify:
-        return (
-            "Simplify language to an easy-to-understand short answer (one or two sentences). "
-            "Use short words, avoid jargon, and if possible give a 1-line example."
+        if len(response) > max_length:
+            sentences = response.split('. ')
+            truncated = ""
+            for sentence in sentences:
+                if len(truncated + sentence + '. ') <= max_length:
+                    truncated += sentence + '. '
+                else:
+                    break
+            response = truncated.rstrip() or response[:max_length-3] + "..."
+        
+        return response
+    
+    def get_response_template(self, response_type: str) -> str:
+        templates = self.response_templates.get(response_type, self.response_templates["general"])
+        return random.choice(templates)
+    
+    async def generate_quick_response_async(
+        self, 
+        prompt: str, 
+        context: Optional[str] = None,
+        response_type: str = "general",
+        max_length: int = 200
+    ) -> str:
+        return await asyncio.to_thread(
+            self.generate_quick_response, 
+            prompt, 
+            context, 
+            response_type, 
+            max_length
         )
-    return (
-        "Give a concise interview-style response (about 1-2 short paragraphs). "
-        "Prefer STAR structure when applicable (Situation, Task, Action, Result). "
-        "Keep it actionable and professional."
-    )
-
-def _mock_quick_reply(text: str, simplify: bool) -> Tuple[str, List[str]]:
-    """
-    Heuristic mock generator for local testing without external LLM calls.
-    Returns (reply, suggestions)
-    """
-    # Basic heuristics:
-    # - If the text looks like a definition e.g., contains 'is' and short => short definition
-    # - If contains 'how' or 'why' => provide steps or reasons (shortened)
-    # - Otherwise produce a STAR-style concise answer skeleton + one-liner simplification if requested
-    lower = text.strip().lower()
-    suggestions = []
-
-    # Extract a short subject (first 6-10 words) for personalization
-    words = text.strip().split()
-    subject = " ".join(words[:8])
-
-    if any(q in lower for q in ["what is", "define", "explain"]):
-        reply = f"{subject} — In short: {('It appears to be ' + (subject if subject else 'the item'))}."
-        suggestions = [
-            "Keep it short and start with a 1-line definition.",
-            "Follow up with one example."
-        ]
-    elif any(q in lower for q in ["how to", "how do i", "how can i", "steps", "process"]):
-        reply = "Quick steps: 1) Identify goal. 2) Break task into smaller steps. 3) Execute and measure results."
-        suggestions = ["Give a specific example with numbers if possible."]
-    else:
-        # STAR-like skeleton
-        reply = ("Situation: Briefly set the scene. Action: Explain what you did. "
-                 "Result: Share measurable outcomes. Keep answers to ~60-90 seconds.")
-        suggestions = [
-            "Start with one sentence summarizing the context.",
-            "Mention concrete outcomes if you can (numbers, percentages)."
-        ]
-
-    if simplify:
-        # produce an even shorter plain-language reply
-        short = reply.split(".")[0]
-        reply = f"{short}. (Simpler: {short.split(':')[-1].trim() if ':' in short else short})"
-
-    # Ensure reply not too long
-    if len(reply) > 500:
-        reply = reply[:500].rsplit(" ", 1)[0] + "..."
-
-    return reply, suggestions
-
-async def generate_quick_reply(text: str, simplify: bool = False, max_tokens: int = 80) -> dict:
-    """
-    Main service entry. Tries to call an LLM provider if configured, otherwise
-    returns a mock reply. Returns dict matching QuickResponse schema.
-    """
-    text = (text or "").strip()
-    if not text:
-        return {"reply": "Please provide some text to analyze.", "suggestions": [], "source": "validation"}
-
-    # Build the prompt to send to the model (if available)
-    prompt = (
-        _simple_style_guidelines(simplify) + "\n\n"
-        + "User input:\n"
-        + text + "\n\n"
-        + ( "If the input is a description of something on-screen, produce a concise explanation tailored for a job interview candidate." )
-    )
-
-    # Prefer OpenAI if key set
-    if OPENAI_API_KEY:
+    
+    def generate_quick_response(
+        self, 
+        prompt: str, 
+        context: Optional[str] = None,
+        response_type: str = "general",
+        max_length: int = 200
+    ) -> str:
         try:
-            reply_text = await call_openai_chat(prompt, max_tokens=max_tokens)
-            # return as single reply with optional short suggestions from model (none for now)
-            return {"reply": reply_text, "suggestions": None, "source": "openai"}
-        except Exception as e:
-            logger.exception("OpenAI call failed, falling back to mock: %s", e)
+            logger.info(f"Generating response for prompt: {prompt[:50]}...")
+            clean_prompt = self.preprocess_prompt(prompt)
+            response_content = self._generate_mock_response(clean_prompt, context, response_type)
+            template = self.get_response_template(response_type)
+            formatted_response = template.format(response_content)
+            final_response = self.postprocess_response(formatted_response, max_length)
 
-    # Fallback: mock generator
-    reply, suggestions = _mock_quick_reply(text, simplify)
-    return {"reply": reply, "suggestions": suggestions, "source": "mock"}
+            logger.info(f"Successfully generated response of length: {len(final_response)}")
+            return final_response
+            
+        except Exception as e:
+            logger.error(f"Error generating quick response: {str(e)}")
+            raise Exception(f"Failed to generate response: {str(e)}")
+    
+    def _generate_mock_response(self, prompt: str, context: Optional[str], response_type: str) -> str:
+        prompt_lower = prompt.lower()
+        
+        if context:
+            context_lower = context.lower()
+            if "meeting" in context_lower or "presentation" in context_lower:
+                if "question" in prompt_lower:
+                    return "I understand your question. Let me provide a clear answer that addresses your concerns"
+                elif "problem" in prompt_lower or "issue" in prompt_lower:
+                    return "I see the challenge you're facing. Here's a practical solution we can implement"
+                else:
+                    return "Thank you for bringing this up. This is definitely worth discussing further"
+        
+        if "how" in prompt_lower:
+            return "there are several approaches to consider. The most effective method would be to start with the fundamentals"
+        elif "what" in prompt_lower:
+            return "this is an important topic that requires careful consideration of multiple factors"
+        elif "why" in prompt_lower:
+            return "the underlying reasons involve several key principles that I can explain"
+        elif "when" in prompt_lower:
+            return "the timing depends on various factors, but generally speaking, sooner is better than later"
+        elif "where" in prompt_lower:
+            return "the location or context matters significantly for this particular situation"
+        elif any(word in prompt_lower for word in ["problem", "issue", "error", "bug"]):
+            return "I can help you troubleshoot this. Let's break down the problem systematically"
+        elif any(word in prompt_lower for word in ["thank", "thanks", "appreciate"]):
+            return "you're very welcome! I'm glad I could assist you with this"
+        else:
+            return "this is an interesting point that deserves a thoughtful response"
+
+
+# Create a global instance
+quick_response_service = QuickResponseService()
+
+def generate_quick_response(
+    prompt: str, 
+    context: Optional[str] = None,
+    response_type: str = "general",
+    max_length: int = 200
+) -> str:
+    """
+    Generate a quick response - synchronous version
+    """
+    return quick_response_service.generate_quick_response(prompt, context, response_type, max_length)
+
+async def generate_quick_response_async(
+    prompt: str, 
+    context: Optional[str] = None,
+    response_type: str = "general",
+    max_length: int = 200
+) -> str:
+    """
+    Generate a quick response - asynchronous version
+    """
+    return await quick_response_service.generate_quick_response_async(prompt, context, response_type, max_length)
