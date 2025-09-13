@@ -6,7 +6,7 @@ class PreopConfig(BaseModel):
     device: str = Field(..., description="Audio input device identifier")
     noise_cancellation: bool = Field(default=False, description="Enable noise cancelation")
     sample_rate: Optional[int] = Field(default=16000, description="Audio sample rate in Hz")
-    language: Optional[str] = Field(default="en-US, description="Recognition language")
+    language: Optional[str] = Field(default="en-US", description="Recognition language")
 
 class PreopResponse(BaseModel):
     status: str = Field(..., description="Configuration status")
@@ -40,7 +40,7 @@ class Insight(BaseModel):
     content: str = Field(..., description="Insight content")
     confidence: float = Field(..., description="Confidence score")
     timestamp: Optional[float] = Field(default=None, description="Related timestamp in audio")
-
+   
 class RecognitionResponse(BaseModel):
     """Complete voice recognition response"""
     session_id: str = Field(..., description="Session identifier")

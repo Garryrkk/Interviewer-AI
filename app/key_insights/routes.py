@@ -4,7 +4,7 @@ from typing import Optional, List
 import logging
 from datetime import datetime
 
-from .service import insights_service
+from .services import insights_service
 from .schemas import (
     KeyInsightRequest, 
     KeyInsightResponse, 
