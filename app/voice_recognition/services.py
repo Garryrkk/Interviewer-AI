@@ -20,7 +20,7 @@ from .schemas import (
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-a
+
 class VoiceRecognitionService:
     def __init__(self, ollama_host: str = "http://localhost:11434", model_name: str = "nous-hermes2"):
         self.active_sessions: Dict[str, dict] = {}
@@ -28,8 +28,36 @@ class VoiceRecognitionService:
         self.model_name = model_name
         self.supported_formats = ['wav', 'mp3', 'flac', 'm4a']
         self.max_chunk_size = 1024 * 1024  
+        self.initialize = False  # Initialize attribute added
+
+    async def initialize_service(self) -> bool:
+        """Initialize the voice recognition service"""
+        try:
+            # Check if Ollama service is available
+            ollama_ready = await self._check_ollama_service()
+            
+            if ollama_ready:
+                self.initialize = True
+                logger.info("VoiceRecognitionService initialized successfully")
+            else:
+                logger.warning("VoiceRecognitionService initialization failed - Ollama service not ready")
+            
+            return self.initialize
+            
+        except Exception as e:
+            logger.error(f"Service initialization error: {str(e)}")
+            self.initialize = False
+            return False
+
+    def is_initialized(self) -> bool:
+        """Check if the service is initialized"""
+        return self.initialize
 
     async def _call_ollama(self, prompt: str, system_prompt: str = "") -> str:
+        if not self.initialize:
+            logger.warning("Service not initialized. Call initialize_service() first.")
+            return ""
+            
         try:
             payload = {
                 "model": self.model_name,
@@ -178,6 +206,9 @@ class VoiceRecognitionService:
         return min(0.95, len(text) / 100.0)
     
     async def start_recognition_session(self, session: RecognitionSession) -> SessionStatus:
+        if not self.initialize:
+            raise RuntimeError("Service not initialized. Call initialize_service() first.")
+            
         try:
             session_id = session.session_id or str(uuid.uuid4())
             
@@ -398,5 +429,3 @@ voice_service = VoiceRecognitionService(
     ollama_host="http://localhost:11434",  
     model_name="nous-hermes2" 
 )
-
-

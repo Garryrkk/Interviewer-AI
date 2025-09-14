@@ -1,0 +1,1 @@
+FROM C:\llama-gpu\models\Nous-Hermes-2-Mistral-7B-DPO.Q4_K_S.gguf

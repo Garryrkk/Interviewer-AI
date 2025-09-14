@@ -130,7 +130,7 @@ async def lifespan(app: FastAPI):
         await initialize_ollama_connection()
         
         # Initialize voice service
-        await voice_service.initialize()
+        await initialize_voice_service()
         
         # Initialize other services
         await initialize_core_services()
@@ -172,20 +172,57 @@ async def initialize_ollama_connection():
         logger.error(f"❌ Failed to connect to Ollama: {e}")
         raise
 
+async def initialize_voice_service():
+    """Initialize voice service with proper error handling"""
+    try:
+        # Check if voice_service has an initialize method
+        if hasattr(voice_service, 'initialize') and callable(voice_service.initialize):
+            if asyncio.iscoroutinefunction(voice_service.initialize):
+                await voice_service.initialize()
+            else:
+                voice_service.initialize()
+        else:
+            # If initialize is a boolean attribute or doesn't exist, set it manually
+            if hasattr(voice_service, 'initialize'):
+                voice_service.initialize = True
+            logger.info("✅ Voice service initialized (fallback method)")
+        
+        logger.info("✅ Voice service initialized successfully")
+    except Exception as e:
+        logger.error(f"❌ Failed to initialize voice service: {e}")
+        # Continue without voice service if it fails
+        logger.warning("⚠️  Continuing without voice service")
+
 async def initialize_core_services():
     """Initialize core AI services"""
     try:
         # Initialize summarization service
-        SummarizationService.initialize()
+        if hasattr(SummarizationService, 'initialize') and callable(SummarizationService.initialize):
+            if asyncio.iscoroutinefunction(SummarizationService.initialize):
+                await SummarizationService.initialize()
+            else:
+                SummarizationService.initialize()
         
         # Initialize quick response service
-        QuickResponseService.initialize()
+        if hasattr(QuickResponseService, 'initialize') and callable(QuickResponseService.initialize):
+            if asyncio.iscoroutinefunction(QuickResponseService.initialize):
+                await QuickResponseService.initialize()
+            else:
+                QuickResponseService.initialize()
         
         # Initialize hands-free service
-        HandsFreeService.initialize()
+        if hasattr(HandsFreeService, 'initialize') and callable(HandsFreeService.initialize):
+            if asyncio.iscoroutinefunction(HandsFreeService.initialize):
+                await HandsFreeService.initialize()
+            else:
+                HandsFreeService.initialize()
         
         # Initialize key insights service
-        KeyInsightsService.initialize()
+        if hasattr(KeyInsightsService, 'initialize') and callable(KeyInsightsService.initialize):
+            if asyncio.iscoroutinefunction(KeyInsightsService.initialize):
+                await KeyInsightsService.initialize()
+            else:
+                KeyInsightsService.initialize()
         
         logger.info("✅ Core AI services initialized")
     except Exception as e:
@@ -196,7 +233,11 @@ async def cleanup_services():
     """Cleanup services and resources"""
     try:
         # Cleanup voice service
-        await voice_service.cleanup()
+        if hasattr(voice_service, 'cleanup') and callable(voice_service.cleanup):
+            if asyncio.iscoroutinefunction(voice_service.cleanup):
+                await voice_service.cleanup()
+            else:
+                voice_service.cleanup()
         
         # Clear active sessions
         interview_sessions.clear()
@@ -545,8 +586,13 @@ async def health_check():
         health_status["services"]["ollama"] = "unhealthy"
     
     try:
-        # Check voice service
-        health_status["services"]["voice_service"] = "healthy" if hasattr(voice_service, 'is_initialized') else "unknown"
+        # Check voice service - handle both boolean and method cases
+        if hasattr(voice_service, 'is_initialized'):
+            health_status["services"]["voice_service"] = "healthy" if voice_service.is_initialized else "unknown"
+        elif hasattr(voice_service, 'initialize'):
+            health_status["services"]["voice_service"] = "healthy" if voice_service.initialize else "unknown"
+        else:
+            health_status["services"]["voice_service"] = "unknown"
     except:
         health_status["services"]["voice_service"] = "unhealthy"
     

@@ -1,24 +1,32 @@
 import React, { useState } from "react";
-import ReactDOM from "react-dom/client";
-import App from "./App";
+import App from "./src/App";
 import "./index.css"; // only if you have styles
+import React, { useState } from 'react';
 import { 
   Camera, 
-  Zap, 
-  Activity, 
-  FileText, 
-  Key, 
+  Monitor, 
   Mic, 
+  MicOff, 
+  Volume2, 
   Eye, 
   EyeOff, 
-  Monitor,
-  Volume2,
-  Circle,
-  Home,
-  ChevronLeft,
-  ChevronRight,
+  FileText, 
+  Key, 
+  Zap, 
+  Menu,
   Settings,
-  User
+  User,
+  Home,
+  Activity,
+  BarChart3,
+  Play,
+  Square,
+  Circle,
+  Minimize2,
+  Maximize2,
+  X,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 
 const InvisibleAI = () => {
@@ -212,7 +220,7 @@ const InvisibleAI = () => {
             <p className="text-slate-400 text-sm">Voice transcription will appear here in real-time...</p>
           </div>
         </div>
-      </div>    
+      </div>
     </div>
   );
 
@@ -495,7 +503,7 @@ const InvisibleAI = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-slate-100 font-sans">
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-slate-100 font-system">
       {/* Desktop Window Frame */}
       <div className="bg-slate-800/50 backdrop-blur border-b border-slate-700 px-6 py-3">
         <div className="flex items-center justify-between">
@@ -584,36 +592,21 @@ const InvisibleAI = () => {
   );
 };
 
-// Main App Component that integrates with your existing App.jsx
-const AppWithInvisibleAI = () => {
-  const [showInvisibleAI, setShowInvisibleAI] = React.useState(false);
-
-  // You can toggle between your existing App and InvisibleAI
-  if (showInvisibleAI) {
-    return <InvisibleAI />;
-  }
-
-  return (
-    <div>
-      <div className="fixed top-4 right-4 z-50">
-        <button
-          onClick={() => setShowInvisibleAI(true)}
-          className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg shadow-lg transition-colors"
-        >
-          Switch to Invisible AI
-        </button>
-      </div>
-      <App />
-    </div>
-  );
+// This is the App component that would normally be in src/App.js
+const App = () => {
+  return <InvisibleAI />;
 };
 
-// Render the application
-const root = ReactDOM.createRoot(document.getElementById('root'));
-root.render(
-  <React.StrictMode>
-    <AppWithInvisibleAI />
-  </React.StrictMode>
-);
+// This simulates what would be in your index.js file to utilize ReactDOM
+// In a real setup, this would be in a separate file
+if (typeof document !== 'undefined') {
+  const root = document.getElementById('root');
+  if (root) {
+    import('react-dom/client').then(({ createRoot }) => {
+      const reactRoot = createRoot(root);
+      reactRoot.render(<App />);
+    });
+  }
+}
 
-export default InvisibleAI;
+export default App;
