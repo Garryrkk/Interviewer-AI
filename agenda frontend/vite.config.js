@@ -5,7 +5,7 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   plugins: [react()],
   server: {
-    port: 0, // Use port 0 for dynamic port assignment
+    port: 61863, // Use port 0 for dynamic port assignment
     host: 'localhost',
     strictPort: false, // Allow Vite to find an alternative port if needed
     open: false, // Don't automatically open browser since Electron will handle this

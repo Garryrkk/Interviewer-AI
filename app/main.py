@@ -107,6 +107,7 @@ from app.MainFeature import routes as mainfeature_routes
 from app.handFree import routes as handsfree_routes
 from app.image_recognition import routes as image_recognition_routes
 from app.voice_recognition import routes as voice_recognition_routes
+from fastapi.middleware.cors import CORSMiddleware
 
 # Configure logging
 logging.basicConfig(
@@ -254,6 +255,14 @@ app = FastAPI(
     lifespan=lifespan,
     docs_url="/docs",
     redoc_url="/redoc"
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:61863"],  # your frontend dev URL
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # Security Middleware
