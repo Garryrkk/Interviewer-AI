@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interviewer AI Dashboard</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- React and React DOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    
+    <!-- React Router -->
+    <script src="https://unpkg.com/react-router-dom@6/dist/umd/react-router-dom.production.min.js"></script>
+    
+    <!-- Babel for JSX transformation -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <style>
+        /* Additional custom styles if needed */
+        body {
+            margin: 0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+                'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+                sans-serif;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+        
+        #root {
+            min-height: 100vh;
+        }
+        
+        /* Loading spinner */
+        .loading {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            font-size: 18px;
+            color: #6b7280;
+        }
+    </style>
+</head>
+<body>
+    <div id="root">
+        <div class="loading">
+            Loading Interviewer AI Dashboard...
+        </div>
+    </div>
+
+    <script type="text/babel">
+        const { BrowserRouter: Router, Route, Routes } = ReactRouterDOM;
+        
+        // Placeholder components for your features
+        const QuickRespond = () => (
+            <div className="p-8">
+                <h1 className="text-2xl font-bold mb-4">Quick Respond</h1>
+                <p className="text-gray-600">Quick response feature implementation goes here.</p>
+            </div>
+        );
+        
+        const Summarization = () => (
+            <div className="p-8">
+                <h1 className="text-2xl font-bold mb-4">Summarization</h1>
+                <p className="text-gray-600">Text summarization feature implementation goes here.</p>
+            </div>
+        );
+        
+        const VoiceRecognition = () => (
+            <div className="p-8">
+                <h1 className="text-2xl font-bold mb-4">Voice Recognition</h1>
+                <p className="text-gray-600">Voice recognition feature implementation goes here.</p>
+            </div>
+        );
+        
+        const MainFeature = () => (
+            <div className="p-8">
+                <h1 className="text-2xl font-bold mb-4">Main Feature</h1>
+                <p className="text-gray-600">Main feature implementation goes here.</p>
+            </div>
+        );
+        
+        const ImageRecognition = () => (
+            <div className="p-8">
+                <h1 className="text-2xl font-bold mb-4">Image Recognition</h1>
+                <p className="text-gray-600">Image recognition feature implementation goes here.</p>
+            </div>
+        );
+        
+        const KeyInsights = () => (
+            <div className="p-8">
+                <h1 className="text-2xl font-bold mb-4">Key Insights</h1>
+                <p className="text-gray-600">Key insights feature implementation goes here.</p>
+            </div>
+        );
+        
+        const HandsFree = () => (
+            <div className="p-8">
+                <h1 className="text-2xl font-bold mb-4">Hands Free</h1>
+                <p className="text-gray-600">Hands-free feature implementation goes here.</p>
+            </div>
+        );
+        
+        const Overlay = () => (
+            <div className="p-8">
+                <h1 className="text-2xl font-bold mb-4">Overlay</h1>
+                <p className="text-gray-600">Overlay feature implementation goes here.</p>
+            </div>
+        );
+        
+        const HiddenTest = () => (
+            <div className="p-8">
+                <h1 className="text-2xl font-bold mb-4">Hidden Test</h1>
+                <p className="text-gray-600">Hidden test feature implementation goes here.</p>
+            </div>
+        );
+
+        // Navigation component
+        const Navigation = () => (
+            <nav className="bg-gray-800 text-white p-4">
+                <div className="container mx-auto">
+                    <div className="flex flex-wrap gap-4">
+                        <a href="/" className="hover:text-gray-300">Home</a>
+                        <a href="/quick-respond" className="hover:text-gray-300">Quick Respond</a>
+                        <a href="/summarization" className="hover:text-gray-300">Summarization</a>
+                        <a href="/voice-recognition" className="hover:text-gray-300">Voice Recognition</a>
+                        <a href="/main-feature" className="hover:text-gray-300">Main Feature</a>
+                        <a href="/image-recognition" className="hover:text-gray-300">Image Recognition</a>
+                        <a href="/key-insights" className="hover:text-gray-300">Key Insights</a>
+                        <a href="/hands-free" className="hover:text-gray-300">Hands Free</a>
+                        <a href="/overlay" className="hover:text-gray-300">Overlay</a>
+                    </div>
+                </div>
+            </nav>
+        );
+        
+        // Main App component matching your structure
+        function App() {
+            return (
+                <Router>
+                    <div className="flex flex-col min-h-screen">
+                        <Navigation />
+                        
+                        {/* Main Content */}
+                        <main className="flex-grow">
+                            <Routes>
+                                <Route path="/quick-respond" element={<QuickRespond />} />
+                                <Route path="/summarization" element={<Summarization />} />
+                                <Route path="/voice-recognition" element={<VoiceRecognition />} />
+                                <Route path="/main-feature" element={<MainFeature />} />
+                                <Route path="/image-recognition" element={<ImageRecognition />} />
+                                <Route path="/key-insights" element={<KeyInsights />} />
+                                <Route path="/hands-free" element={<HandsFree />} />
+                                <Route path="/overlay" element={<Overlay />} />
+                                <Route path="/hidden-test" element={<HiddenTest />} />
+
+                                <Route
+                                    path="/"
+                                    element={
+                                        <div className="text-center mt-20">
+                                            <h1 className="text-3xl font-semibold text-gray-800">
+                                                Welcome to the Interviewer AI Dashboard
+                                            </h1>
+                                            <p className="mt-4 text-gray-600">
+                                                Select a feature from the navigation menu to get started.
+                                            </p>
+                                        </div>
+                                    }
+                                />
+                            </Routes>
+                        </main>
+
+                        {/* Footer */}
+                        <footer className="text-center py-4 text-gray-500 text-sm border-t">
+                            © {new Date().getFullYear()}
+                        </footer>
+                    </div>
+                </Router>
+            );
+        }
+
+        // Render the app
+        ReactDOM.render(<App />, document.getElementById('root'));
+    </script>
+</body>
+</html>
