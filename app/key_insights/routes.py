@@ -140,7 +140,6 @@ async def health_check():
             }
         )
 
-@router.exception_handler(HTTPException)
 async def http_exception_handler(request, exc: HTTPException):
     """Handle HTTP exceptions and return structured error response."""
     return JSONResponse(
@@ -151,7 +150,6 @@ async def http_exception_handler(request, exc: HTTPException):
         ).dict()
     )
 
-@router.exception_handler(Exception)
 async def general_exception_handler(request, exc: Exception):
     """Handle general exceptions and return structured error response."""
     logger.error(f"Unhandled exception: {str(exc)}")

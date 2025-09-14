@@ -1,11 +1,11 @@
 from fastapi import APIRouter
-from schemas import (
+from .schemas import (
     ScreenCaptureRequest,
     ScreenCaptureResponse,
     CameraCaptureRequest,
     CameraCaptureResponse,
 )
-from service import analyze_screen, analyze_camera
+from .service import analyze_screen, analyze_camera
 
 router = APIRouter()
 

@@ -20,7 +20,7 @@ from .schemas import (
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
+a
 class VoiceRecognitionService:
     def __init__(self, ollama_host: str = "http://localhost:11434", model_name: str = "nous-hermes2"):
         self.active_sessions: Dict[str, dict] = {}

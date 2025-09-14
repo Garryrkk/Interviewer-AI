@@ -6,9 +6,9 @@ import base64
 from typing import Dict, List, Optional
 import logging
 
-from .service import VoiceService
+from .services import VoiceRecognitionService
 from .schemas import (
-    PreopConfig, 
+    PreopConfig,   
     PreopResponse, 
     AudioChunk, 
     ProcessingResponse, 
@@ -24,8 +24,8 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/voice", tags=["voice"])
 
 # Initialize service
-voice_service = VoiceService()
-
+voice_service = VoiceRecognitionService()   
+  
 # Active WebSocket connections for real-time processing
 active_connections: Dict[str, WebSocket] = {}
 
@@ -265,7 +265,6 @@ async def force_close_session(session_id: str):
         raise HTTPException(status_code=500, detail=f"Failed to close session: {str(e)}")
 
 
-@router.exception_handler(Exception)
 async def general_exception_handler(request, exc):
     """
     General exception handler for voice routes.

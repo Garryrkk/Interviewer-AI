@@ -15,3 +15,4 @@ class CameraCaptureRequest(BaseModel):
 class CameraCaptureResponse(BaseModel):
     emotion: str       # e.g. "stressed", "confused", "neutral"
     advice: str        # suggestion or simplified answer
+   

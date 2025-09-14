@@ -2,14 +2,17 @@
 import logging
 import asyncio
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, HTTPException, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.exception_handlers import http_exception_handler
+from fastapi.exceptions import RequestValidationError, ResponseValidationError
 import uvicorn
 from typing import Dict, Any
 import time
+from starlette.exceptions import HTTPException as StarletteHTTPException
+import traceback
 
 # Import all schemas - keeping them as requested
 from app.summarization.schemas import (
@@ -254,21 +257,182 @@ async def add_process_time_header(request, call_next):
     response.headers["X-Process-Time"] = str(process_time)
     return response
 
-# Enhanced exception handler
+# Enhanced Exception handlers
 @app.exception_handler(HTTPException)
-async def custom_http_exception_handler(request, exc):
-    logger.error(f"HTTP Exception: {exc.status_code} - {exc.detail} - Path: {request.url.path}")
-    return await http_exception_handler(request, exc)
+async def custom_http_exception_handler(request: Request, exc: HTTPException):
+    """Handle HTTP exceptions with detailed logging"""
+    logger.warning(f"HTTP Exception: {exc.status_code} - {exc.detail} - Path: {request.url.path} - Method: {request.method}")
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "error": "HTTP Exception",
+            "message": exc.detail,
+            "status_code": exc.status_code,
+            "path": str(request.url.path),
+            "method": request.method,
+            "timestamp": time.time()
+        }
+    )
 
-@app.exception_handler(Exception)
-async def global_exception_handler(request, exc):
-    logger.error(f"Unhandled Exception: {str(exc)} - Path: {request.url.path}")
+@app.exception_handler(StarletteHTTPException)
+async def starlette_http_exception_handler(request: Request, exc: StarletteHTTPException):
+    """Handle Starlette HTTP exceptions"""
+    logger.warning(f"Starlette HTTP Exception: {exc.status_code} - {exc.detail} - Path: {request.url.path}")
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "error": "HTTP Exception",
+            "message": exc.detail,
+            "status_code": exc.status_code,
+            "path": str(request.url.path),
+            "timestamp": time.time()
+        }
+    )
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    """Handle request validation errors with detailed field information"""
+    logger.error(f"Validation Error: {exc.errors()} - Path: {request.url.path} - Method: {request.method}")
+    
+    # Extract detailed error information
+    error_details = []
+    for error in exc.errors():
+        error_details.append({
+            "field": " -> ".join(str(loc) for loc in error["loc"]),
+            "message": error["msg"],
+            "type": error["type"],
+            "input": error.get("input")
+        })
+    
+    return JSONResponse(
+        status_code=422,
+        content={
+            "error": "Validation Error",
+            "message": "Request validation failed",
+            "details": error_details,
+            "path": str(request.url.path),
+            "method": request.method,
+            "timestamp": time.time()
+        }
+    )
+
+@app.exception_handler(ResponseValidationError)
+async def response_validation_exception_handler(request: Request, exc: ResponseValidationError):
+    """Handle response validation errors"""
+    logger.error(f"Response Validation Error: {exc.errors()} - Path: {request.url.path}")
     return JSONResponse(
         status_code=500,
         content={
-            "error": "Internal server error",
+            "error": "Response Validation Error",
+            "message": "Server response validation failed",
+            "path": str(request.url.path),
+            "timestamp": time.time()
+        }
+    )
+
+@app.exception_handler(asyncio.TimeoutError)
+async def timeout_exception_handler(request: Request, exc: asyncio.TimeoutError):
+    """Handle timeout errors"""
+    logger.error(f"Timeout Error: {str(exc)} - Path: {request.url.path}")
+    return JSONResponse(
+        status_code=408,
+        content={
+            "error": "Timeout Error",
+            "message": "Request timeout - operation took too long to complete",
+            "path": str(request.url.path),
+            "timestamp": time.time()
+        }
+    )
+
+@app.exception_handler(ConnectionError)
+async def connection_exception_handler(request: Request, exc: ConnectionError):
+    """Handle connection errors (e.g., Ollama service down)"""
+    logger.error(f"Connection Error: {str(exc)} - Path: {request.url.path}")
+    return JSONResponse(
+        status_code=503,
+        content={
+            "error": "Service Unavailable",
+            "message": "Unable to connect to required services",
+            "path": str(request.url.path),
+            "timestamp": time.time()
+        }
+    )
+
+@app.exception_handler(ValueError)
+async def value_error_exception_handler(request: Request, exc: ValueError):
+    """Handle value errors with context"""
+    logger.error(f"Value Error: {str(exc)} - Path: {request.url.path}")
+    return JSONResponse(
+        status_code=400,
+        content={
+            "error": "Invalid Value",
+            "message": f"Invalid input value: {str(exc)}",
+            "path": str(request.url.path),
+            "timestamp": time.time()
+        }
+    )
+
+@app.exception_handler(KeyError)
+async def key_error_exception_handler(request: Request, exc: KeyError):
+    """Handle missing key errors"""
+    logger.error(f"Key Error: {str(exc)} - Path: {request.url.path}")
+    return JSONResponse(
+        status_code=400,
+        content={
+            "error": "Missing Required Field",
+            "message": f"Required field missing: {str(exc)}",
+            "path": str(request.url.path),
+            "timestamp": time.time()
+        }
+    )
+
+@app.exception_handler(FileNotFoundError)
+async def file_not_found_exception_handler(request: Request, exc: FileNotFoundError):
+    """Handle file not found errors"""
+    logger.error(f"File Not Found Error: {str(exc)} - Path: {request.url.path}")
+    return JSONResponse(
+        status_code=404,
+        content={
+            "error": "File Not Found",
+            "message": f"Required file not found: {exc.filename}",
+            "path": str(request.url.path),
+            "timestamp": time.time()
+        }
+    )
+
+@app.exception_handler(PermissionError)
+async def permission_exception_handler(request: Request, exc: PermissionError):
+    """Handle permission errors"""
+    logger.error(f"Permission Error: {str(exc)} - Path: {request.url.path}")
+    return JSONResponse(
+        status_code=403,
+        content={
+            "error": "Permission Denied",
+            "message": "Insufficient permissions to perform this operation",
+            "path": str(request.url.path),
+            "timestamp": time.time()
+        }
+    )
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    """Handle all other unhandled exceptions with full traceback logging"""
+    # Get full traceback for logging
+    tb = traceback.format_exception(type(exc), exc, exc.__traceback__)
+    tb_str = "".join(tb)
+    
+    logger.error(f"Unhandled Exception: {str(exc)} - Path: {request.url.path} - Method: {request.method}")
+    logger.error(f"Full Traceback:\n{tb_str}")
+    
+    return JSONResponse(
+        status_code=500,
+        content={
+            "error": "Internal Server Error",
             "message": "An unexpected error occurred",
-            "path": str(request.url.path)
+            "exception_type": type(exc).__name__,
+            "path": str(request.url.path),
+            "method": request.method,
+            "timestamp": time.time()
         }
     )
 
