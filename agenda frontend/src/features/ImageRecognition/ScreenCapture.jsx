@@ -5,8 +5,20 @@ import {
   recognizeImage,
   generateInsightFromRecognition,
   formatRecognitionResult,
-} from "./screenCaptureUtils";
+} from "./ScreenCaptureUtils";
 import { sendQuickReply } from "../QuickRespond/quickRespondUtils";
+import { 
+  Monitor, 
+  Play, 
+  Square, 
+  Camera, 
+  Activity, 
+  Eye, 
+  EyeOff, 
+  Copy,
+  Circle,
+  Zap
+} from 'lucide-react';
 
 /**
  * Hello Bimari Gamari read from here
@@ -159,74 +171,201 @@ export default function ScreenCapture() {
   }
 
   return (
-    <div>
-      <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8 }}>
-        <button onClick={running ? stopStream : startStream}>
-          {running ? "Stop Screen Sharing" : "Start Screen Sharing"}
-        </button>
-
-        <button onClick={handleSnapshot} disabled={!running || processing}>
-          {processing ? "Processing…" : "Capture Now"}
-        </button>
-
-        <button onClick={toggleAutoDetect}>
-          {autoDetect ? "Auto-Detect: ON" : "Auto-Detect: OFF"}
-        </button>
-
-        <button onClick={copyLatest} disabled={!messages.length}>
-          Copy Latest
-        </button>
-      </div>
-
-      <div style={{ display: "flex", gap: 12 }}>
-        <div style={{ flex: 1, minWidth: 320 }}>
-          {/* Video element shows the shared screen stream */}
-          <div style={{ border: "1px solid #ddd", borderRadius: 6, overflow: "hidden" }}>
-            <video ref={videoRef} style={{ width: "100%", height: 240 }} muted playsInline />
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-slate-100 p-8">
+      <div className="max-w-7xl mx-auto space-y-8">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-4xl font-bold text-slate-100 mb-2 flex items-center space-x-3">
+              <Monitor className="text-blue-500" size={40} />
+              <span>Screen Capture</span>
+            </h1>
+            <p className="text-slate-400">Real-time screen monitoring and AI analysis</p>
           </div>
-
-          {/* Last snapshot preview */}
-          <div style={{ marginTop: 8 }}>
-            <strong>Last Snapshot:</strong>
-            {lastSnapshot ? (
-              <img
-                alt="snapshot"
-                src={URL.createObjectURL(lastSnapshot)}
-                style={{ display: "block", maxWidth: "100%", marginTop: 6, borderRadius: 6 }}
-              />
-            ) : (
-              <div style={{ color: "#666", marginTop: 6 }}>No snapshots yet</div>
-            )}
+          <div className="flex items-center space-x-4">
+            <div className={`flex items-center space-x-2 px-4 py-2 rounded-full text-sm font-medium ${
+              running ? 'bg-green-600 text-white' : 'bg-slate-700 text-slate-300'
+            }`}>
+              <Circle size={8} className={`fill-current ${running ? 'text-green-300' : 'text-slate-500'}`} />
+              <span>{running ? 'Active' : 'Standby'}</span>
+            </div>
           </div>
         </div>
 
-        {/* Right column: recognitions history & chat UI */}
-        <div style={{ width: 420 }}>
-          <div style={{ border: "1px solid #eee", padding: 8, borderRadius: 6, maxHeight: 420, overflowY: "auto" }}>
-            <h4>Recognition History</h4>
-            {recognitions.length === 0 && <div style={{ color: "#666" }}>No detections yet</div>}
-            {recognitions.map((r) => (
-              <div key={r.id} style={{ padding: 8, borderBottom: "1px solid #fafafa" }}>
-                <div style={{ fontWeight: 600 }}>{r.title}</div>
-                <div style={{ fontSize: 13, color: "#333" }}>{r.summary}</div>
-                <div style={{ fontSize: 12, color: "#666", marginTop: 6 }}>
-                  Confidence: {(r.confidence || 0).toFixed(2)} · Category: {r.category}
-                </div>
+        {/* Control Panel */}
+        <div className="bg-slate-800/50 backdrop-blur p-6 rounded-xl border border-slate-700">
+          <h3 className="text-xl font-semibold mb-4 text-slate-200">Control Panel</h3>
+          <div className="flex flex-wrap gap-4">
+            <button 
+              onClick={running ? stopStream : startStream}
+              className={`flex items-center space-x-3 py-3 px-6 rounded-lg font-medium transition-all ${
+                running 
+                  ? 'bg-red-600 hover:bg-red-700 text-white' 
+                  : 'bg-blue-600 hover:bg-blue-700 text-white'
+              }`}
+            >
+              {running ? <Square size={20} /> : <Play size={20} />}
+              <span>{running ? "Stop Screen Sharing" : "Start Screen Sharing"}</span>
+            </button>
+
+            <button 
+              onClick={handleSnapshot} 
+              disabled={!running || processing}
+              className={`flex items-center space-x-3 py-3 px-6 rounded-lg font-medium transition-all ${
+                !running || processing 
+                  ? 'bg-slate-700 text-slate-500 cursor-not-allowed' 
+                  : 'bg-green-600 hover:bg-green-700 text-white'
+              }`}
+            >
+              <Camera size={20} />
+              <span>{processing ? "Processing…" : "Capture Now"}</span>
+              {processing && <Activity size={16} className="animate-spin" />}
+            </button>
+
+            <button 
+              onClick={toggleAutoDetect}
+              className={`flex items-center space-x-3 py-3 px-6 rounded-lg font-medium transition-all ${
+                autoDetect 
+                  ? 'bg-purple-600 hover:bg-purple-700 text-white' 
+                  : 'bg-slate-700 hover:bg-slate-600 text-slate-300'
+              }`}
+            >
+              {autoDetect ? <Eye size={20} /> : <EyeOff size={20} />}
+              <span>{autoDetect ? "Auto-Detect: ON" : "Auto-Detect: OFF"}</span>
+            </button>
+
+            <button 
+              onClick={copyLatest} 
+              disabled={!messages.length}
+              className={`flex items-center space-x-3 py-3 px-6 rounded-lg font-medium transition-all ${
+                !messages.length 
+                  ? 'bg-slate-700 text-slate-500 cursor-not-allowed' 
+                  : 'bg-orange-600 hover:bg-orange-700 text-white'
+              }`}
+            >
+              <Copy size={20} />
+              <span>Copy Latest</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Main Content Grid */}
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
+          {/* Left Column - Video and Snapshot */}
+          <div className="xl:col-span-2 space-y-6">
+            {/* Video Stream */}
+            <div className="bg-slate-800/50 backdrop-blur p-6 rounded-xl border border-slate-700">
+              <h3 className="text-lg font-semibold mb-4 text-slate-200 flex items-center">
+                <Monitor className="mr-2" size={20} />
+                Live Screen Stream
+              </h3>
+              <div className="bg-slate-900/80 rounded-xl overflow-hidden border-2 border-slate-700">
+                <video 
+                  ref={videoRef} 
+                  className="w-full h-64 object-cover" 
+                  muted 
+                  playsInline 
+                  style={{ backgroundColor: '#1e293b' }}
+                />
               </div>
-            ))}
+            </div>
+
+            {/* Last Snapshot */}
+            <div className="bg-slate-800/50 backdrop-blur p-6 rounded-xl border border-slate-700">
+              <h3 className="text-lg font-semibold mb-4 text-slate-200 flex items-center">
+                <Camera className="mr-2" size={20} />
+                Latest Snapshot
+              </h3>
+              <div className="bg-slate-900/80 rounded-xl overflow-hidden border-2 border-dashed border-slate-600 min-h-48">
+                {lastSnapshot ? (
+                  <img
+                    alt="Latest snapshot"
+                    src={URL.createObjectURL(lastSnapshot)}
+                    className="w-full h-auto object-cover rounded-lg"
+                  />
+                ) : (
+                  <div className="flex items-center justify-center h-48 text-slate-400">
+                    <div className="text-center">
+                      <Camera size={48} className="mx-auto mb-2 text-slate-500" />
+                      <p>No snapshots captured yet</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
 
-          <div style={{ marginTop: 12, border: "1px solid #eee", padding: 8, borderRadius: 6, maxHeight: 300, overflowY: "auto" }}>
-            <h4>AI Chat</h4>
-            {messages.length === 0 && <div style={{ color: "#666" }}>No messages yet</div>}
-            {messages.map((m) => (
-              <div key={m.id} style={{ marginBottom: 8 }}>
-                <div style={{ fontSize: 12, color: "#888" }}>{m.from.toUpperCase()}</div>
-                <div style={{ background: m.from === "ai" ? "#eef6ff" : "#f7f7f7", padding: 8, borderRadius: 6 }}>
-                  {m.text}
-                </div>
+          {/* Right Column - Recognition History and Chat */}
+          <div className="space-y-6">
+            {/* Recognition History */}
+            <div className="bg-slate-800/50 backdrop-blur p-6 rounded-xl border border-slate-700">
+              <h3 className="text-lg font-semibold mb-4 text-slate-200 flex items-center">
+                <Zap className="mr-2" size={20} />
+                Recognition History
+              </h3>
+              <div className="bg-slate-900/80 rounded-lg p-4 max-h-80 overflow-y-auto">
+                {recognitions.length === 0 ? (
+                  <div className="text-center text-slate-400 py-8">
+                    <Activity size={48} className="mx-auto mb-2 text-slate-500" />
+                    <p>No detections yet</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {recognitions.map((r) => (
+                      <div key={r.id} className="p-4 bg-slate-800/50 rounded-lg border border-slate-700">
+                        <div className="font-semibold text-slate-200 mb-2">{r.title}</div>
+                        <div className="text-sm text-slate-300 mb-3">{r.summary}</div>
+                        <div className="flex justify-between items-center text-xs">
+                          <span className="text-slate-400">
+                            Confidence: <span className="text-blue-400">{(r.confidence || 0).toFixed(2)}</span>
+                          </span>
+                          <span className="px-2 py-1 bg-slate-700 text-slate-300 rounded-full">
+                            {r.category}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
-            ))}
+            </div>
+
+            {/* AI Chat */}
+            <div className="bg-slate-800/50 backdrop-blur p-6 rounded-xl border border-slate-700">
+              <h3 className="text-lg font-semibold mb-4 text-slate-200 flex items-center">
+                <Activity className="mr-2" size={20} />
+                AI Chat
+              </h3>
+              <div className="bg-slate-900/80 rounded-lg p-4 max-h-64 overflow-y-auto">
+                {messages.length === 0 ? (
+                  <div className="text-center text-slate-400 py-8">
+                    <div className="text-center">
+                      <Circle size={32} className="mx-auto mb-2 text-slate-500" />
+                      <p>No messages yet</p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {messages.map((m) => (
+                      <div key={m.id} className="space-y-1">
+                        <div className="text-xs font-medium text-slate-400 uppercase tracking-wide">
+                          {m.from}
+                        </div>
+                        <div className={`p-3 rounded-lg text-sm ${
+                          m.from === "ai" 
+                            ? "bg-blue-600/20 border border-blue-600/30 text-blue-100" 
+                            : m.from === "system"
+                            ? "bg-purple-600/20 border border-purple-600/30 text-purple-100"
+                            : "bg-slate-700/50 border border-slate-600 text-slate-200"
+                        }`}>
+                          {m.text}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       </div>

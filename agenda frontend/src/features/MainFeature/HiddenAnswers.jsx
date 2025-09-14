@@ -1,15 +1,15 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Send, Eye, EyeOff, Settings, Trash2, Copy, Check } from 'lucide-react';
+import { Send, Eye, EyeOff, Settings, Trash2, Copy, Check, Circle } from 'lucide-react';
 
 const HiddenAnswers = () => {
   const [answer, setAnswer] = useState('');
-  const [isOverlayVisible, setIsOverlayVisible] = useState(true); // Fixed typo
+  const [isOverlayVisible, setIsOverlayVisible] = useState(true);
   const [overlaySettings, setOverlaySettings] = useState({
     position: 'top-right',
     opacity: 0.9,
     theme: 'dark'
   });
-  const [isCopied, setIsCopied] = useState(false); // Fixed camelCase
+  const [isCopied, setIsCopied] = useState(false);
   const [isElectronAvailable, setIsElectronAvailable] = useState(false);
   const textareaRef = useRef(null);
 
@@ -22,7 +22,7 @@ const HiddenAnswers = () => {
   useEffect(() => {
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
-      textareaRef.current.style.height = textareaRef.current.scrollHeight + 'px'; // Fixed typo
+      textareaRef.current.style.height = textareaRef.current.scrollHeight + 'px';
     }
   }, [answer]);
 
@@ -38,7 +38,7 @@ const HiddenAnswers = () => {
         window.agenda.sendAnswer({
           text: answer,
           timestamp: new Date().toISOString(),
-          settings: overlaySettings // Fixed capitalization
+          settings: overlaySettings
         });
         console.log('Answer sent to overlay:', answer);
       } else {
@@ -46,7 +46,7 @@ const HiddenAnswers = () => {
         alert('Overlay feature requires Electron app. Answer logged to console.');
       }
     } catch (error) {
-      console.error('Error sending answer to overlay:', error); // Fixed string concatenation
+      console.error('Error sending answer to overlay:', error);
       alert('Failed to send answer to overlay.');
     }
   };
@@ -64,7 +64,7 @@ const HiddenAnswers = () => {
     try {
       await navigator.clipboard.writeText(answer);
       setIsCopied(true);
-      setTimeout(() => setIsCopied(false), 2000); // Fixed function name
+      setTimeout(() => setIsCopied(false), 2000);
     } catch (error) {
       console.error('Failed to copy to clipboard:', error);
     }
@@ -84,7 +84,7 @@ const HiddenAnswers = () => {
       sendToOverlay();
     }
     // Ctrl + Shift + C to clear
-    if (e.ctrlKey && e.shiftKey && e.key === 'C') { // Fixed key code
+    if (e.ctrlKey && e.shiftKey && e.key === 'C') {
       e.preventDefault();
       clearAnswer();
     }
@@ -94,181 +94,267 @@ const HiddenAnswers = () => {
     return text
       .split('\n')
       .map(line => line.trim())
-      .filter(line => line.length > 0) // Fixed typo
+      .filter(line => line.length > 0)
       .map((line, index) => {
         if (line.startsWith('.') || line.startsWith('-') || line.startsWith('*')) {
-          return `<li class="numbered-point">${line}</li>`; // Fixed template literal
+          return `<li class="numbered-point">${line}</li>`;
         }
         if (/^\d+\./.test(line)) {
-          return `<li class="numbered-point">${line}</li>`; // Fixed template literal and removed extra >
+          return `<li class="numbered-point">${line}</li>`;
         }
-        return `<p>${line}</p>`; // Added return for non-list items
+        return `<p>${line}</p>`;
       })
       .join('');
   };
 
   return (
-    <div className="hidden-answers-container max-w-4xl mx-auto p-6 bg-gradient-to-br from-blue-50 to-indigo-100 rounded-lg shadow-lg">
-      <div className="mb-6">
-        <h2 className="text-2xl font-bold text-gray-800 mb-2">
-          Hidden Answers
-        </h2>
-        <p className="text-gray-600 text-sm">
-          Send answers to your private overlay. Only you can see them during screen sharing.
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-slate-100 p-6">
+      <div className="max-w-6xl mx-auto space-y-8">
+        {/* Header */}
+        <div className="bg-slate-800/50 backdrop-blur p-8 rounded-xl border border-slate-700">
+          <div className="flex items-center space-x-4 mb-4">
+            <div className="w-12 h-12 bg-gradient-to-r from-purple-600 to-blue-600 rounded-xl flex items-center justify-center">
+              <Eye size={24} className="text-white" />
+            </div>
+            <div>
+              <h1 className="text-3xl font-bold text-slate-100">Hidden Answers</h1>
+              <p className="text-slate-400">Send answers to your private overlay. Only you can see them during screen sharing.</p>
+            </div>
+          </div>
+          
           {!isElectronAvailable && (
-            <span className="text-amber-600 font-medium ml-2">
-              (Electron app required for overlay feature)
-            </span>
+            <div className="bg-amber-900/20 border border-amber-600/30 rounded-lg p-4">
+              <div className="flex items-center space-x-2">
+                <Circle size={8} className="text-amber-500 fill-current" />
+                <span className="text-amber-400 font-medium">Electron app required for overlay feature</span>
+              </div>
+            </div>
           )}
-        </p>
-      </div>
-
-      {/* Status indicators */}
-      <div className="flex items-center gap-4 mb-4 p-3 bg-white/50 rounded-lg">
-        <div className="flex items-center gap-2">
-          <div className={`w-3 h-3 rounded-full ${isElectronAvailable ? 'bg-green-500' : 'bg-red-500'}`}></div>
-          <span className="text-sm font-medium">
-            Electron: {isElectronAvailable ? 'Connected' : 'Unavailable'}
-          </span>
         </div>
-        <div className="flex items-center gap-2">
-          {isOverlayVisible ? <Eye className="w-4 h-4 text-green-600" /> : <EyeOff className="w-4 h-4 text-gray-400" />}
-          <span className="text-sm font-medium">
-            Overlay: {isOverlayVisible ? 'Visible' : 'Hidden'}
-          </span>
-        </div>
-      </div>
 
-      {/* Main input area */}
-      <div className="space-y-4">
-        <div className="relative">
-          <textarea
-            ref={textareaRef}
-            value={answer}
-            onChange={(e) => setAnswer(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="Enter your answer or AI-generated response here...
+        {/* Status indicators */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="bg-slate-800/50 backdrop-blur p-6 rounded-xl border border-slate-700">
+            <h3 className="text-lg font-semibold mb-4 text-slate-200 flex items-center">
+              <Settings className="mr-2" size={20} />
+              System Status
+            </h3>
+            <div className="space-y-4">
+              <div className="flex items-center justify-between p-3 rounded-lg bg-slate-900/50">
+                <span className="text-slate-300 font-medium">Electron Connection</span>
+                <div className="flex items-center space-x-2">
+                  <Circle 
+                    size={8} 
+                    className={`fill-current ${isElectronAvailable ? 'text-green-500' : 'text-red-500'}`} 
+                  />
+                  <span className={`text-sm font-medium ${isElectronAvailable ? 'text-green-400' : 'text-red-400'}`}>
+                    {isElectronAvailable ? 'Connected' : 'Unavailable'}
+                  </span>
+                </div>
+              </div>
+              
+              <div className="flex items-center justify-between p-3 rounded-lg bg-slate-900/50">
+                <span className="text-slate-300 font-medium">Overlay Status</span>
+                <div className="flex items-center space-x-2">
+                  {isOverlayVisible ? <Eye className="w-4 h-4 text-green-500" /> : <EyeOff className="w-4 h-4 text-slate-500" />}
+                  <span className={`text-sm font-medium ${isOverlayVisible ? 'text-green-400' : 'text-slate-400'}`}>
+                    {isOverlayVisible ? 'Visible' : 'Hidden'}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-slate-800/50 backdrop-blur p-6 rounded-xl border border-slate-700">
+            <h3 className="text-lg font-semibold mb-4 text-slate-200">Quick Stats</h3>
+            <div className="space-y-4">
+              <div className="flex justify-between">
+                <span className="text-slate-300">Characters</span>
+                <span className="text-slate-400 font-mono">{answer.length}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-300">Words</span>
+                <span className="text-slate-400 font-mono">{answer.trim() ? answer.trim().split(/\s+/).length : 0}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-300">Lines</span>
+                <span className="text-slate-400 font-mono">{answer.split('\n').length}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Main input area */}
+        <div className="bg-slate-800/50 backdrop-blur p-8 rounded-xl border border-slate-700 space-y-6">
+          <h3 className="text-xl font-semibold text-slate-200">Answer Input</h3>
+          
+          <div className="relative">
+            <textarea
+              ref={textareaRef}
+              value={answer}
+              onChange={(e) => setAnswer(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="Enter your answer or AI-generated response here...
 
 Tips:
 • Use bullet points for key insights
 • Press Ctrl+Enter to send quickly
 • Keep answers concise for better overlay display"
-            className="w-full min-h-40 max-h-80 p-4 border-2 border-indigo-200 rounded-lg focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-colors resize-none"
-            style={{ lineHeight: '1.5' }}
-          />
-          <div className="absolute bottom-3 right-3 text-xs text-gray-400">
-            {answer.length} characters
-          </div>
-        </div>
-
-        {/* Action buttons */}
-        <div className="flex flex-wrap gap-3">
-          <button
-            onClick={sendToOverlay}
-            disabled={!answer.trim() || !isElectronAvailable}
-            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
-          >
-            <Send className="w-4 h-4" />
-            Send to Overlay
-          </button>
-
-          <button
-            onClick={toggleOverlayVisibility}
-            disabled={!isElectronAvailable}
-            className="flex items-center gap-2 px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
-          >
-            {isOverlayVisible ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-            {isOverlayVisible ? 'Hide Overlay' : 'Show Overlay'}
-          </button>
-
-          <button
-            onClick={copyToClipboard}
-            disabled={!answer.trim()}
-            className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
-          >
-            {isCopied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-            {isCopied ? 'Copied!' : 'Copy Text'}
-          </button>
-
-          <button
-            onClick={clearAnswer}
-            disabled={!answer.trim()}
-            className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
-          >
-            <Trash2 className="w-4 h-4" />
-            Clear
-          </button>
-        </div>
-      </div>
-
-      {/* Overlay settings panel */}
-      <div className="mt-6 p-4 bg-white/60 rounded-lg">
-        <div className="flex items-center gap-2 mb-3">
-          <Settings className="w-4 h-4 text-gray-600" />
-          <h3 className="font-semibold text-gray-700">Overlay Settings</h3>
-        </div>
-        
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Position
-            </label>
-            <select
-              value={overlaySettings.position}
-              onChange={(e) => setOverlaySettings(prev => ({ ...prev, position: e.target.value }))}
-              className="w-full p-2 border border-gray-300 rounded-md focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
-            >
-              <option value="top-left">Top Left</option>
-              <option value="top-right">Top Right</option>
-              <option value="bottom-left">Bottom Left</option>
-              <option value="bottom-right">Bottom Right</option>
-              <option value="center">Center</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Opacity ({Math.round(overlaySettings.opacity * 100)}%)
-            </label>
-            <input
-              type="range"
-              min="0.1"
-              max="1"
-              step="0.1"
-              value={overlaySettings.opacity}
-              onChange={(e) => setOverlaySettings(prev => ({ ...prev, opacity: parseFloat(e.target.value) }))}
-              className="w-full"
+              className="w-full min-h-48 max-h-96 p-6 bg-slate-900/80 border-2 border-slate-700 rounded-lg focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 transition-colors resize-none text-slate-100 placeholder-slate-500"
+              style={{ lineHeight: '1.6' }}
             />
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Theme
-            </label>
-            <select
-              value={overlaySettings.theme}
-              onChange={(e) => setOverlaySettings(prev => ({ ...prev, theme: e.target.value }))}
-              className="w-full p-2 border border-gray-300 rounded-md focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+          {/* Action buttons */}
+          <div className="flex flex-wrap gap-4">
+            <button
+              onClick={sendToOverlay}
+              disabled={!answer.trim() || !isElectronAvailable}
+              className="flex items-center gap-3 px-6 py-3 bg-gradient-to-r from-purple-600 to-purple-700 text-white rounded-lg hover:from-purple-700 hover:to-purple-800 disabled:from-slate-600 disabled:to-slate-700 disabled:cursor-not-allowed transition-all font-medium shadow-lg"
             >
-              <option value="dark">Dark</option>
-              <option value="light">Light</option>
-              <option value="auto">Auto</option>
-            </select>
+              <Send className="w-5 h-5" />
+              Send to Overlay
+            </button>
+
+            <button
+              onClick={toggleOverlayVisibility}
+              disabled={!isElectronAvailable}
+              className="flex items-center gap-3 px-6 py-3 bg-slate-700 text-white rounded-lg hover:bg-slate-600 disabled:bg-slate-800 disabled:cursor-not-allowed transition-colors font-medium"
+            >
+              {isOverlayVisible ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+              {isOverlayVisible ? 'Hide Overlay' : 'Show Overlay'}
+            </button>
+
+            <button
+              onClick={copyToClipboard}
+              disabled={!answer.trim()}
+              className="flex items-center gap-3 px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-slate-600 disabled:cursor-not-allowed transition-colors font-medium"
+            >
+              {isCopied ? <Check className="w-5 h-5" /> : <Copy className="w-5 h-5" />}
+              {isCopied ? 'Copied!' : 'Copy Text'}
+            </button>
+
+            <button
+              onClick={clearAnswer}
+              disabled={!answer.trim()}
+              className="flex items-center gap-3 px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:bg-slate-600 disabled:cursor-not-allowed transition-colors font-medium"
+            >
+              <Trash2 className="w-5 h-5" />
+              Clear
+            </button>
+          </div>
+        </div>
+
+        {/* Overlay settings panel */}
+        <div className="bg-slate-800/50 backdrop-blur p-8 rounded-xl border border-slate-700">
+          <div className="flex items-center gap-3 mb-6">
+            <Settings className="w-6 h-6 text-slate-400" />
+            <h3 className="text-xl font-semibold text-slate-200">Overlay Settings</h3>
+          </div>
+          
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="bg-slate-900/50 p-6 rounded-lg">
+              <label className="block text-sm font-medium text-slate-300 mb-3">
+                Position
+              </label>
+              <select
+                value={overlaySettings.position}
+                onChange={(e) => setOverlaySettings(prev => ({ ...prev, position: e.target.value }))}
+                className="w-full p-3 bg-slate-800 border border-slate-600 rounded-lg focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 text-slate-100"
+              >
+                <option value="top-left">Top Left</option>
+                <option value="top-right">Top Right</option>
+                <option value="bottom-left">Bottom Left</option>
+                <option value="bottom-right">Bottom Right</option>
+                <option value="center">Center</option>
+              </select>
+            </div>
+
+            <div className="bg-slate-900/50 p-6 rounded-lg">
+              <label className="block text-sm font-medium text-slate-300 mb-3">
+                Opacity ({Math.round(overlaySettings.opacity * 100)}%)
+              </label>
+              <input
+                type="range"
+                min="0.1"
+                max="1"
+                step="0.1"
+                value={overlaySettings.opacity}
+                onChange={(e) => setOverlaySettings(prev => ({ ...prev, opacity: parseFloat(e.target.value) }))}
+                className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer slider"
+              />
+              <div className="flex justify-between text-xs text-slate-500 mt-2">
+                <span>10%</span>
+                <span>100%</span>
+              </div>
+            </div>
+
+            <div className="bg-slate-900/50 p-6 rounded-lg">
+              <label className="block text-sm font-medium text-slate-300 mb-3">
+                Theme
+              </label>
+              <select
+                value={overlaySettings.theme}
+                onChange={(e) => setOverlaySettings(prev => ({ ...prev, theme: e.target.value }))}
+                className="w-full p-3 bg-slate-800 border border-slate-600 rounded-lg focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 text-slate-100"
+              >
+                <option value="dark">Dark</option>
+                <option value="light">Light</option>
+                <option value="auto">Auto</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        {/* Keyboard shortcuts help */}
+        <div className="bg-gradient-to-r from-amber-900/20 to-orange-900/20 backdrop-blur p-6 rounded-xl border border-amber-600/30">
+          <h4 className="text-lg font-semibold text-amber-300 mb-4 flex items-center">
+            <Circle size={8} className="text-amber-500 fill-current mr-2" />
+            Keyboard Shortcuts
+          </h4>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-amber-200">Send to overlay</span>
+                <code className="bg-amber-900/30 text-amber-300 px-2 py-1 rounded text-xs font-mono">Ctrl+Enter</code>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-amber-200">Clear text</span>
+                <code className="bg-amber-900/30 text-amber-300 px-2 py-1 rounded text-xs font-mono">Ctrl+Shift+C</code>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-amber-200">Toggle overlay (global)</span>
+                <code className="bg-amber-900/30 text-amber-300 px-2 py-1 rounded text-xs font-mono">Ctrl+Shift+Space</code>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-amber-200">Toggle theme (global)</span>
+                <code className="bg-amber-900/30 text-amber-300 px-2 py-1 rounded text-xs font-mono">Ctrl+Shift+T</code>
+              </div>
+            </div>
           </div>
         </div>
       </div>
-
-      {/* Keyboard shortcuts help */}
-      <div className="mt-4 p-3 bg-amber-50 rounded-lg border border-amber-200">
-        <h4 className="font-semibold text-amber-800 mb-2">Keyboard Shortcuts</h4>
-        <div className="text-sm text-amber-700 space-y-1">
-          <div><code className="bg-amber-100 px-1 rounded">Ctrl+Enter</code> - Send to overlay</div>
-          <div><code className="bg-amber-100 px-1 rounded">Ctrl+Shift+C</code> - Clear text</div>
-          <div><code className="bg-amber-100 px-1 rounded">Ctrl+Shift+Space</code> - Toggle overlay visibility (global)</div>
-          <div><code className="bg-amber-100 px-1 rounded">Ctrl+Shift+O</code> - Toggle click-through (global)</div>
-          <div><code className="bg-amber-100 px-1 rounded">Ctrl+Shift+T</code> - Toggle theme (global)</div>
-        </div>
-      </div>
+      
+      <style jsx>{`
+        .slider::-webkit-slider-thumb {
+          appearance: none;
+          width: 20px;
+          height: 20px;
+          border-radius: 50%;
+          background: #9333ea;
+          cursor: pointer;
+        }
+        .slider::-moz-range-thumb {
+          width: 20px;
+          height: 20px;
+          border-radius: 50%;
+          background: #9333ea;
+          cursor: pointer;
+          border: none;
+        }
+      `}</style>
     </div>
   );
 };

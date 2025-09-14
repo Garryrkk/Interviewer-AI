@@ -18,7 +18,7 @@ export async function captureScreenFrame(videoEl) {
     const settings = track.getSettings ? track.getSettings() : {};
     const width = settings.width || videoEl.videoWidth || 1280;
     const height = settings.height || videoEl.videoHeight || 720;
-
+     
     // Create an offscreen canvas to draw current frame
     const canvas = document.createElement("canvas");
     canvas.width = width;
