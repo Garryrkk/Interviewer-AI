@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { sendQuickReply } from "./quickRespondUtils";
 import { Activity, Send, MessageCircle, Sparkles } from 'lucide-react';
+import { QuickRespond } from "../../services/aiService";
 
 export default function QuickRespond() {
   const [input, setInput] = useState("");

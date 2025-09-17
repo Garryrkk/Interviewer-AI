@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Send, Eye, EyeOff, Settings, Trash2, Copy, Check, Circle } from 'lucide-react';
+import { HiddenAnswers } from '../../services/mainFeature';
 
 const HiddenAnswers = () => {
   const [answer, setAnswer] = useState('');

@@ -11,6 +11,7 @@ import {
     Settings,
     User
 } from 'lucide-react';
+import { VoiceProcessing } from "../../services/voiceService";
 
 // Import your existing utility functions (keeping them exactly the same)
 // import {

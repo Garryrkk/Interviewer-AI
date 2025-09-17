@@ -7,10 +7,11 @@ import {
   CheckCircle, 
   AlertCircle, 
   Volume2,
-  Settings,
+  Settings,  
   Play,
   Square
 } from 'lucide-react';
+import { PreOpVoice } from "../../services/voiceService";
 
 const PreOpVoice = ({ onComplete, micPermission, setMicPermission }) => {
     const [currentCheck, setCurrentCheck] = useState('permission');

@@ -17,6 +17,8 @@ import {
   calculateInsightPriority 
 } from './KeyInsights.utils';
 
+import { KeyInsights } from '../../services/aiService';
+
 const KeyInsights = ({
     data = null, 
     maxInsights = 5,

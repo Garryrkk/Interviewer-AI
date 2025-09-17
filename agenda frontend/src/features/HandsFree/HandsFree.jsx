@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { startListening } from "./handsFreeUtils";
 import { sendQuickReply } from "../QuickRespond/quickRespondUtils";
+import { HandsFreeMode } from "../../services/aiService";
 import { Zap, Mic, Activity, Volume2, User, Bot } from 'lucide-react';
 
 export default function HandsFreeMode() {

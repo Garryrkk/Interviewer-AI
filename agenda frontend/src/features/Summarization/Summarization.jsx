@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { FileText, Zap, Copy, Download } from 'lucide-react';
 import { summarizeText } from "./summarizationUtils";
+import { Summarization } from "../../services/aiService";
 
 export default function Summarization() {
   const [input, setInput] = useState("");
