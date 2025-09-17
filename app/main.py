@@ -12,7 +12,9 @@ import uvicorn
 from typing import Dict, Any
 import time
 from starlette.exceptions import HTTPException as StarletteHTTPException
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 import traceback
+import os
 
 # Import all schemas - keeping them as requested
 from app.summarization.schemas import (
@@ -80,8 +82,6 @@ from app.key_insights.schemas import (
 )
 
 from app.key_insights.services import (
-    KeyInsight,
-    KeyInsightRequest,
     KeyInsightsService,
     extract_key_insights
 )
@@ -107,7 +107,6 @@ from app.MainFeature import routes as mainfeature_routes
 from app.handFree import routes as handsfree_routes
 from app.image_recognition import routes as image_recognition_routes
 from app.voice_recognition import routes as voice_recognition_routes
-from fastapi.middleware.cors import CORSMiddleware
 
 # Configure logging
 logging.basicConfig(
@@ -166,7 +165,7 @@ async def initialize_ollama_connection():
             if hermes_models:
                 logger.info(f"✅ Ollama connected. Found Nous Hermes models: {[m['name'] for m in hermes_models]}")
             else:
-                logger.warning("⚠️  Ollama connected but Nous Hermes model not found")
+                logger.warning("⚠️ Ollama connected but Nous Hermes model not found")
         else:
             raise Exception(f"Ollama not responding: {response.status_code}")
     except Exception as e:
@@ -192,7 +191,7 @@ async def initialize_voice_service():
     except Exception as e:
         logger.error(f"❌ Failed to initialize voice service: {e}")
         # Continue without voice service if it fails
-        logger.warning("⚠️  Continuing without voice service")
+        logger.warning("⚠️ Continuing without voice service")
 
 async def initialize_core_services():
     """Initialize core AI services"""
@@ -257,31 +256,35 @@ app = FastAPI(
     redoc_url="/redoc"
 )
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["http://localhost:61863"],  # your frontend dev URL
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# Define allowed origins and trusted hosts
+allowed_origins = [
+    "http://localhost:5173",    # Vite dev
+    "http://127.0.0.1:5173",
+    "http://localhost:3000",    # React dev
+    "http://127.0.0.1:3000",
+    "http://localhost:61863",   # your current frontend port
+    "http://127.0.0.1:61863",
+    "http://localhost:8000",    # your frontend dev URL
+    "http://127.0.0.1:8000",
+]
+
+trusted_hosts = [
+    "localhost",
+    "127.0.0.1",
+    "*.ngrok-free.app",         # covers any ngrok subdomain
+    "960bd0f27143.ngrok-free.app",
+]
 
 # Security Middleware
 app.add_middleware(
     TrustedHostMiddleware, 
-    allowed_hosts=["localhost", "127.0.0.1", "*.localhost"]
+    allowed_hosts=trusted_hosts
 )
 
-# CORS Middleware - Enhanced for interview scenarios
+# CORS Middleware - Single instance with proper configuration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",     # React dev server
-        "http://localhost:5173",     # Vite dev server  
-        "http://localhost:8080",     # Alternative dev server
-        "http://127.0.0.1:3000",
-        "http://127.0.0.1:5173",
-        "http://127.0.0.1:8080"
-    ],
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allow_headers=[

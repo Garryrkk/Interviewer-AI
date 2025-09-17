@@ -20,7 +20,7 @@ pytesseract==0.3.13
 
 # NLP / AI helpers
 transformers==4.44.2
-torch==2.4.1
+torch>=2.8.0
 sentencepiece==0.2.0
 
 # Summarization / embeddings
