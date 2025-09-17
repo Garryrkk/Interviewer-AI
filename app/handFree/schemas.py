@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 
 class HandsFreeRequest(BaseModel):
     """Request model for hands-free mode"""
-    transcript: str = Field(
+    transcript: str = Field(  
         description="The spoken text from speech recognition",
         min_length=1,
         max_length=2000,

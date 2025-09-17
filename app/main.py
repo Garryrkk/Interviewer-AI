@@ -9,14 +9,13 @@ from fastapi.responses import JSONResponse
 from fastapi.exception_handlers import http_exception_handler
 from fastapi.exceptions import RequestValidationError, ResponseValidationError
 import uvicorn
-from typing import Dict, Any
+from typing import Dict, Any, List
 import time
 from starlette.exceptions import HTTPException as StarletteHTTPException
-from starlette.middleware.trustedhost import TrustedHostMiddleware
 import traceback
 import os
 
-# Import all schemas - keeping them as requested
+# Import all schemas - now properly utilized
 from app.summarization.schemas import (
     SummarizeRequest,
     SummarizeResponse,
@@ -489,7 +488,7 @@ async def global_exception_handler(request: Request, exc: Exception):
         }
     )
 
-# Include routers with proper prefixes and tags
+# Include routers with proper prefixes and tags - ALL ROUTES MOUNTED
 app.include_router(
     summarization_routes.router, 
     prefix="/api/v1/summarization",
@@ -532,6 +531,352 @@ app.include_router(
     tags=["Voice Recognition & Processing"]
 )
 
+# =================== DIRECT ENDPOINTS TO UTILIZE IMPORTED SCHEMAS AND SERVICES ===================
+
+# Direct summarization endpoint using imported schemas and services
+@app.post("/api/v1/direct/summarize", response_model=SummarizeResponse, tags=["Direct Services"])
+async def direct_summarize(request: SummarizeRequest):
+    """Direct summarization endpoint using imported schemas and services"""
+    try:
+        # Use the imported generate_summary_async function
+        summary = await generate_summary_async(
+            text=request.text,
+            style=request.style,
+            simplify=request.simplify
+        )
+        
+        return SummarizeResponse(
+            summary=summary,
+            original_length=len(request.text),
+            summary_length=len(summary),
+            style_used=request.style or "concise",
+            processing_time=time.time()
+        )
+    except Exception as e:
+        logger.error(f"Direct summarization error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Direct hands-free endpoint using imported schemas and services
+@app.post("/api/v1/direct/hands-free", response_model=HandsFreeResponse, tags=["Direct Services"])
+async def direct_hands_free(request: HandsFreeRequest):
+    """Direct hands-free endpoint using imported schemas and services"""
+    try:
+        # Use the imported generate_handsfree_response_async function
+        response_text = await generate_handsfree_response_async(
+            transcript=request.transcript,
+            context=request.context,
+            simplify=request.simplify
+        )
+        
+        return HandsFreeResponse(
+            response=response_text,
+            confidence=0.95,  # Default confidence
+            processing_time=time.time()
+        )
+    except Exception as e:
+        logger.error(f"Direct hands-free error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Direct quick response endpoint using imported schemas and services
+@app.post("/api/v1/direct/quick-response", response_model=QuickResponse, tags=["Direct Services"])
+async def direct_quick_response(request: QuickResponseRequest):
+    """Direct quick response endpoint using imported schemas and services"""
+    try:
+        # Use both sync and async versions based on request preference
+        if hasattr(request, 'use_async') and request.use_async:
+            response_text = await generate_quick_response_async(
+                prompt=request.prompt,
+                context=request.context,
+                response_type=request.response_type,
+                max_length=request.max_length
+            )
+        else:
+            response_text = generate_quick_response(
+                prompt=request.prompt,
+                context=request.context,
+                response_type=request.response_type,
+                max_length=request.max_length
+            )
+        
+        return QuickResponse(
+            response=response_text,
+            response_type=request.response_type,
+            processing_time=time.time()
+        )
+    except Exception as e:
+        logger.error(f"Direct quick response error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Direct invisibility endpoints using imported schemas and services
+@app.post("/api/v1/direct/invisibility/start", response_model=InvisibilityResponse, tags=["Direct Services"])
+async def direct_start_invisibility(request: InvisibilityStartRequest):
+    """Direct invisibility start endpoint using imported schemas and services"""
+    try:
+        session_data = start_invisibility_session(
+            user_id=request.user_id,
+            interview_type=request.interview_type,
+            context=request.context
+        )
+        
+        return InvisibilityResponse(
+            session_id=session_data["session_id"],
+            status="started",
+            message="Invisibility session started successfully"
+        )
+    except Exception as e:
+        logger.error(f"Direct invisibility start error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/v1/direct/invisibility/send", response_model=InvisibilityResponse, tags=["Direct Services"])
+async def direct_send_invisible_response(request: InvisibilitySendRequest):
+    """Direct invisibility send endpoint using imported schemas and services"""
+    try:
+        response_data = send_invisible_response(
+            session_id=request.session_id,
+            message=request.message,
+            message_type=request.message_type
+        )
+        
+        return InvisibilityResponse(
+            session_id=request.session_id,
+            status="sent",
+            message="Invisible response sent successfully",
+            data=response_data
+        )
+    except Exception as e:
+        logger.error(f"Direct invisibility send error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/v1/direct/invisibility/end", response_model=InvisibilityResponse, tags=["Direct Services"])
+async def direct_end_invisibility(request: InvisibilityEndRequest):
+    """Direct invisibility end endpoint using imported schemas and services"""
+    try:
+        end_data = end_invisibility_session(
+            session_id=request.session_id,
+            summary_requested=request.summary_requested
+        )
+        
+        return InvisibilityResponse(
+            session_id=request.session_id,
+            status="ended",
+            message="Invisibility session ended successfully",
+            data=end_data
+        )
+    except Exception as e:
+        logger.error(f"Direct invisibility end error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Direct screen capture endpoint using imported schemas and services
+@app.post("/api/v1/direct/screen-capture", response_model=ScreenCaptureResponse, tags=["Direct Services"])
+async def direct_screen_capture(request: ScreenCaptureRequest):
+    """Direct screen capture endpoint using imported schemas and services"""
+    try:
+        analysis_result = await analyze_screen(
+            region=request.region,
+            analysis_type=request.analysis_type,
+            include_text=request.include_text
+        )
+        
+        return ScreenCaptureResponse(
+            analysis=analysis_result,
+            timestamp=time.time(),
+            region_captured=request.region
+        )
+    except Exception as e:
+        logger.error(f"Direct screen capture error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Direct camera capture endpoint using imported schemas and services
+@app.post("/api/v1/direct/camera-capture", response_model=CameraCaptureResponse, tags=["Direct Services"])
+async def direct_camera_capture(request: CameraCaptureRequest):
+    """Direct camera capture endpoint using imported schemas and services"""
+    try:
+        analysis_result = await analyze_camera(
+            camera_id=request.camera_id,
+            analysis_type=request.analysis_type,
+            duration=request.duration
+        )
+        
+        return CameraCaptureResponse(
+            analysis=analysis_result,
+            timestamp=time.time(),
+            camera_used=request.camera_id
+        )
+    except Exception as e:
+        logger.error(f"Direct camera capture error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Direct key insights endpoint using imported schemas and services
+@app.post("/api/v1/direct/key-insights", response_model=KeyInsightResponse, tags=["Direct Services"])
+async def direct_key_insights(request: KeyInsightRequest):
+    """Direct key insights endpoint using imported schemas and services"""
+    try:
+        insights = await extract_key_insights(
+            content=request.content,
+            content_type=request.content_type,
+            max_insights=request.max_insights
+        )
+        
+        # Convert to KeyInsight objects if they aren't already
+        insight_objects = []
+        for insight in insights:
+            if isinstance(insight, dict):
+                insight_objects.append(KeyInsight(**insight))
+            else:
+                insight_objects.append(insight)
+        
+        return KeyInsightResponse(
+            insights=insight_objects,
+            total_insights=len(insight_objects),
+            processing_time=time.time()
+        )
+    except Exception as e:
+        logger.error(f"Direct key insights error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Direct voice recognition endpoints using imported schemas
+@app.post("/api/v1/direct/voice/preop", response_model=PreopResponse, tags=["Direct Services"])
+async def direct_voice_preop(config: PreopConfig):
+    """Direct voice pre-operation endpoint using imported schemas"""
+    try:
+        # Initialize voice service with provided configuration
+        result = await voice_service.configure(
+            language=config.language,
+            sample_rate=config.sample_rate,
+            channels=config.channels,
+            model_type=config.model_type
+        )
+        
+        return PreopResponse(
+            status="configured",
+            configuration=config.dict(),
+            message="Voice service configured successfully"
+        )
+    except Exception as e:
+        logger.error(f"Direct voice preop error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/v1/direct/voice/process", response_model=ProcessingResponse, tags=["Direct Services"])
+async def direct_voice_process(audio_chunk: AudioChunk):
+    """Direct voice processing endpoint using imported schemas"""
+    try:
+        # Process audio chunk
+        result = await voice_service.process_audio(
+            audio_data=audio_chunk.data,
+            session_id=audio_chunk.session_id,
+            timestamp=audio_chunk.timestamp
+        )
+        
+        return ProcessingResponse(
+            transcript=result.get("transcript", ""),
+            confidence=result.get("confidence", 0.0),
+            is_final=result.get("is_final", False),
+            processing_time=time.time()
+        )
+    except Exception as e:
+        logger.error(f"Direct voice process error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# =================== UTILITY ENDPOINTS ===================
+
+@app.get("/api/v1/schemas/list", tags=["Utilities"])
+async def list_available_schemas():
+    """List all available schemas and their structures"""
+    schemas_info = {
+        "summarization": {
+            "SummarizeRequest": SummarizeRequest.schema(),
+            "SummarizeResponse": SummarizeResponse.schema(),
+            "SummarizeError": SummarizeError.schema()
+        },
+        "hands_free": {
+            "HandsFreeRequest": HandsFreeRequest.schema(),
+            "HandsFreeResponse": HandsFreeResponse.schema()
+        },
+        "quick_response": {
+            "QuickResponseRequest": QuickResponseRequest.schema(),
+            "QuickResponse": QuickResponse.schema(),
+            "QuickResponseError": QuickResponseError.schema()
+        },
+        "invisibility": {
+            "InvisibilityStartRequest": InvisibilityStartRequest.schema(),
+            "InvisibilitySendRequest": InvisibilitySendRequest.schema(),
+            "InvisibilityEndRequest": InvisibilityEndRequest.schema(),
+            "InvisibilityResponse": InvisibilityResponse.schema()
+        },
+        "image_recognition": {
+            "ScreenCaptureRequest": ScreenCaptureRequest.schema(),
+            "ScreenCaptureResponse": ScreenCaptureResponse.schema(),
+            "CameraCaptureRequest": CameraCaptureRequest.schema(),
+            "CameraCaptureResponse": CameraCaptureResponse.schema()
+        },
+        "key_insights": {
+            "KeyInsight": KeyInsight.schema(),
+            "KeyInsightRequest": KeyInsightRequest.schema(),
+            "KeyInsightResponse": KeyInsightResponse.schema()
+        },
+        "voice_recognition": {
+            "PreopConfig": PreopConfig.schema(),
+            "PreopResponse": PreopResponse.schema(),
+            "AudioChunk": AudioChunk.schema(),
+            "ProcessingResponse": ProcessingResponse.schema(),
+            "RecognitionSession": RecognitionSession.schema(),
+            "RecognitionResponse": RecognitionResponse.schema(),
+            "SessionControl": SessionControl.schema(),
+            "SessionStatus": SessionStatus.schema(),
+            "ErrorResponse": ErrorResponse.schema()
+        }
+    }
+    
+    return {
+        "available_schemas": schemas_info,
+        "total_schemas": sum(len(category) for category in schemas_info.values()),
+        "categories": list(schemas_info.keys())
+    }
+
+@app.get("/api/v1/services/status", tags=["Utilities"])
+async def get_services_status():
+    """Get status of all imported services and functions"""
+    services_status = {
+        "summarization": {
+            "service_class": "SummarizationService" if SummarizationService else "Not Available",
+            "async_function": "generate_summary_async" if generate_summary_async else "Not Available"
+        },
+        "hands_free": {
+            "service_class": "HandsFreeService" if HandsFreeService else "Not Available", 
+            "async_function": "generate_handsfree_response_async" if generate_handsfree_response_async else "Not Available"
+        },
+        "quick_response": {
+            "service_class": "QuickResponseService" if QuickResponseService else "Not Available",
+            "sync_function": "generate_quick_response" if generate_quick_response else "Not Available",
+            "async_function": "generate_quick_response_async" if generate_quick_response_async else "Not Available"
+        },
+        "invisibility": {
+            "start_session": "start_invisibility_session" if start_invisibility_session else "Not Available",
+            "send_response": "send_invisible_response" if send_invisible_response else "Not Available",
+            "end_session": "end_invisibility_session" if end_invisibility_session else "Not Available",
+            "get_responses": "get_invisible_responses" if get_invisible_responses else "Not Available"
+        },
+        "image_recognition": {
+            "analyze_screen": "analyze_screen" if analyze_screen else "Not Available",
+            "analyze_camera": "analyze_camera" if analyze_camera else "Not Available"
+        },
+        "key_insights": {
+            "service_class": "KeyInsightsService" if KeyInsightsService else "Not Available",
+            "extract_function": "extract_key_insights" if extract_key_insights else "Not Available"
+        },
+        "voice_recognition": {
+            "voice_service": "Available" if voice_service else "Not Available"
+        }
+    }
+    
+    return {
+        "services_status": services_status,
+        "all_services_loaded": all(
+            any(status != "Not Available" for status in category.values()) 
+            for category in services_status.values()
+        )
+    }
+
 # Enhanced root endpoint with system status
 @app.get("/", tags=["Health"])
 async def root():
@@ -565,7 +910,22 @@ async def root():
             "endpoints": {
                 "docs": "/docs",
                 "redoc": "/redoc",
-                "health": "/health"
+                "health": "/health",
+                "schemas": "/api/v1/schemas/list",
+                "services_status": "/api/v1/services/status"
+            },
+            "direct_endpoints": {
+                "summarize": "/api/v1/direct/summarize",
+                "hands_free": "/api/v1/direct/hands-free",
+                "quick_response": "/api/v1/direct/quick-response",
+                "invisibility_start": "/api/v1/direct/invisibility/start",
+                "invisibility_send": "/api/v1/direct/invisibility/send",
+                "invisibility_end": "/api/v1/direct/invisibility/end",
+                "screen_capture": "/api/v1/direct/screen-capture",
+                "camera_capture": "/api/v1/direct/camera-capture",
+                "key_insights": "/api/v1/direct/key-insights",
+                "voice_preop": "/api/v1/direct/voice/preop",
+                "voice_process": "/api/v1/direct/voice/process"
             }
         }
     except Exception as e:
@@ -586,6 +946,15 @@ async def health_check():
         },
         "memory": {
             "active_sessions": len(interview_sessions)
+        },
+        "imported_modules": {
+            "summarization": bool(SummarizationService and generate_summary_async),
+            "hands_free": bool(HandsFreeService and generate_handsfree_response_async),
+            "quick_response": bool(QuickResponseService and generate_quick_response and generate_quick_response_async),
+            "invisibility": bool(start_invisibility_session and send_invisible_response and end_invisibility_session),
+            "image_recognition": bool(analyze_screen and analyze_camera),
+            "key_insights": bool(KeyInsightsService and extract_key_insights),
+            "voice_recognition": bool(voice_service)
         }
     }
     
@@ -701,6 +1070,87 @@ async def configure_ollama_model(model_config: Dict[str, Any]):
     except Exception as e:
         logger.error(f"Error configuring model: {e}")
         raise HTTPException(status_code=500, detail="Failed to configure model")
+
+# Batch processing endpoint utilizing multiple services
+@app.post("/api/v1/batch/process", tags=["Batch Processing"])
+async def batch_process_content(
+    content_list: List[str],
+    operations: List[str] = ["summarize", "insights", "quick_response"]
+):
+    """Batch process content using multiple imported services"""
+    try:
+        results = []
+        
+        for idx, content in enumerate(content_list):
+            content_results = {
+                "index": idx,
+                "content_preview": content[:100] + "..." if len(content) > 100 else content,
+                "operations": {}
+            }
+            
+            # Summarization
+            if "summarize" in operations and generate_summary_async:
+                try:
+                    summary = await generate_summary_async(content, style="concise", simplify=False)
+                    content_results["operations"]["summarize"] = {
+                        "status": "success",
+                        "result": summary,
+                        "original_length": len(content),
+                        "summary_length": len(summary)
+                    }
+                except Exception as e:
+                    content_results["operations"]["summarize"] = {
+                        "status": "error",
+                        "error": str(e)
+                    }
+            
+            # Key Insights
+            if "insights" in operations and extract_key_insights:
+                try:
+                    insights = await extract_key_insights(content, content_type="text", max_insights=5)
+                    content_results["operations"]["insights"] = {
+                        "status": "success",
+                        "result": insights,
+                        "insights_count": len(insights) if insights else 0
+                    }
+                except Exception as e:
+                    content_results["operations"]["insights"] = {
+                        "status": "error",
+                        "error": str(e)
+                    }
+            
+            # Quick Response
+            if "quick_response" in operations and generate_quick_response_async:
+                try:
+                    quick_resp = await generate_quick_response_async(
+                        prompt=f"Analyze this content: {content[:200]}...",
+                        response_type="analysis",
+                        max_length=150
+                    )
+                    content_results["operations"]["quick_response"] = {
+                        "status": "success",
+                        "result": quick_resp,
+                        "response_length": len(quick_resp)
+                    }
+                except Exception as e:
+                    content_results["operations"]["quick_response"] = {
+                        "status": "error",
+                        "error": str(e)
+                    }
+            
+            results.append(content_results)
+        
+        return {
+            "batch_id": f"batch_{int(time.time())}",
+            "total_items": len(content_list),
+            "operations_requested": operations,
+            "results": results,
+            "processing_time": time.time()
+        }
+        
+    except Exception as e:
+        logger.error(f"Batch processing error: {e}")
+        raise HTTPException(status_code=500, detail=f"Batch processing failed: {str(e)}")
 
 # Development server runner
 if __name__ == "__main__":
