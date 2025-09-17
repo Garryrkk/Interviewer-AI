@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -36,9 +37,17 @@
             transition: all 0.2s ease;
         }
 
-        .window-btn.close { background: #ff5f57; }
-        .window-btn.minimize { background: #ffbd2e; }
-        .window-btn.maximize { background: #28ca42; }
+        .window-btn.close {
+            background: #ff5f57;
+        }
+
+        .window-btn.minimize {
+            background: #ffbd2e;
+        }
+
+        .window-btn.maximize {
+            background: #28ca42;
+        }
 
         .window-btn:hover {
             filter: brightness(1.2);
@@ -110,8 +119,15 @@
         }
 
         @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.5; }
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.5;
+            }
         }
 
         .toolbar-btn {
@@ -448,8 +464,15 @@
         }
 
         @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
         }
 
         .panel-header {
@@ -538,15 +561,15 @@
             .sidebar {
                 width: 70px;
             }
-            
+
             .nav-text {
                 display: none;
             }
-            
+
             .main-grid {
                 grid-template-columns: 1fr;
             }
-            
+
             .capture-grid,
             .voice-grid {
                 grid-template-columns: 1fr;
@@ -603,6 +626,7 @@
         }
     </style>
 </head>
+
 <body>
     <!-- Title Bar -->
     <div class="titlebar">
@@ -778,7 +802,8 @@
                                         <i class="fas fa-bolt" style="font-size: 24px; color: #8F74D4;"></i>
                                         <div>
                                             <h4>Quick Response Mode</h4>
-                                            <p style="color: rgba(248, 250, 252, 0.6); font-size: 12px;">Activate instant AI responses</p>
+                                            <p style="color: rgba(248, 250, 252, 0.6); font-size: 12px;">Activate
+                                                instant AI responses</p>
                                         </div>
                                     </div>
                                 </div>
@@ -787,7 +812,8 @@
                                         <i class="fas fa-file-text" style="font-size: 24px; color: #10b981;"></i>
                                         <div>
                                             <h4>Generate Summary</h4>
-                                            <p style="color: rgba(248, 250, 252, 0.6); font-size: 12px;">Create interview summary</p>
+                                            <p style="color: rgba(248, 250, 252, 0.6); font-size: 12px;">Create
+                                                interview summary</p>
                                         </div>
                                     </div>
                                 </div>
@@ -796,7 +822,8 @@
                                         <i class="fas fa-key" style="font-size: 24px; color: #f59e0b;"></i>
                                         <div>
                                             <h4>Extract Key Insights</h4>
-                                            <p style="color: rgba(248, 250, 252, 0.6); font-size: 12px;">Identify important points</p>
+                                            <p style="color: rgba(248, 250, 252, 0.6); font-size: 12px;">Identify
+                                                important points</p>
                                         </div>
                                     </div>
                                 </div>
@@ -930,12 +957,15 @@
                         <div class="card-header">
                             <h3 class="card-title">Recognition Results</h3>
                         </div>
-                        <div style="background: rgba(30, 30, 47, 0.8); padding: 20px; border-radius: 12px; min-height: 300px;">
-                            <div style="border-bottom: 1px solid rgba(143, 116, 212, 0.2); padding-bottom: 15px; margin-bottom: 15px;">
+                        <div
+                            style="background: rgba(30, 30, 47, 0.8); padding: 20px; border-radius: 12px; min-height: 300px;">
+                            <div
+                                style="border-bottom: 1px solid rgba(143, 116, 212, 0.2); padding-bottom: 15px; margin-bottom: 15px;">
                                 <h4 style="margin-bottom: 8px;">Detected Objects</h4>
                                 <p style="color: rgba(248, 250, 252, 0.6); font-size: 14px;">No objects detected yet</p>
                             </div>
-                            <div style="border-bottom: 1px solid rgba(143, 116, 212, 0.2); padding-bottom: 15px; margin-bottom: 15px;">
+                            <div
+                                style="border-bottom: 1px solid rgba(143, 116, 212, 0.2); padding-bottom: 15px; margin-bottom: 15px;">
                                 <h4 style="margin-bottom: 8px;">Text Recognition</h4>
                                 <p style="color: rgba(248, 250, 252, 0.6); font-size: 14px;">No text detected yet</p>
                             </div>
@@ -986,8 +1016,10 @@
 
                     <div class="voice-control">
                         <h3 style="margin-bottom: 15px;">Live Transcription</h3>
-                        <div style="background: rgba(30, 30, 47, 0.8); padding: 15px; border-radius: 12px; min-height: 120px; margin-bottom: 15px;">
-                            <p style="color: rgba(248, 250, 252, 0.6); font-size: 12px;">Voice transcription will appear here...</p>
+                        <div
+                            style="background: rgba(30, 30, 47, 0.8); padding: 15px; border-radius: 12px; min-height: 120px; margin-bottom: 15px;">
+                            <p style="color: rgba(248, 250, 252, 0.6); font-size: 12px;">Voice transcription will appear
+                                here...</p>
                         </div>
                     </div>
                 </div>
@@ -1003,8 +1035,10 @@
                         <i class="fas fa-bolt"></i>
                     </div>
                     <h2 style="margin-bottom: 20px;">Voice Command Interface</h2>
-                    <p style="color: rgba(248, 250, 252, 0.6); margin-bottom: 40px; font-size: 18px; max-width: 600px; margin-left: auto; margin-right: auto;">
-                        Control the entire application using voice commands. Perfect for hands-free operation during presentations or interviews.
+                    <p
+                        style="color: rgba(248, 250, 252, 0.6); margin-bottom: 40px; font-size: 18px; max-width: 600px; margin-left: auto; margin-right: auto;">
+                        Control the entire application using voice commands. Perfect for hands-free operation during
+                        presentations or interviews.
                     </p>
                     <button class="btn" style="font-size: 18px; padding: 15px 30px;">
                         <i class="fas fa-bolt"></i>
@@ -1025,18 +1059,24 @@
                         </div>
                         <div style="display: grid; gap: 25px;">
                             <div>
-                                <label style="display: block; margin-bottom: 10px; font-weight: 500;">Response Delay (ms)</label>
-                                <input type="range" min="100" max="2000" value="500" style="width: 100%; margin-bottom: 10px;">
-                                <div style="display: flex; justify-content: space-between; font-size: 12px; color: rgba(248, 250, 252, 0.6);">
+                                <label style="display: block; margin-bottom: 10px; font-weight: 500;">Response Delay
+                                    (ms)</label>
+                                <input type="range" min="100" max="2000" value="500"
+                                    style="width: 100%; margin-bottom: 10px;">
+                                <div
+                                    style="display: flex; justify-content: space-between; font-size: 12px; color: rgba(248, 250, 252, 0.6);">
                                     <span>100ms</span>
                                     <span>500ms</span>
                                     <span>2000ms</span>
                                 </div>
                             </div>
                             <div>
-                                <label style="display: block; margin-bottom: 10px; font-weight: 500;">Confidence Threshold</label>
-                                <input type="range" min="0" max="100" value="80" style="width: 100%; margin-bottom: 10px;">
-                                <div style="display: flex; justify-content: space-between; font-size: 12px; color: rgba(248, 250, 252, 0.6);">
+                                <label style="display: block; margin-bottom: 10px; font-weight: 500;">Confidence
+                                    Threshold</label>
+                                <input type="range" min="0" max="100" value="80"
+                                    style="width: 100%; margin-bottom: 10px;">
+                                <div
+                                    style="display: flex; justify-content: space-between; font-size: 12px; color: rgba(248, 250, 252, 0.6);">
                                     <span>0%</span>
                                     <span>80%</span>
                                     <span>100%</span>
@@ -1052,11 +1092,14 @@
                         <div class="card-header">
                             <h3 class="card-title">Response Monitor</h3>
                         </div>
-                        <div style="background: rgba(30, 30, 47, 0.8); padding: 20px; border-radius: 12px; min-height: 300px;">
-                            <p style="color: rgba(248, 250, 252, 0.6); margin-bottom: 20px;">AI responses will appear here in real-time...</p>
+                        <div
+                            style="background: rgba(30, 30, 47, 0.8); padding: 20px; border-radius: 12px; min-height: 300px;">
+                            <p style="color: rgba(248, 250, 252, 0.6); margin-bottom: 20px;">AI responses will appear
+                                here in real-time...</p>
                             <div style="border-left: 3px solid #8F74D4; padding-left: 15px; margin-bottom: 15px;">
                                 <h4 style="color: #8F74D4; margin-bottom: 5px;">Example Response</h4>
-                                <p style="font-size: 14px; color: rgba(248, 250, 252, 0.8);">This is how AI responses will be displayed when quick response mode is active.</p>
+                                <p style="font-size: 14px; color: rgba(248, 250, 252, 0.8);">This is how AI responses
+                                    will be displayed when quick response mode is active.</p>
                             </div>
                         </div>
                     </div>
@@ -1073,11 +1116,15 @@
                         <div class="card-header">
                             <h3 class="card-title">Content Summary</h3>
                         </div>
-                        <div style="background: rgba(30, 30, 47, 0.8); padding: 25px; border-radius: 12px; min-height: 400px;">
-                            <p style="color: rgba(248, 250, 252, 0.6); margin-bottom: 20px;">Interview summaries and key points will appear here...</p>
-                            <div style="border: 1px solid rgba(143, 116, 212, 0.2); padding: 15px; border-radius: 8px; margin-bottom: 15px;">
+                        <div
+                            style="background: rgba(30, 30, 47, 0.8); padding: 25px; border-radius: 12px; min-height: 400px;">
+                            <p style="color: rgba(248, 250, 252, 0.6); margin-bottom: 20px;">Interview summaries and key
+                                points will appear here...</p>
+                            <div
+                                style="border: 1px solid rgba(143, 116, 212, 0.2); padding: 15px; border-radius: 8px; margin-bottom: 15px;">
                                 <h4 style="color: #8F74D4; margin-bottom: 8px;">Summary Section 1</h4>
-                                <p style="font-size: 14px; line-height: 1.6;">Key discussion points and important topics will be automatically summarized here.</p>
+                                <p style="font-size: 14px; line-height: 1.6;">Key discussion points and important topics
+                                    will be automatically summarized here.</p>
                             </div>
                         </div>
                     </div>
@@ -1119,16 +1166,21 @@
                         <div class="card-header">
                             <h3 class="card-title">Important Points & Insights</h3>
                         </div>
-                        <div style="background: rgba(30, 30, 47, 0.8); padding: 25px; border-radius: 12px; min-height: 400px;">
+                        <div
+                            style="background: rgba(30, 30, 47, 0.8); padding: 25px; border-radius: 12px; min-height: 400px;">
                             <div style="border-left: 4px solid #ef4444; padding-left: 15px; margin-bottom: 20px;">
-                                <span style="background: rgba(239, 68, 68, 0.2); color: #ef4444; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 600;">CRITICAL</span>
+                                <span
+                                    style="background: rgba(239, 68, 68, 0.2); color: #ef4444; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 600;">CRITICAL</span>
                                 <h4 style="margin: 8px 0; color: #F8FAFC;">Critical Insight Example</h4>
-                                <p style="color: rgba(248, 250, 252, 0.7); font-size: 14px;">This is an example of how critical insights will be highlighted and categorized.</p>
+                                <p style="color: rgba(248, 250, 252, 0.7); font-size: 14px;">This is an example of how
+                                    critical insights will be highlighted and categorized.</p>
                             </div>
                             <div style="border-left: 4px solid #f59e0b; padding-left: 15px; margin-bottom: 20px;">
-                                <span style="background: rgba(245, 158, 11, 0.2); color: #f59e0b; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 600;">IMPORTANT</span>
+                                <span
+                                    style="background: rgba(245, 158, 11, 0.2); color: #f59e0b; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 600;">IMPORTANT</span>
                                 <h4 style="margin: 8px 0; color: #F8FAFC;">Important Point Example</h4>
-                                <p style="color: rgba(248, 250, 252, 0.7); font-size: 14px;">Important insights will be clearly marked with appropriate priority levels.</p>
+                                <p style="color: rgba(248, 250, 252, 0.7); font-size: 14px;">Important insights will be
+                                    clearly marked with appropriate priority levels.</p>
                             </div>
                         </div>
                     </div>
@@ -1138,30 +1190,38 @@
                                 <h4 class="card-title">Insight Categories</h4>
                             </div>
                             <div style="display: grid; gap: 12px;">
-                                <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 0;">
+                                <div
+                                    style="display: flex; justify-content: space-between; align-items: center; padding: 8px 0;">
                                     <div style="display: flex; align-items: center; gap: 8px;">
-                                        <div style="width: 8px; height: 8px; background: #ef4444; border-radius: 50%;"></div>
+                                        <div style="width: 8px; height: 8px; background: #ef4444; border-radius: 50%;">
+                                        </div>
                                         <span>Critical</span>
                                     </div>
                                     <span style="color: rgba(248, 250, 252, 0.6);">2</span>
                                 </div>
-                                <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 0;">
+                                <div
+                                    style="display: flex; justify-content: space-between; align-items: center; padding: 8px 0;">
                                     <div style="display: flex; align-items: center; gap: 8px;">
-                                        <div style="width: 8px; height: 8px; background: #f59e0b; border-radius: 50%;"></div>
+                                        <div style="width: 8px; height: 8px; background: #f59e0b; border-radius: 50%;">
+                                        </div>
                                         <span>Important</span>
                                     </div>
                                     <span style="color: rgba(248, 250, 252, 0.6);">5</span>
                                 </div>
-                                <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 0;">
+                                <div
+                                    style="display: flex; justify-content: space-between; align-items: center; padding: 8px 0;">
                                     <div style="display: flex; align-items: center; gap: 8px;">
-                                        <div style="width: 8px; height: 8px; background: #10b981; border-radius: 50%;"></div>
+                                        <div style="width: 8px; height: 8px; background: #10b981; border-radius: 50%;">
+                                        </div>
                                         <span>Relevant</span>
                                     </div>
                                     <span style="color: rgba(248, 250, 252, 0.6);">8</span>
                                 </div>
-                                <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 0;">
+                                <div
+                                    style="display: flex; justify-content: space-between; align-items: center; padding: 8px 0;">
                                     <div style="display: flex; align-items: center; gap: 8px;">
-                                        <div style="width: 8px; height: 8px; background: #8F74D4; border-radius: 50%;"></div>
+                                        <div style="width: 8px; height: 8px; background: #8F74D4; border-radius: 50%;">
+                                        </div>
                                         <span>Notable</span>
                                     </div>
                                     <span style="color: rgba(248, 250, 252, 0.6);">12</span>
@@ -1186,10 +1246,13 @@
                         <i class="fas fa-eye"></i>
                     </div>
                     <h2 style="margin-bottom: 20px;" id="invisibilityTitle">Invisibility Mode Inactive</h2>
-                    <p style="color: rgba(248, 250, 252, 0.6); margin-bottom: 40px; font-size: 18px; max-width: 600px; margin-left: auto; margin-right: auto;" id="invisibilityDesc">
-                        Activate invisible mode for stealth operation during sensitive conversations or interviews. The AI will monitor and analyze without detection.
+                    <p style="color: rgba(248, 250, 252, 0.6); margin-bottom: 40px; font-size: 18px; max-width: 600px; margin-left: auto; margin-right: auto;"
+                        id="invisibilityDesc">
+                        Activate invisible mode for stealth operation during sensitive conversations or interviews. The
+                        AI will monitor and analyze without detection.
                     </p>
-                    <button class="btn" style="font-size: 18px; padding: 15px 30px;" id="invisibilityBtn" onclick="toggleInvisibility()">
+                    <button class="btn" style="font-size: 18px; padding: 15px 30px;" id="invisibilityBtn"
+                        onclick="toggleInvisibility()">
                         <i class="fas fa-eye-slash"></i>
                         Activate Invisibility
                     </button>
@@ -1208,7 +1271,7 @@
             document.querySelectorAll('.feature-panel').forEach(panel => {
                 panel.classList.remove('active');
             });
-            
+
             // Remove active class from all nav links
             document.querySelectorAll('.nav-link').forEach(link => {
                 link.classList.remove('active');
@@ -1218,12 +1281,18 @@
             document.querySelectorAll('.feature-card').forEach(card => {
                 card.classList.remove('active');
             });
-            
+
             // Show selected panel
             document.getElementById(featureId).classList.add('active');
-            
+
             // Add active class to corresponding nav link
-            event.target.closest('.nav-link').classList.add('active');
+            const link = event.target.closest('.nav-link');
+            if (link) {
+                link.classList.add('active');
+            } else {
+                console.warn("Clicked element is not inside a .nav-link:", event.target);
+            }
+
 
             // Add active class to corresponding feature card if exists
             const featureCard = document.querySelector(`[onclick="showFeature('${featureId}')"].feature-card`);
@@ -1243,7 +1312,7 @@
             const title = document.getElementById('invisibilityTitle');
             const desc = document.getElementById('invisibilityDesc');
             const btn = document.getElementById('invisibilityBtn');
-            
+
             if (isInvisible) {
                 icon.innerHTML = '<i class="fas fa-eye-slash"></i>';
                 icon.style.color = '#10b981';
@@ -1265,7 +1334,7 @@
             isPrepVoice = !isPrepVoice;
             const indicator = document.getElementById('prepIndicator');
             const btn = event.target;
-            
+
             if (isPrepVoice) {
                 indicator.classList.add('active');
                 btn.textContent = 'Stop Prep';
@@ -1275,7 +1344,7 @@
                 btn.textContent = 'Start Prep';
                 btn.className = 'btn';
             }
-            
+
             updateVoiceStatus();
         }
 
@@ -1283,7 +1352,7 @@
             isProcessing = !isProcessing;
             const indicator = document.getElementById('processIndicator');
             const btn = event.target;
-            
+
             if (isProcessing) {
                 indicator.classList.add('active');
                 btn.textContent = 'Stop';
@@ -1293,7 +1362,7 @@
                 btn.textContent = 'Start';
                 btn.className = 'btn btn-danger';
             }
-            
+
             updateVoiceStatus();
         }
 
@@ -1338,7 +1407,7 @@
 
         // Initialize nav link click handlers
         document.querySelectorAll('.nav-link').forEach(link => {
-            link.addEventListener('click', function(e) {
+            link.addEventListener('click', function (e) {
                 e.preventDefault();
                 const featureId = this.getAttribute('onclick').match(/'([^']+)'/)[1];
                 showFeature(featureId);
@@ -1346,4 +1415,5 @@
         });
     </script>
 </body>
+
 </html>
