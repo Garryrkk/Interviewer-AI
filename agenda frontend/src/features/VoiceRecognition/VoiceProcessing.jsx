@@ -338,17 +338,17 @@ const VoiceProcessing = ({ onBack }) => {
                                     <Mic size={32} className="text-white" />
                                 )}
                             </div>
-                            <button 
-                                onClick={isRecording ? handleStopRecording : handleStartRecording}
-                                disabled={isProcessing}
-                                className={`w-full py-3 px-4 rounded-lg transition-all font-medium ${
-                                    isRecording 
-                                        ? 'bg-red-600 hover:bg-red-700 text-white shadow-lg' 
-                                        : 'bg-pink-600 hover:bg-pink-700 text-white'
-                                } ${isProcessing ? 'opacity-50 cursor-not-allowed' : ''}`}
+                            <button
+                            onClick={isRecording ? handleStopRecording : handleStartRecording}
+                            className={`w-full py-3 px-4 rounded-lg transition-all font-medium ${
+                                isRecording
+                                ? 'bg-red-600 hover:bg-red-700 text-white shadow-lg'
+                                : 'bg-pink-600 hover:bg-pink-700 text-white'
+                            }`}
                             >
-                                {isRecording ? 'Stop Recording' : 'Start Recording'}
+                            {isRecording ? 'Stop Recording' : 'Start Recording'}
                             </button>
+
                         </div>
                     </div>
 

@@ -226,23 +226,22 @@ Tips:
               {isOverlayVisible ? 'Hide Overlay' : 'Show Overlay'}
             </button>
 
-            <button
-              onClick={copyToClipboard}
-              disabled={!answer.trim()}
-              className="flex items-center gap-3 px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-slate-600 disabled:cursor-not-allowed transition-colors font-medium"
-            >
-              {isCopied ? <Check className="w-5 h-5" /> : <Copy className="w-5 h-5" />}
-              {isCopied ? 'Copied!' : 'Copy Text'}
-            </button>
+      <button
+  onClick={copyToClipboard}
+  className="flex items-center gap-3 px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium"
+>
+  {isCopied ? <Check className="w-5 h-5" /> : <Copy className="w-5 h-5" />}
+  {isCopied ? 'Copied!' : 'Copy Text'}
+</button>
 
-            <button
-              onClick={clearAnswer}
-              disabled={!answer.trim()}
-              className="flex items-center gap-3 px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:bg-slate-600 disabled:cursor-not-allowed transition-colors font-medium"
-            >
-              <Trash2 className="w-5 h-5" />
-              Clear
-            </button>
+<button
+  onClick={clearAnswer}
+  className="flex items-center gap-3 px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium"
+>
+  <Trash2 className="w-5 h-5" />
+  Clear
+</button>
+
           </div>
         </div>
 

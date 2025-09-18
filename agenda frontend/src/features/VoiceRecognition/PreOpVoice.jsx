@@ -517,30 +517,21 @@ const PreOpVoice = ({ onComplete, micPermission, setMicPermission }) => {
                                     <h4 className="font-semibold text-slate-200 mb-4">Test Voice Transcription</h4>
                                     
                                     <div className="flex justify-center space-x-4 mb-4">
-                                        <button 
-                                            onClick={startRecording}
-                                            disabled={isRecording}
-                                            className={`flex items-center space-x-2 px-4 py-2 rounded-lg font-medium transition-all ${
-                                                isRecording 
-                                                    ? 'bg-gray-600 cursor-not-allowed' 
-                                                    : 'bg-red-600 hover:bg-red-700'
-                                            } text-white`}
-                                        >
-                                            <Mic size={16} />
-                                            <span>Start Recording</span>
-                                        </button>
+                                    <button
+                                    onClick={startRecording}
+                                    className="flex items-center space-x-2 px-4 py-2 rounded-lg font-medium transition-all bg-red-600 hover:bg-red-700 text-white"
+                                    >
+                                    <Mic size={16} />
+                                    <span>Start Recording</span>
+                                    </button>
+
                                         
                                         <button 
-                                            onClick={stopRecording}
-                                            disabled={!isRecording}
-                                            className={`flex items-center space-x-2 px-4 py-2 rounded-lg font-medium transition-all ${
-                                                !isRecording 
-                                                    ? 'bg-gray-600 cursor-not-allowed' 
-                                                    : 'bg-red-600 hover:bg-red-700'
-                                            } text-white`}
+                                        onClick={stopRecording}
+                                        className="flex items-center space-x-2 px-4 py-2 rounded-lg font-medium transition-all bg-red-600 hover:bg-red-700 text-white"
                                         >
-                                            <Square size={16} />
-                                            <span>Stop Recording</span>
+                                        <Square size={16} />
+                                        <span>Stop Recording</span>
                                         </button>
                                     </div>
 
