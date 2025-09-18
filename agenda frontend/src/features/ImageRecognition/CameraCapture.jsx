@@ -24,6 +24,17 @@ export default function CameraCapture() {
 
   async function startStream() {
     try {
+      // First, send request to backend
+      const backendResponse = await fetch('/api/camera/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: 'someId' })
+      });
+      
+      if (!backendResponse.ok) {
+        throw new Error('Backend denied camera access');
+      }
+
       const mediaStream = await navigator.mediaDevices.getUserMedia({
         video: { width: 640, height: 480 },
         audio: false,
@@ -45,7 +56,18 @@ export default function CameraCapture() {
     }
   }
 
-  function stopStream() {
+  async function stopStream() {
+    try {
+      // Send request to backend to stop camera
+      await fetch('/api/camera/stop', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: 'someId' })
+      });
+    } catch (err) {
+      console.error("Backend stop request failed:", err);
+    }
+
     if (stream) {
       stream.getTracks().forEach((t) => t.stop());
     }

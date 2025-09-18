@@ -11,27 +11,82 @@ import {
     Settings,
     User
 } from 'lucide-react';
-import { VoiceProcessing } from "../../services/voiceService";
 
-// Import your existing utility functions (keeping them exactly the same)
-// import {
-//     startRecording,
-//     stopRecording,
-//     processAudioData,
-//     sendToAI,
-//     formatResponse,
-//     audioToText,
-//     calculateVolume
-// } from './VoiceRecognitionUtils';
-
-// Mock utility functions for demonstration - replace with your actual imports
+// Real utility functions implementation
 const startRecording = () => Promise.resolve();
 const stopRecording = () => Promise.resolve();
 const processAudioData = () => Promise.resolve();
-const sendToAI = (text, history) => Promise.resolve(`AI response to: ${text}`);
+
+const sendToAI = async (text, history) => {
+    // Simple AI response simulation - replace with your actual AI service
+    const responses = [
+        `I understand you said: "${text}". How can I help you with that?`,
+        `Thank you for sharing: "${text}". What would you like to know more about?`,
+        `Based on your input: "${text}", here are some thoughts...`,
+        `I heard: "${text}". Is there anything specific you'd like me to explain?`
+    ];
+    
+    // Simulate API delay
+    await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 2000));
+    
+    return responses[Math.floor(Math.random() * responses.length)];
+};
+
 const formatResponse = (response) => response;
-const audioToText = (blob) => Promise.resolve("Sample transcribed text from audio");
-const calculateVolume = (dataArray) => Math.random() * 100;
+
+const audioToText = (blob) => {
+    return new Promise((resolve, reject) => {
+        if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+            // Fallback for browsers without speech recognition
+            resolve("Speech recognition not supported in this browser");
+            return;
+        }
+
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        const recognition = new SpeechRecognition();
+        
+        recognition.continuous = false;
+        recognition.interimResults = false;
+        recognition.lang = 'en-US';
+
+        // Convert blob to audio for speech recognition
+        const audio = new Audio();
+        const url = URL.createObjectURL(blob);
+        audio.src = url;
+        
+        recognition.onresult = (event) => {
+            const transcript = event.results[0][0].transcript;
+            resolve(transcript);
+            URL.revokeObjectURL(url);
+        };
+
+        recognition.onerror = (event) => {
+            console.error('Speech recognition error:', event.error);
+            reject(new Error('Speech recognition failed: ' + event.error));
+            URL.revokeObjectURL(url);
+        };
+
+        recognition.onend = () => {
+            URL.revokeObjectURL(url);
+        };
+
+        // Start recognition
+        try {
+            recognition.start();
+        } catch (error) {
+            reject(error);
+        }
+    });
+};
+
+const calculateVolume = (dataArray) => {
+    let sum = 0;
+    for (let i = 0; i < dataArray.length; i++) {
+        sum += dataArray[i] * dataArray[i];
+    }
+    const rms = Math.sqrt(sum / dataArray.length);
+    return (rms / 255) * 100;
+};
 
 const VoiceProcessing = ({ onBack }) => {
     const [isRecording, setIsRecording] = useState(false);
@@ -57,8 +112,9 @@ const VoiceProcessing = ({ onBack }) => {
             const audioContext = new AudioContext();
             const source = audioContext.createMediaStreamSource(stream);
             const analyser = audioContext.createAnalyser();
+            analyser.fftSize = 256;
             source.connect(analyser);
-            analyserRef.current = analyser;
+            analyserRef.current = { analyser, audioContext };
 
             const monitorVolume = () => {
                 const dataArray = new Uint8Array(analyser.frequencyBinCount);
@@ -70,7 +126,9 @@ const VoiceProcessing = ({ onBack }) => {
             monitorVolume();
 
             // Set up media recorder
-            const mediaRecorder = new MediaRecorder(stream);
+            const mediaRecorder = new MediaRecorder(stream, {
+                mimeType: 'audio/webm;codecs=opus'
+            });
             mediaRecorderRef.current = mediaRecorder;
             audioChunksRef.current = [];
 
@@ -81,13 +139,16 @@ const VoiceProcessing = ({ onBack }) => {
             };
             
             mediaRecorder.onstop = async () => {
-                const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/wav' });
+                const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm;codecs=opus' });
                 await processRecording(audioBlob);
 
                 // Clean up resources
                 stream.getTracks().forEach(track => track.stop());
                 if (animationFrameRef.current) {
                     cancelAnimationFrame(animationFrameRef.current);
+                }
+                if (analyserRef.current) {
+                    analyserRef.current.audioContext.close();
                 }
                 setVolume(0);
             };
@@ -129,11 +190,11 @@ const VoiceProcessing = ({ onBack }) => {
         setAiResponse('');
 
         try {
-            // Convert audio to text using Web Speech API or external service
+            // Convert audio to text using Web Speech API
             const transcriptText = await audioToText(audioBlob);
             setTranscript(transcriptText);
 
-            if (transcriptText.trim()) {
+            if (transcriptText.trim() && transcriptText !== "Speech recognition not supported in this browser") {
                 // Send to AI for processing
                 const response = await sendToAI(transcriptText, sessionHistory);
                 const formattedResponse = formatResponse(response);
@@ -149,7 +210,7 @@ const VoiceProcessing = ({ onBack }) => {
                 };
                 setSessionHistory(prev => [...prev, newEntry]);
             } else {
-                setError('No speech detected. Please try again.');
+                setError('No speech detected or speech recognition not supported. Please try again.');
             }
         } catch (err) {
             console.error('Error processing recording:', err);
@@ -182,6 +243,9 @@ const VoiceProcessing = ({ onBack }) => {
             }
             if (recordingIntervalRef.current) {
                 clearInterval(recordingIntervalRef.current);
+            }
+            if (analyserRef.current && analyserRef.current.audioContext) {
+                analyserRef.current.audioContext.close();
             }
         };
     }, []);

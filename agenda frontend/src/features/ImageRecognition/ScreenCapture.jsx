@@ -17,8 +17,33 @@ import {
   EyeOff, 
   Copy,
   Circle,
-  Zap
+  Zap,
+  Wifi,
+  WifiOff,
+  AlertCircle
 } from 'lucide-react';
+
+// Backend Communication Layer
+const screenCaptureAPI = {
+  startCapture: async (config) => {
+    const response = await fetch('/api/screen-capture/start', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(config)
+    });
+    return response.json();
+  },
+  stopCapture: async (sessionId) => {
+    return fetch(`/api/screen-capture/stop/${sessionId}`, { method: 'POST' });
+  },
+  sendFrame: async (frameData, sessionId) => {
+    return fetch('/api/screen-capture/frame', {
+      method: 'POST',
+      body: frameData,
+      headers: { 'X-Session-ID': sessionId }
+    });
+  }
+};
 
 /**
  * Hello Bimari Gamari read from here
@@ -30,6 +55,7 @@ import {
  */
 export default function ScreenCapture() {
   const videoRef = useRef(null);
+  const wsRef = useRef(null);
   const [stream, setStream] = useState(null);
   const [running, setRunning] = useState(false);
   const [autoDetect, setAutoDetect] = useState(true);
@@ -37,6 +63,16 @@ export default function ScreenCapture() {
   const [recognitions, setRecognitions] = useState([]); // history of recognition results
   const [messages, setMessages] = useState([]); // chat-like UI of interviewer/ai
   const [processing, setProcessing] = useState(false);
+  
+  // Backend Integration State
+  const [sessionId, setSessionId] = useState(null);
+  const [backendStatus, setBackendStatus] = useState('disconnected'); // connected, processing, error
+  const [permissions, setPermissions] = useState({
+    screen: null,
+    camera: null,
+    microphone: null
+  });
+  
   const detectorLockRef = useRef(false);
   const intervalRef = useRef(null);
 
@@ -44,50 +80,201 @@ export default function ScreenCapture() {
     return () => {
       stopStream();
       clearInterval(intervalRef.current);
+      if (wsRef.current) {
+        wsRef.current.close();
+      }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Permission Handling System
+  async function requestPermissions() {
+    try {
+      // Request screen capture permission
+      const stream = await navigator.mediaDevices.getDisplayMedia({
+        video: { cursor: "always" },
+        audio: false
+      });
+      
+      setPermissions(prev => ({...prev, screen: 'granted'}));
+      return stream;
+    } catch (error) {
+      setPermissions(prev => ({...prev, screen: 'denied'}));
+      throw error;
+    }
+  }
+
+  // Backend Service Activation
+  async function activateBackendServices() {
+    try {
+      setBackendStatus('connecting');
+      
+      const response = await fetch('/api/services/activate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          services: ['screen_capture', 'image_recognition', 'ai_analysis'],
+          config: {
+            captureInterval: 1500,
+            analysisMode: 'realtime',
+            autoDetect: autoDetect
+          }
+        })
+      });
+      
+      if (!response.ok) throw new Error('Failed to activate backend services');
+      
+      const { sessionId: newSessionId } = await response.json();
+      setSessionId(newSessionId);
+      setBackendStatus('connected');
+      
+      return newSessionId;
+    } catch (error) {
+      setBackendStatus('error');
+      throw error;
+    }
+  }
+
+  // Real-time Backend Synchronization
+  function establishWebSocketConnection(sessionId) {
+    wsRef.current = new WebSocket(`ws://localhost:8000/ws/screen-capture/${sessionId}`);
+    
+    wsRef.current.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+      
+      switch (data.type) {
+        case 'recognition_result':
+          setRecognitions(prev => [data.payload, ...prev].slice(0, 20));
+          break;
+        case 'ai_response':
+          setMessages(prev => [...prev, {
+            id: crypto.randomUUID(),
+            from: 'ai',
+            text: data.payload.response
+          }]);
+          break;
+        case 'backend_status':
+          setBackendStatus(data.payload.status);
+          break;
+        default:
+          break;
+      }
+    };
+
+    wsRef.current.onclose = () => {
+      setBackendStatus('disconnected');
+    };
+
+    wsRef.current.onerror = () => {
+      setBackendStatus('error');
+    };
+  }
+
+  function startAutoCaptureLoop(sessionId) {
+    if (autoDetect) {
+      intervalRef.current = setInterval(() => {
+        if (!detectorLockRef.current) doCaptureAndRecognize();
+      }, 1500); // throttle to once every 1.5s
+    }
+  }
+
+  async function handleStartupError(error) {
+    setBackendStatus('error');
+    setMessages(prev => [...prev, {
+      id: crypto.randomUUID(),
+      from: 'system',
+      text: `Startup Error: ${error.message}`
+    }]);
+  }
+
+  // Enhanced Start/Stop Flow
   async function startStream() {
     try {
-      const mediaStream = await navigator.mediaDevices.getDisplayMedia({
-        video: { cursor: "always" },
-        audio: false,
-      });
+      // 1. Request permissions
+      const mediaStream = await requestPermissions();
+      
+      // 2. Activate backend services
+      const sessionId = await activateBackendServices();
+      
+      // 3. Establish WebSocket connection
+      establishWebSocketConnection(sessionId);
+      
+      // 4. Start local stream
       setStream(mediaStream);
       if (videoRef.current) {
         videoRef.current.srcObject = mediaStream;
-        videoRef.current.play().catch(() => {});
+        await videoRef.current.play();
       }
       setRunning(true);
-
-      // auto-capture periodically if autoDetect enabled
+      
+      // 5. Notify backend that stream is ready
+      await fetch('/api/screen-capture/ready', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId, status: 'ready' })
+      });
+      
+      // 6. Start auto-capture if enabled
       if (autoDetect) {
-        intervalRef.current = setInterval(() => {
-          if (!detectorLockRef.current) doCaptureAndRecognize();
-        }, 1500); // throttle to once every 1.5s
+        startAutoCaptureLoop(sessionId);
       }
-    } catch (err) {
-      console.error("Screen capture failed:", err);
-      alert("Unable to start screen capture: " + (err.message || err));
+      
+    } catch (error) {
+      console.error("Failed to start screen capture:", error);
+      await handleStartupError(error);
     }
   }
 
   async function stopStream() {
     try {
+      // 1. Stop local stream
       if (stream) {
-        stream.getTracks().forEach((t) => t.stop());
+        stream.getTracks().forEach(track => track.stop());
       }
-    } finally {
+      
+      // 2. Close WebSocket
+      if (wsRef.current) {
+        wsRef.current.close();
+      }
+      
+      // 3. Deactivate backend services
+      if (sessionId) {
+        await fetch('/api/services/deactivate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sessionId })
+        });
+      }
+      
+      // 4. Clean up state
       setStream(null);
+      setSessionId(null);
       setRunning(false);
+      setBackendStatus('disconnected');
       clearInterval(intervalRef.current);
+      
+    } catch (error) {
+      console.error("Error stopping stream:", error);
     }
   }
 
+  function handleImmediateResult(result) {
+    if (result.recognition) {
+      setRecognitions(prev => [result.recognition, ...prev].slice(0, 20));
+    }
+    if (result.aiResponse) {
+      setMessages(prev => [...prev, {
+        id: crypto.randomUUID(),
+        from: 'ai',
+        text: result.aiResponse
+      }]);
+    }
+  }
+
+  // Frame Transmission to Backend
   async function doCaptureAndRecognize({ manualTrigger = false } = {}) {
-    // avoid concurrent processing
-    if (detectorLockRef.current) return;
+    if (detectorLockRef.current || !sessionId) return;
+    
     detectorLockRef.current = true;
     setProcessing(true);
 
@@ -100,36 +287,68 @@ export default function ScreenCapture() {
       }
       setLastSnapshot(frameBlob);
 
-      // Convert to base64 for sending to backend or to show inline
-      const b64 = await blobToBase64(frameBlob);
+      // Create FormData for multipart upload
+      const formData = new FormData();
+      formData.append('frame', frameBlob, 'screenshot.png');
+      formData.append('sessionId', sessionId);
+      formData.append('timestamp', Date.now().toString());
+      formData.append('manualTrigger', manualTrigger.toString());
 
-      // Recognize image (mock or real API inside recognizeImage)
-      const recognition = await recognizeImage(b64);
+      // Send to backend for processing
+      const response = await fetch('/api/screen-capture/process-frame', {
+        method: 'POST',
+        body: formData
+      });
 
-      // Create an insight-like object (similar to KeyInsights style)
-      const insight = generateInsightFromRecognition(recognition);
+      if (!response.ok) {
+        throw new Error(`Backend processing failed: ${response.statusText}`);
+      }
 
-      // Add to recognition history
-      setRecognitions((s) => [insight, ...s].slice(0, 20));
+      const result = await response.json();
+      
+      // Backend will send results via WebSocket, but we can also handle immediate response
+      if (result.immediate) {
+        handleImmediateResult(result);
+      }
 
-      // Format result for AI quick response (send to quick respond)
-      const formatted = formatRecognitionResult(insight);
+      // Fallback to local processing if backend fails
+      if (!result.success) {
+        // Convert to base64 for sending to backend or to show inline
+        const b64 = await blobToBase64(frameBlob);
 
-      // Add interviewer-like message (what the UI shows as detected question context)
-      setMessages((m) => [
-        ...m,
-        { id: crypto.randomUUID(), from: "system", text: "Detected: " + (insight.title || "screen content") },
-      ]);
+        // Recognize image (mock or real API inside recognizeImage)
+        const recognition = await recognizeImage(b64);
 
-      // Ask QuickRespond (or your chat service) for an immediate answer
-      const aiReply = await sendQuickReply(formatted);
-      setMessages((m) => [
-        ...m,
-        { id: crypto.randomUUID(), from: "ai", text: aiReply },
-      ]);
+        // Create an insight-like object (similar to KeyInsights style)
+        const insight = generateInsightFromRecognition(recognition);
 
-    } catch (err) {
-      console.error("Capture/recognize error:", err);
+        // Add to recognition history
+        setRecognitions((s) => [insight, ...s].slice(0, 20));
+
+        // Format result for AI quick response (send to quick respond)
+        const formatted = formatRecognitionResult(insight);
+
+        // Add interviewer-like message (what the UI shows as detected question context)
+        setMessages((m) => [
+          ...m,
+          { id: crypto.randomUUID(), from: "system", text: "Detected: " + (insight.title || "screen content") },
+        ]);
+
+        // Ask QuickRespond (or your chat service) for an immediate answer
+        const aiReply = await sendQuickReply(formatted);
+        setMessages((m) => [
+          ...m,
+          { id: crypto.randomUUID(), from: "ai", text: aiReply },
+        ]);
+      }
+
+    } catch (error) {
+      console.error("Frame processing error:", error);
+      setMessages(prev => [...prev, {
+        id: crypto.randomUUID(),
+        from: 'system',
+        text: `Error: ${error.message}`
+      }]);
     } finally {
       detectorLockRef.current = false;
       setProcessing(false);
@@ -141,10 +360,34 @@ export default function ScreenCapture() {
     await doCaptureAndRecognize({ manualTrigger: true });
   }
 
+  // Configuration Sync with Backend
+  async function updateBackendConfig(config) {
+    if (!sessionId) return;
+    
+    try {
+      await fetch('/api/screen-capture/config', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionId,
+          config: {
+            autoDetect,
+            captureInterval: 1500,
+            recognitionThreshold: 0.7,
+            ...config
+          }
+        })
+      });
+    } catch (error) {
+      console.error('Failed to update backend config:', error);
+    }
+  }
+
   // Toggle auto-detect on the fly
   function toggleAutoDetect() {
     setAutoDetect((v) => {
       const next = !v;
+      updateBackendConfig({ autoDetect: next }); // Sync with backend
       if (next) {
         // start interval if running
         if (running && !intervalRef.current) {
@@ -188,6 +431,40 @@ export default function ScreenCapture() {
             }`}>
               <Circle size={8} className={`fill-current ${running ? 'text-green-300' : 'text-slate-500'}`} />
               <span>{running ? 'Active' : 'Standby'}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Backend Status Monitor */}
+        <div className="bg-slate-800/50 backdrop-blur p-4 rounded-xl border border-slate-700">
+          <h4 className="text-sm font-semibold text-slate-200 mb-2">Backend Status</h4>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-4">
+              <div className={`flex items-center space-x-2 text-sm ${
+                backendStatus === 'connected' ? 'text-green-400' : 
+                backendStatus === 'connecting' ? 'text-yellow-400' : 'text-red-400'
+              }`}>
+                {backendStatus === 'connected' ? <Wifi size={16} /> : 
+                 backendStatus === 'connecting' ? <Activity size={16} className="animate-spin" /> :
+                 <WifiOff size={16} />}
+                <span className="capitalize">{backendStatus}</span>
+              </div>
+              {sessionId && (
+                <span className="text-xs text-slate-400">
+                  Session: {sessionId.slice(0, 8)}...
+                </span>
+              )}
+            </div>
+            <div className="flex items-center space-x-2">
+              <div className={`flex items-center space-x-1 text-xs ${
+                permissions.screen === 'granted' ? 'text-green-400' : 
+                permissions.screen === 'denied' ? 'text-red-400' : 'text-slate-400'
+              }`}>
+                {permissions.screen === 'granted' ? <Circle size={6} className="fill-current" /> :
+                 permissions.screen === 'denied' ? <AlertCircle size={12} /> :
+                 <Circle size={6} className="text-slate-500" />}
+                <span>Screen</span>
+              </div>
             </div>
           </div>
         </div>

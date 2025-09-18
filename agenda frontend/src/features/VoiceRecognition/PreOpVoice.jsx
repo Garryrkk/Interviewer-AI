@@ -24,6 +24,12 @@ const PreOpVoice = ({ onComplete, micPermission, setMicPermission }) => {
     const [calibrationData, setCalibrationData] = useState(null);
     const [allChecksComplete, setAllChecksComplete] = useState(false);
 
+    // Voice transcription states
+    const [isRecording, setIsRecording] = useState(false);
+    const [transcript, setTranscript] = useState('');
+    const [mediaRecorder, setMediaRecorder] = useState(null);
+    const [audioChunks, setAudioChunks] = useState([]);
+
     const animationRef = useRef();
     const analyserRef = useRef();
 
@@ -45,8 +51,11 @@ const PreOpVoice = ({ onComplete, micPermission, setMicPermission }) => {
             if (animationRef.current) {
                 cancelAnimationFrame(animationRef.current);
             }
+            if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+                mediaRecorder.stop();
+            }
         };
-    }, [mediaStream, audioContext]);
+    }, [mediaStream, audioContext, mediaRecorder]);
 
     const requestMicrophonePermission = async () => {
         setPermissionStatus('requesting');
@@ -91,6 +100,21 @@ const PreOpVoice = ({ onComplete, micPermission, setMicPermission }) => {
 
             source.connect(analyser);
             analyserRef.current = analyser;
+            
+            // Setup MediaRecorder for transcription
+            const recorder = new MediaRecorder(stream);
+            setMediaRecorder(recorder);
+
+            recorder.ondataavailable = (event) => {
+                if (event.data.size > 0) {
+                    setAudioChunks(prev => [...prev, event.data]);
+                }
+            };
+
+            recorder.onstop = () => {
+                const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+                sendAudioToBackend(audioBlob);
+            };
             
             // Start noise detection
             monitorNoise();
@@ -137,6 +161,40 @@ const PreOpVoice = ({ onComplete, micPermission, setMicPermission }) => {
             setCurrentCheck('complete');
             setAllChecksComplete(true);
         }, 1000);
+    };
+
+    // Voice transcription functions
+    const startRecording = () => {
+        if (mediaRecorder && mediaRecorder.state === 'inactive') {
+            setAudioChunks([]);
+            setIsRecording(true);
+            mediaRecorder.start();
+        }
+    };
+
+    const stopRecording = () => {
+        if (mediaRecorder && mediaRecorder.state === 'recording') {
+            setIsRecording(false);
+            mediaRecorder.stop();
+        }
+    };
+
+    const sendAudioToBackend = async (audioBlob) => {
+        try {
+            const formData = new FormData();
+            formData.append('audio', audioBlob);
+            
+            const response = await fetch('/api/transcribe', {
+                method: 'POST',
+                body: formData
+            });
+            
+            const { transcript: newTranscript } = await response.json();
+            setTranscript(newTranscript);
+        } catch (error) {
+            console.error('Error transcribing audio:', error);
+            setTranscript('Error: Could not transcribe audio');
+        }
     };
 
     const handleComplete = () => {
@@ -453,6 +511,55 @@ const PreOpVoice = ({ onComplete, micPermission, setMicPermission }) => {
                                         </div>
                                     </div>
                                 )}
+
+                                {/* Voice Transcription Section */}
+                                <div className="bg-slate-900/50 p-6 rounded-lg mb-6 max-w-2xl mx-auto">
+                                    <h4 className="font-semibold text-slate-200 mb-4">Test Voice Transcription</h4>
+                                    
+                                    <div className="flex justify-center space-x-4 mb-4">
+                                        <button 
+                                            onClick={startRecording}
+                                            disabled={isRecording}
+                                            className={`flex items-center space-x-2 px-4 py-2 rounded-lg font-medium transition-all ${
+                                                isRecording 
+                                                    ? 'bg-gray-600 cursor-not-allowed' 
+                                                    : 'bg-red-600 hover:bg-red-700'
+                                            } text-white`}
+                                        >
+                                            <Mic size={16} />
+                                            <span>Start Recording</span>
+                                        </button>
+                                        
+                                        <button 
+                                            onClick={stopRecording}
+                                            disabled={!isRecording}
+                                            className={`flex items-center space-x-2 px-4 py-2 rounded-lg font-medium transition-all ${
+                                                !isRecording 
+                                                    ? 'bg-gray-600 cursor-not-allowed' 
+                                                    : 'bg-red-600 hover:bg-red-700'
+                                            } text-white`}
+                                        >
+                                            <Square size={16} />
+                                            <span>Stop Recording</span>
+                                        </button>
+                                    </div>
+
+                                    {isRecording && (
+                                        <div className="bg-red-900/30 border border-red-700/50 p-3 rounded-lg mb-4">
+                                            <div className="flex items-center justify-center space-x-2">
+                                                <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
+                                                <span className="text-red-300 text-sm">Recording in progress...</span>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {transcript && (
+                                        <div className="bg-slate-800 p-4 rounded-lg border border-slate-600">
+                                            <h5 className="text-slate-300 text-sm mb-2">Transcript:</h5>
+                                            <p className="text-slate-100">{transcript}</p>
+                                        </div>
+                                    )}
+                                </div>
                             </div>
 
                             <button 

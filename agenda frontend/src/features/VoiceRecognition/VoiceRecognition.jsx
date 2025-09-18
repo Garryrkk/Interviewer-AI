@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Mic, Activity, Volume2, ChevronLeft, Settings, Circle } from 'lucide-react';
-import { VoiceRecognition } from "../../services/voiceService";
+
 // PreOpVoice Component
 const PreOpVoice = ({ onComplete, micPermission, setMicPermission }) => {
     const [isPrepping, setIsPrepping] = useState(false);
@@ -114,32 +114,166 @@ const VoiceProcessing = ({ onBackToSetup, isReady }) => {
     const [isProcessing, setIsProcessing] = useState(false);
     const [transcription, setTranscription] = useState('');
     const [processingStatus, setProcessingStatus] = useState('ready');
+    const [accuracy, setAccuracy] = useState(94);
+    const [processingSpeed, setProcessingSpeed] = useState(87);
+    const [audioQuality, setAudioQuality] = useState(91);
+    const [interimTranscript, setInterimTranscript] = useState('');
+    
+    const recognitionRef = useRef(null);
+    const mediaRecorderRef = useRef(null);
+    const audioChunksRef = useRef([]);
+    const streamRef = useRef(null);
 
-    const handleStartRecording = () => {
-        setIsRecording(true);
-        setProcessingStatus('recording');
-        setTranscription('Listening for voice input...');
-        
-        // Simulate recording process
-        setTimeout(() => {
-            setTranscription('Processing speech...');
-            setIsRecording(false);
-            setIsProcessing(true);
-            setProcessingStatus('processing');
+    useEffect(() => {
+        // Initialize Speech Recognition
+        if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+            const SpeechRecognition = window.webkitSpeechRecognition || window.SpeechRecognition;
+            recognitionRef.current = new SpeechRecognition();
             
-            setTimeout(() => {
-                setTranscription('Voice recognition completed successfully.');
+            recognitionRef.current.continuous = true;
+            recognitionRef.current.interimResults = true;
+            recognitionRef.current.lang = 'en-US';
+
+            recognitionRef.current.onstart = () => {
+                setProcessingStatus('recording');
+                setTranscription('Listening for voice input...');
+            };
+
+            recognitionRef.current.onresult = (event) => {
+                let finalTranscript = '';
+                let interimTranscript = '';
+
+                for (let i = event.resultIndex; i < event.results.length; i++) {
+                    const transcript = event.results[i][0].transcript;
+                    const confidence = event.results[i][0].confidence;
+                    
+                    if (event.results[i].isFinal) {
+                        finalTranscript += transcript;
+                        // Update accuracy based on confidence
+                        setAccuracy(Math.round(confidence * 100));
+                    } else {
+                        interimTranscript += transcript;
+                    }
+                }
+
+                if (finalTranscript) {
+                    setTranscription(prev => prev + ' ' + finalTranscript);
+                }
+                setInterimTranscript(interimTranscript);
+            };
+
+            recognitionRef.current.onerror = (event) => {
+                console.error('Speech recognition error:', event.error);
+                setProcessingStatus('error');
+                setTranscription('Error occurred during voice recognition: ' + event.error);
+            };
+
+            recognitionRef.current.onend = () => {
+                setIsRecording(false);
                 setIsProcessing(false);
                 setProcessingStatus('completed');
-            }, 2000);
-        }, 3000);
+            };
+        }
+
+        return () => {
+            if (recognitionRef.current) {
+                recognitionRef.current.stop();
+            }
+            if (streamRef.current) {
+                streamRef.current.getTracks().forEach(track => track.stop());
+            }
+        };
+    }, []);
+
+    const startAudioRecording = async () => {
+        try {
+            streamRef.current = await navigator.mediaDevices.getUserMedia({ 
+                audio: {
+                    echoCancellation: true,
+                    noiseSuppression: true,
+                    autoGainControl: true
+                } 
+            });
+
+            mediaRecorderRef.current = new MediaRecorder(streamRef.current, {
+                mimeType: 'audio/webm;codecs=opus'
+            });
+
+            audioChunksRef.current = [];
+
+            mediaRecorderRef.current.ondataavailable = (event) => {
+                if (event.data.size > 0) {
+                    audioChunksRef.current.push(event.data);
+                    // Analyze audio quality
+                    analyzeAudioQuality(event.data);
+                }
+            };
+
+            mediaRecorderRef.current.onstop = () => {
+                const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+                processAudioData(audioBlob);
+            };
+
+            mediaRecorderRef.current.start(100); // Collect data every 100ms
+        } catch (error) {
+            console.error('Error starting audio recording:', error);
+        }
+    };
+
+    const analyzeAudioQuality = (audioData) => {
+        // Simulate audio quality analysis based on data size
+        const quality = Math.min(100, Math.max(60, audioData.size / 1000 * 20));
+        setAudioQuality(Math.round(quality));
+    };
+
+    const processAudioData = async (audioBlob) => {
+        setIsProcessing(true);
+        setProcessingStatus('processing');
+        
+        // Simulate processing time based on audio size
+        const processingTime = Math.max(500, audioBlob.size / 1000);
+        const speedScore = Math.max(70, 100 - (processingTime / 100));
+        setProcessingSpeed(Math.round(speedScore));
+
+        // In a real implementation, you would send audioBlob to your backend
+        // const formData = new FormData();
+        // formData.append('audio', audioBlob);
+        // const response = await fetch('/api/voice-recognition', {
+        //     method: 'POST',
+        //     body: formData
+        // });
+        
+        setTimeout(() => {
+            setIsProcessing(false);
+        }, Math.min(processingTime, 2000));
+    };
+
+    const handleStartRecording = async () => {
+        setIsRecording(true);
+        setTranscription('');
+        setInterimTranscript('');
+        
+        // Start both speech recognition and audio recording
+        if (recognitionRef.current) {
+            recognitionRef.current.start();
+        }
+        await startAudioRecording();
     };
 
     const handleStopRecording = () => {
         setIsRecording(false);
-        setIsProcessing(false);
-        setProcessingStatus('ready');
-        setTranscription('');
+        
+        if (recognitionRef.current) {
+            recognitionRef.current.stop();
+        }
+        
+        if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+            mediaRecorderRef.current.stop();
+        }
+        
+        if (streamRef.current) {
+            streamRef.current.getTracks().forEach(track => track.stop());
+        }
     };
 
     return (
@@ -189,6 +323,7 @@ const VoiceProcessing = ({ onBackToSetup, isReady }) => {
                                         ? 'bg-red-600 hover:bg-red-700 shadow-lg hover:shadow-red-600/30' 
                                         : 'bg-pink-600 hover:bg-pink-700 shadow-lg hover:shadow-pink-600/30'
                                 } text-white`}
+                                disabled={!isReady}
                             >
                                 {isRecording ? 'Stop Recording' : 'Start Recording'}
                             </button>
@@ -211,11 +346,13 @@ const VoiceProcessing = ({ onBackToSetup, isReady }) => {
                                 processingStatus === 'recording' ? 'bg-red-600' :
                                 processingStatus === 'processing' ? 'bg-yellow-600' :
                                 processingStatus === 'completed' ? 'bg-green-600' :
+                                processingStatus === 'error' ? 'bg-red-600' :
                                 'bg-slate-600'
                             }`}>
                                 {processingStatus === 'recording' ? 'Recording' :
                                  processingStatus === 'processing' ? 'Processing' :
                                  processingStatus === 'completed' ? 'Completed' :
+                                 processingStatus === 'error' ? 'Error' :
                                  'Ready'}
                             </div>
                         </div>
@@ -231,8 +368,16 @@ const VoiceProcessing = ({ onBackToSetup, isReady }) => {
                             <div className="w-20 h-20 bg-slate-900 border-2 border-slate-600 rounded-full flex items-center justify-center mx-auto">
                                 <Volume2 size={32} className="text-slate-500" />
                             </div>
-                            <button className="w-full bg-pink-600 text-white py-3 px-4 rounded-lg hover:bg-pink-700 transition-colors font-medium">
-                                View Results
+                            <button 
+                                className="w-full bg-pink-600 text-white py-3 px-4 rounded-lg hover:bg-pink-700 transition-colors font-medium"
+                                onClick={() => {
+                                    if (transcription) {
+                                        navigator.clipboard.writeText(transcription);
+                                        alert('Transcription copied to clipboard!');
+                                    }
+                                }}
+                            >
+                                Copy Results
                             </button>
                         </div>
                     </div>
@@ -241,9 +386,14 @@ const VoiceProcessing = ({ onBackToSetup, isReady }) => {
                     <div className="bg-slate-800/50 backdrop-blur p-6 rounded-xl border border-slate-700">
                         <h3 className="text-lg font-semibold mb-4 text-slate-200">Live Transcription</h3>
                         <div className="bg-slate-900/80 p-4 rounded-lg min-h-32 max-h-48 overflow-y-auto">
-                            <p className="text-slate-400 text-sm">
+                            <p className="text-slate-300 text-sm mb-2">
                                 {transcription || 'Voice transcription will appear here in real-time...'}
                             </p>
+                            {interimTranscript && (
+                                <p className="text-slate-500 italic text-sm">
+                                    {interimTranscript}
+                                </p>
+                            )}
                         </div>
                     </div>
                 </div>
@@ -256,28 +406,37 @@ const VoiceProcessing = ({ onBackToSetup, isReady }) => {
                             <div>
                                 <div className="flex justify-between mb-2">
                                     <span className="text-slate-300 text-sm">Recognition Accuracy</span>
-                                    <span className="text-slate-400 text-sm">94%</span>
+                                    <span className="text-slate-400 text-sm">{accuracy}%</span>
                                 </div>
                                 <div className="w-full bg-slate-700 rounded-full h-2">
-                                    <div className="bg-green-500 h-2 rounded-full w-[94%]"></div>
+                                    <div 
+                                        className="bg-green-500 h-2 rounded-full transition-all duration-500"
+                                        style={{ width: `${accuracy}%` }}
+                                    ></div>
                                 </div>
                             </div>
                             <div>
                                 <div className="flex justify-between mb-2">
                                     <span className="text-slate-300 text-sm">Processing Speed</span>
-                                    <span className="text-slate-400 text-sm">87%</span>
+                                    <span className="text-slate-400 text-sm">{processingSpeed}%</span>
                                 </div>
                                 <div className="w-full bg-slate-700 rounded-full h-2">
-                                    <div className="bg-blue-500 h-2 rounded-full w-[87%]"></div>
+                                    <div 
+                                        className="bg-blue-500 h-2 rounded-full transition-all duration-500"
+                                        style={{ width: `${processingSpeed}%` }}
+                                    ></div>
                                 </div>
                             </div>
                             <div>
                                 <div className="flex justify-between mb-2">
                                     <span className="text-slate-300 text-sm">Audio Quality</span>
-                                    <span className="text-slate-400 text-sm">91%</span>
+                                    <span className="text-slate-400 text-sm">{audioQuality}%</span>
                                 </div>
                                 <div className="w-full bg-slate-700 rounded-full h-2">
-                                    <div className="bg-purple-500 h-2 rounded-full w-[91%]"></div>
+                                    <div 
+                                        className="bg-purple-500 h-2 rounded-full transition-all duration-500"
+                                        style={{ width: `${audioQuality}%` }}
+                                    ></div>
                                 </div>
                             </div>
                         </div>
@@ -288,9 +447,9 @@ const VoiceProcessing = ({ onBackToSetup, isReady }) => {
                         <div className="space-y-4">
                             {[
                                 { name: 'Microphone', status: isReady, color: 'green' },
-                                { name: 'Audio Processing', status: true, color: 'blue' },
-                                { name: 'Speech Recognition', status: true, color: 'purple' },
-                                { name: 'Network Connection', status: true, color: 'green' }
+                                { name: 'Audio Processing', status: !!mediaRecorderRef.current, color: 'blue' },
+                                { name: 'Speech Recognition', status: !!recognitionRef.current, color: 'purple' },
+                                { name: 'Network Connection', status: navigator.onLine, color: 'green' }
                             ].map((item, index) => (
                                 <div key={index} className="flex items-center justify-between p-3 rounded-lg bg-slate-900/50">
                                     <span className="text-slate-300 font-medium">{item.name}</span>
