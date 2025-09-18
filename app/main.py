@@ -266,6 +266,7 @@ allowed_origins = [
     "http://127.0.0.1:61863",
     "http://localhost:8000",    # your frontend dev URL
     "http://127.0.0.1:8000",
+    "https://a6cca2e85a30.ngrok-free.app",
 ]
 
 trusted_hosts = [
