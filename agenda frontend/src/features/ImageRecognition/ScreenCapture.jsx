@@ -22,7 +22,7 @@ import {
   WifiOff,
   AlertCircle
 } from 'lucide-react';
-
+import { ScreenCapture } from "../../services/imageService";
 // Backend Communication Layer
 const screenCaptureAPI = {
   startCapture: async (config) => {

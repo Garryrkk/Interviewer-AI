@@ -13,6 +13,9 @@ from typing import Dict, Any, List
 import time
 from starlette.exceptions import HTTPException as StarletteHTTPException
 import traceback
+from fastapi.staticfiles import StaticFiles
+from pathlib import Path
+
 import os
 
 # Import all schemas - now properly utilized
@@ -255,16 +258,26 @@ app = FastAPI(
     redoc_url="/redoc"
 )
 
+frontend_dist = Path(__file__).parent.parent / "agenda frontend" / "dist"
+
+# Mount the static frontend
+app.mount(
+    "/",                               # URL prefix
+    StaticFiles(directory=frontend_dist, html=True),
+    name="frontend"
+)
+
+
 # Define allowed origins and trusted hosts
 allowed_origins = [
     "http://localhost:5173",    # Vite dev
     "http://127.0.0.1:5173",
     "http://localhost:3000",    # React dev
     "http://127.0.0.1:3000",
-    "http://localhost:61863",   # your current frontend port
-    "http://127.0.0.1:61863",
-    "http://localhost:8000",    # your frontend dev URL
+    "http://localhost:8000",   # your current frontend port
     "http://127.0.0.1:8000",
+    "http://localhost:61863",    # your frontend dev URL
+    "http://127.0.0.1:61863",
 ]
 
 trusted_hosts = [
