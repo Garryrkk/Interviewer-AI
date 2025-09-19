@@ -26,7 +26,7 @@ export default function CameraCapture() {
   async function startStream() {
     try {
       // First, send request to backend
-      const backendResponse = await fetch('/api/camera/start', {
+      const backendResponse = await fetch('/start_stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId: 'someId' })
@@ -60,7 +60,7 @@ export default function CameraCapture() {
   async function stopStream() {
     try {
       // Send request to backend to stop camera
-      await fetch('/api/camera/stop', {
+      await fetch('/stopStream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId: 'someId' })
