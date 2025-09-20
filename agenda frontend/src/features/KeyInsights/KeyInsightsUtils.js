@@ -1,422 +1,511 @@
-export const generateInsightId = () => {
-    return `insight-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-};
-
 /**
- * Extract key insights from data
- * @param {string|object|array} data - The data to analyze
- * @param {number} maxInsights - Maximum number of insights to return
- * @returns {Promise<array>} Array of insight objects
+ * Key Insights Service - JavaScript utility file
+ * This file contains all the business logic, API calls, and data processing
+ * for the Key Insights Dashboard React component.
  */
-export const extractKeyInsights = async (data, maxInsights = 5) => {
-    if (!data) return [];
+
+class KeyInsightsService {
+  constructor(baseUrl = 'http://localhost:8000/api/v1/key-insights') {
+    this.baseUrl = baseUrl;
+    this.pollingIntervals = new Map();
+    this.requestTimeouts = new Map();
+  }
+
+  // API Configuration and Headers
+  getDefaultHeaders() {
+    return {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+    };
+  }
+
+  // Error handling utility
+  async handleResponse(response) {
+    if (!response.ok) {
+      let errorMessage;
+      try {
+        const errorData = await response.json();
+        errorMessage = errorData.detail || errorData.message || `HTTP error! status: ${response.status}`;
+      } catch {
+        errorMessage = `HTTP error! status: ${response.status}`;
+      }
+      throw new Error(errorMessage);
+    }
+    return await response.json();
+  }
+
+  // Generate unique meeting ID
+  generateMeetingId() {
+    const timestamp = Date.now();
+    const random = Math.random().toString(36).substring(2, 8);
+    return `meeting_${timestamp}_${random}`;
+  }
+
+  // Validate file upload
+  validateImageFile(file) {
+    if (!file) return { valid: false, error: 'No file selected' };
+    
+    if (!file.type.startsWith('image/')) {
+      return { valid: false, error: 'Please select a valid image file' };
+    }
+    
+    // Check file size (max 10MB)
+    const maxSize = 10 * 1024 * 1024;
+    if (file.size > maxSize) {
+      return { valid: false, error: 'File size must be less than 10MB' };
+    }
+    
+    return { valid: true };
+  }
+
+  // Parse participants string
+  parseParticipants(participantsString) {
+    if (!participantsString) return [];
+    return participantsString
+      .split(',')
+      .map(p => p.trim())
+      .filter(p => p.length > 0);
+  }
+
+  // Validate meeting context
+  validateMeetingContext(context) {
+    if (!context || context.trim().length < 20) {
+      return { 
+        valid: false, 
+        error: 'Meeting context must be at least 20 characters long' 
+      };
+    }
+    return { valid: true };
+  }
+
+  // Generate insights from meeting context and optional image
+  async generateInsights({
+    meetingContext,
+    meetingId,
+    participants,
+    analysisFocus,
+    selectedFile,
+    onProgress = () => {},
+    onStatusUpdate = () => {}
+  }) {
+    // Validation
+    if (!meetingContext && !selectedFile) {
+      throw new Error('Please provide either meeting context or upload an image file');
+    }
+
+    if (meetingContext) {
+      const contextValidation = this.validateMeetingContext(meetingContext);
+      if (!contextValidation.valid) {
+        throw new Error(contextValidation.error);
+      }
+    }
+
+    if (selectedFile) {
+      const fileValidation = this.validateImageFile(selectedFile);
+      if (!fileValidation.valid) {
+        throw new Error(fileValidation.error);
+      }
+    }
+
+    const parsedParticipants = this.parseParticipants(participants);
+    
+    try {
+      let response;
+      
+      if (selectedFile) {
+        // Use FormData for file upload
+        const formData = new FormData();
+        formData.append('meeting_context', meetingContext || '');
+        formData.append('meeting_id', meetingId || '');
+        formData.append('participants', JSON.stringify(parsedParticipants));
+        formData.append('analysis_focus', analysisFocus || '');
+        formData.append('include_visual_analysis', 'true');
+        formData.append('image_file', selectedFile);
+
+        response = await fetch(`${this.baseUrl}/analyze`, {
+          method: 'POST',
+          body: formData,
+        });
+      } else {
+        // Use JSON for text-only requests
+        const requestData = {
+          meeting_context: meetingContext,
+          meeting_id: meetingId || null,
+          participants: parsedParticipants,
+          analysis_focus: analysisFocus || null,
+          include_visual_analysis: false
+        };
+
+        response = await fetch(`${this.baseUrl}/analyze`, {
+          method: 'POST',
+          headers: this.getDefaultHeaders(),
+          body: JSON.stringify(requestData),
+        });
+      }
+
+      const data = await this.handleResponse(response);
+      
+      // Start status polling if insight ID is available
+      if (data.insight_id) {
+        this.startStatusPolling(data.insight_id, onStatusUpdate);
+      }
+
+      return data;
+    } catch (error) {
+      throw new Error(`Failed to generate insights: ${error.message}`);
+    }
+  }
+
+  // Simplify existing insights
+  async simplifyInsights({
+    originalInsightId,
+    originalInsights,
+    originalTips,
+    simplificationLevel = 'moderate',
+    targetAudience = null
+  }) {
+    if (!originalInsights || originalInsights.length === 0) {
+      throw new Error('No insights to simplify');
+    }
+
+    const requestData = {
+      original_insight_id: originalInsightId,
+      original_insights: originalInsights,
+      original_tips: originalTips,
+      simplification_level: simplificationLevel,
+      target_audience: targetAudience
+    };
 
     try {
-        const textData = typeof data === 'string' ? data : JSON.stringify(data);
+      const response = await fetch(`${this.baseUrl}/simplify`, {
+        method: 'POST',
+        headers: this.getDefaultHeaders(),
+        body: JSON.stringify(requestData),
+      });
 
-        const sentences = textData
-            .split(/[.!?]+/)
-            .map(s => s.trim())
-            .filter(s => s.length > 10);
-
-        if (sentences.length === 0) return [];
-
-        const insights = [];
-
-        const numericalInsights = extractNumericalInsights(sentences);
-        insights.push(...numericalInsights);
-        
-        const keywordInsights = extractKeywordBasedInsights(sentences);
-        insights.push(...keywordInsights);
-
-        const sentimentInsights = extractSentimentInsights(sentences);
-        insights.push(...sentimentInsights);
-
-        const patternInsights = extractPatternInsights(sentences);
-        insights.push(...patternInsights);
-
-        const uniqueInsights = removeDuplicateInsights(insights);
-        return uniqueInsights.slice(0, maxInsights);
-
+      return await this.handleResponse(response);
     } catch (error) {
-        console.error('Error extracting insights:', error);
-        return generateFallbackInsights(data);
+      throw new Error(`Failed to simplify insights: ${error.message}`);
     }
-};
+  }
 
-const extractNumericalInsights = (sentences) => {
-    const numericalPattern = /(\d+(?:\.\d+)?)\s*([%$€£¥]|\w+)/g;
-    const insights = [];
-
-    sentences.forEach((sentence, index) => {
-        const matches = sentence.match(numericalPattern);
-        if (matches && matches.length > 0) {
-            const metrics = matches.map(match => match.trim());
-            
-            insights.push({
-                id: generateInsightId(),
-                title: extractTitleFromSentence(sentence),
-                summary: sentence.length > 100 ? sentence.substring(0, 100) + '...' : sentence,
-                details: sentence,
-                category: 'trend',
-                metrics: metrics,
-                confidence: calculateNumericalConfidence(matches),
-                source: `sentence-${index}`,
-                timestamp: new Date().toISOString()
-            });
-        }
-    });
-    
-    return insights;
-};
-
-const extractKeywordBasedInsights = (sentences) => {
-    const importantKeywords = [
-        // Business terms
-        'revenue', 'profit', 'growth', 'increase', 'decrease', 'improvement',
-        'success', 'failure', 'opportunity', 'risk', 'strategy', 'goal',
-        
-        // Action terms
-        'recommend', 'suggest', 'should', 'must', 'need', 'important',
-        'critical', 'urgent', 'priority', 'focus',
-        
-        // Time-related
-        'today', 'tomorrow', 'next', 'previous', 'recently', 'upcoming',
-        'quarterly', 'monthly', 'yearly', 'deadline',
-        
-        // Performance terms
-        'performance', 'efficiency', 'productivity', 'quality', 'satisfaction',
-        'engagement', 'conversion', 'retention'
-    ];
-
-    const insights = [];
-
-    sentences.forEach((sentence, index) => {
-        const lowerSentence = sentence.toLowerCase();
-        const matchedKeywords = importantKeywords.filter(keyword => 
-            lowerSentence.includes(keyword.toLowerCase())
-        );
-
-        if (matchedKeywords.length >= 2) {
-            insights.push({
-                id: generateInsightId(),
-                title: extractTitleFromSentence(sentence),
-                summary: sentence.length > 120 ? sentence.substring(0, 120) + '...' : sentence,
-                details: sentence,
-                category: 'important',
-                keywords: matchedKeywords,
-                confidence: Math.min(matchedKeywords.length * 0.2, 1),
-                source: `sentence-${index}`,
-                timestamp: new Date().toISOString()
-            });
-        }
-    });
-    
-    return insights;
-};
-
-const extractSentimentInsights = (sentences) => {
-    const positiveWords = ['excellent', 'great', 'amazing', 'successful', 'improved', 'better', 'increased', 'positive'];
-    const negativeWords = ['poor', 'bad', 'terrible', 'failed', 'decreased', 'worse', 'negative', 'problem'];
-    
-    const insights = [];
-
-    sentences.forEach((sentence, index) => {
-        const lowerSentence = sentence.toLowerCase();
-        const positiveCount = positiveWords.filter(word => lowerSentence.includes(word)).length;
-        const negativeCount = negativeWords.filter(word => lowerSentence.includes(word)).length;
-
-        if (positiveCount > 0 || negativeCount > 0) {
-            const sentiment = positiveCount > negativeCount ? 'positive' : 'negative';
-            
-            insights.push({
-                id: generateInsightId(),
-                title: extractTitleFromSentence(sentence),
-                summary: sentence.length > 100 ? sentence.substring(0, 100) + '...' : sentence,
-                details: sentence,
-                category: 'recent',
-                sentiment: sentiment,
-                sentimentScore: (positiveCount - negativeCount) / (positiveCount + negativeCount),
-                confidence: Math.min((positiveCount + negativeCount) * 0.3, 1),
-                source: `sentence-${index}`,
-                timestamp: new Date().toISOString()
-            });
-        }
-    });
-
-    return insights;
-};
-
-const extractPatternInsights = (sentences) => {
-    const insights = [];
-
-    sentences.forEach((sentence, index) => {
-        // Look for list patterns
-        if (sentence.match(/\d+[.)]/g) || sentence.includes(',') && sentence.split(',').length >= 3) {
-            insights.push({
-                id: generateInsightId(),
-                title: 'List or Enumeration Detected',
-                summary: sentence.length > 100 ? sentence.substring(0, 100) + '...' : sentence,
-                details: sentence,
-                category: 'general',
-                pattern: 'list',
-                confidence: 0.6,
-                source: `sentence-${index}`,
-                timestamp: new Date().toISOString()
-            });
-        }
-
-        // Look for comparison patterns
-        if (sentence.includes('compared to') || sentence.includes('vs') || sentence.includes('versus')) {
-            insights.push({
-                id: generateInsightId(),
-                title: 'Comparison Analysis',
-                summary: sentence.length > 100 ? sentence.substring(0, 100) + '...' : sentence,
-                details: sentence,
-                category: 'trend',
-                pattern: 'comparison',
-                confidence: 0.7,
-                source: `sentence-${index}`,
-                timestamp: new Date().toISOString()
-            });
-        }
-    });
-
-    return insights;
-};
-
-const calculateNumericalConfidence = (matches) => {
-    if (!matches) return 0;
-    
-    let score = 0;
-    matches.forEach(match => {
-        if (match.includes('%')) score += 0.3;
-        if (match.includes('$') || match.includes('€') || match.includes('£')) score += 0.3;
-        if (/\d+\.\d+/.test(match)) score += 0.2; // Decimal numbers are more precise
-        if (parseInt(match) > 100) score += 0.1; // Larger numbers might be more significant
-    });
-
-    return Math.min(score, 1);
-};
-
-const extractTitleFromSentence = (sentence) => {
-    const words = sentence.split(' ').slice(0, 8);
-    let title = words.join(' ');
-    
-    // Clean up the title
-    title = title.replace(/[.!?]+$/, '');
-    if (title.length > 50) {
-        title = title.substring(0, 50) + '...';
+  // Get analysis status
+  async getAnalysisStatus(insightId) {
+    try {
+      const response = await fetch(`${this.baseUrl}/status/${insightId}`);
+      return await this.handleResponse(response);
+    } catch (error) {
+      throw new Error(`Failed to get analysis status: ${error.message}`);
     }
+  }
+
+  // Start polling for analysis status
+  startStatusPolling(insightId, onStatusUpdate, pollInterval = 2000, maxDuration = 300000) {
+    // Clear existing polling for this insight
+    this.stopStatusPolling(insightId);
     
-    return title || 'Key Insight';
-};
+    const intervalId = setInterval(async () => {
+      try {
+        const status = await this.getAnalysisStatus(insightId);
+        onStatusUpdate(status);
 
-const removeDuplicateInsights = (insights) => {
-    const unique = [];
-    const seen = new Set();
-
-    insights.forEach(insight => {
-        const key = insight.summary.toLowerCase().replace(/[^\w\s]/g, '').substring(0, 50);
-        if (!seen.has(key)) {
-            seen.add(key);
-            unique.push(insight);
+        if (status.status === 'completed' || status.status === 'failed') {
+          this.stopStatusPolling(insightId);
         }
-    });
-
-    return unique;
-};
-
-const generateFallbackInsights = (data) => {
-    const dataStr = typeof data === 'string' ? data : JSON.stringify(data);
-    
-    return [{
-        id: generateInsightId(),
-        title: 'Data Overview',
-        summary: `Processed ${dataStr.length} characters of data`,
-        details: 'Unable to extract specific insights from the provided data format.',
-        category: 'general',
-        confidence: 0.1,
-        source: 'fallback',
-        timestamp: new Date().toISOString()
-    }];
-};
-
-/**
- * Categorize insights based on their content and properties
- * @param {array} insights - Array of insight objects
- * @returns {array} Categorized insights
- */
-export const categorizeInsights = (insights) => {
-    return insights.map(insight => {
-        if (!insight.category || insight.category === 'general') {
-            if (insight.metrics || insight.pattern === 'comparison') {
-                insight.category = 'trend';
-            } else if (insight.confidence > 0.7 || insight.keywords?.length > 2) {
-                insight.category = 'important';
-            } else if (insight.sentiment) {
-                insight.category = 'recent';
-            }
-        }
-
-        return insight;
-    });
-};
-
-/**
- * Calculate priority score for insights
- * @param {object} insight - Insight object
- * @returns {number} Priority score (1-5)
- */
-export const calculateInsightPriority = (insight) => {
-    let score = 1;
-
-    // Base confidence boost
-    score += (insight.confidence || 0) * 2;
-
-    // Category-based scoring
-    switch (insight.category) {
-        case 'important': score += 2; break;
-        case 'trend': score += 1.5; break;
-        case 'recent': score += 1; break;
-        default: score += 0.5;
-    }
-
-    // Content-based scoring
-    if (insight.metrics?.length > 0) score += 1;
-    if (insight.keywords?.length > 2) score += 0.5;
-    if (insight.sentiment === 'positive' || insight.sentiment === 'negative') score += 0.5;
-
-    // Length penalty (very long insights might be less focused)
-    if (insight.summary.length > 200) score -= 0.5;
-
-    return Math.min(Math.max(Math.round(score), 1), 5);
-};
-
-/**
- * Format insight for copying or sharing
- * @param {object} insight - Insight object
- * @returns {string} Formatted insight text
- */
-export const formatInsight = (insight) => {
-    let formatted = `📋 ${insight.title}\n\n`;
-    formatted += `${insight.summary}\n`;
-    
-    if (insight.details && insight.details !== insight.summary) {
-        formatted += `\n📝 Details:\n${insight.details}\n`;
-    }
-
-    if (insight.metrics?.length > 0) {
-        formatted += `\n📊 Metrics: ${insight.metrics.join(', ')}\n`;
-    }
-
-    if (insight.keywords?.length > 0) {
-        formatted += `\n🔑 Keywords: ${insight.keywords.join(', ')}\n`;
-    }
-
-    formatted += `\n🏷️ Category: ${insight.category}`;
-    formatted += `\n⭐ Priority: ${insight.priority || 1}/5`;
-    formatted += `\n📅 Generated: ${new Date(insight.timestamp).toLocaleString()}`;
-
-    return formatted;
-};
-
-/**
- * Filter insights by various criteria
- * @param {array} insights - Array of insights
- * @param {object} filters - Filter criteria
- * @returns {array} Filtered insights
- */
-export const filterInsights = (insights, filters = {}) => {
-    return insights.filter(insight => {
-        // Category filter
-        if (filters.category && insight.category !== filters.category) return false;
-        
-        // Minimum confidence filter
-        if (filters.minConfidence && (insight.confidence || 0) < filters.minConfidence) return false;
-        
-        // Priority filter
-        if (filters.minPriority && (insight.priority || 1) < filters.minPriority) return false;
-        
-        // Text search filter
-        if (filters.searchText) {
-            const search = filters.searchText.toLowerCase();
-            const searchableText = `${insight.title} ${insight.summary} ${insight.details || ''}`.toLowerCase();
-            if (!searchableText.includes(search)) return false;
-        }
-        
-        // Date range filter
-        if (filters.startDate) {
-            const insightDate = new Date(insight.timestamp);
-            if (insightDate < new Date(filters.startDate)) return false;
-        }
-        
-        if (filters.endDate) {
-            const insightDate = new Date(insight.timestamp);
-            if (insightDate > new Date(filters.endDate)) return false;
-        }
-
-        return true;
-    });
-};
-
-/**
- * Merge similar insights to reduce redundancy
- * @param {array} insights - Array of insights
- * @returns {array} Merged insights
- */
-export const mergeSimilarInsights = (insights) => {
-    const merged = [];
-    const processed = new Set();
-
-    insights.forEach(insight => {
-        if (processed.has(insight.id)) return;
-
-        const similar = insights.filter(other => {
-            if (processed.has(other.id) || other.id === insight.id) return false;
-            return calculateSimilarity(insight, other) > 0.7;
+      } catch (error) {
+        console.error('Status polling error:', error);
+        this.stopStatusPolling(insightId);
+        onStatusUpdate({ 
+          insight_id: insightId, 
+          status: 'failed', 
+          error: error.message 
         });
+      }
+    }, pollInterval);
 
-        if (similar.length > 0) {
-            const mergedInsight = {
-                ...insight,
-                id: generateInsightId(),
-                title: `${insight.title} (+ ${similar.length} related)`,
-                summary: insight.summary,
-                details: [insight.details, ...similar.map(s => s.details)].filter(Boolean).join('\n\n'),
-                metrics: [...(insight.metrics || []), ...similar.flatMap(s => s.metrics || [])],
-                keywords: [...(insight.keywords || []), ...similar.flatMap(s => s.keywords || [])],
-                confidence: Math.max(insight.confidence || 0, ...similar.map(s => s.confidence || 0)),
-                relatedInsights: similar.map(s => s.id)
-            };
+    this.pollingIntervals.set(insightId, intervalId);
 
-            merged.push(mergedInsight);
-            processed.add(insight.id);
-            similar.forEach(s => processed.add(s.id));
-        } else {
-            merged.push(insight);
-            processed.add(insight.id);
-        }
-    });
+    // Stop polling after max duration
+    const timeoutId = setTimeout(() => {
+      this.stopStatusPolling(insightId);
+      onStatusUpdate({ 
+        insight_id: insightId, 
+        status: 'timeout', 
+        error: 'Status polling timed out' 
+      });
+    }, maxDuration);
 
-    return merged;
-};
+    this.requestTimeouts.set(insightId, timeoutId);
+  }
 
-/**
- * Calculate similarity between two insights
- * @param {object} insight1 - First insight
- * @param {object} insight2 - Second insight
- * @returns {number} Similarity score (0-1)
- */
-const calculateSimilarity = (insight1, insight2) => {
-    const text1 = `${insight1.title} ${insight1.summary}`.toLowerCase();
-    const text2 = `${insight2.title} ${insight2.summary}`.toLowerCase();
+  // Stop status polling
+  stopStatusPolling(insightId) {
+    const intervalId = this.pollingIntervals.get(insightId);
+    const timeoutId = this.requestTimeouts.get(insightId);
     
-    const words1 = new Set(text1.split(/\s+/));
-    const words2 = new Set(text2.split(/\s+/));
+    if (intervalId) {
+      clearInterval(intervalId);
+      this.pollingIntervals.delete(insightId);
+    }
     
-    const intersection = new Set([...words1].filter(x => words2.has(x)));
-    const union = new Set([...words1, ...words2]);
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+      this.requestTimeouts.delete(insightId);
+    }
+  }
+
+  // Get insights history for a meeting
+  async getInsightsHistory(meetingId) {
+    if (!meetingId) {
+      throw new Error('Meeting ID is required');
+    }
+
+    try {
+      const response = await fetch(`${this.baseUrl}/history/${meetingId}`);
+      const data = await this.handleResponse(response);
+      return data.insights_history || [];
+    } catch (error) {
+      throw new Error(`Failed to get insights history: ${error.message}`);
+    }
+  }
+
+  // Delete specific insights
+  async deleteInsights(insightId) {
+    if (!insightId) {
+      throw new Error('Insight ID is required');
+    }
+
+    try {
+      const response = await fetch(`${this.baseUrl}/insights/${insightId}`, {
+        method: 'DELETE',
+      });
+
+      return await this.handleResponse(response);
+    } catch (error) {
+      throw new Error(`Failed to delete insights: ${error.message}`);
+    }
+  }
+
+  // Batch analysis for multiple meetings
+  async batchAnalyzeInsights({
+    meetingContexts,
+    meetingIds,
+    participantsList = null,
+    analysisFocusList = null,
+    onBatchProgress = () => {}
+  }) {
+    // Validation
+    const validContexts = meetingContexts.filter(c => c && c.trim());
+    const validIds = meetingIds.filter(id => id && id.trim());
     
-    return intersection.size / union.size;
-};
+    if (validContexts.length !== validIds.length || validContexts.length === 0) {
+      throw new Error('Please provide valid contexts and IDs for batch analysis. Each meeting must have both a context and an ID.');
+    }
+
+    // Validate each context
+    for (let i = 0; i < validContexts.length; i++) {
+      const contextValidation = this.validateMeetingContext(validContexts[i]);
+      if (!contextValidation.valid) {
+        throw new Error(`Meeting ${i + 1}: ${contextValidation.error}`);
+      }
+    }
+
+    const requestData = {
+      meeting_contexts: validContexts,
+      meeting_ids: validIds,
+      participants_list: participantsList,
+      analysis_focus_list: analysisFocusList,
+      batch_id: this.generateMeetingId()
+    };
+
+    try {
+      const response = await fetch(`${this.baseUrl}/batch-analyze`, {
+        method: 'POST',
+        headers: this.getDefaultHeaders(),
+        body: JSON.stringify(requestData),
+      });
+
+      return await this.handleResponse(response);
+    } catch (error) {
+      throw new Error(`Failed to perform batch analysis: ${error.message}`);
+    }
+  }
+
+  // Utility methods for data processing
+  calculateInsightsMetrics(insights) {
+    if (!insights) return null;
+
+    const keyInsights = insights.key_insights || [];
+    const situationTips = insights.situation_tips || [];
+    
+    return {
+      totalInsights: keyInsights.length,
+      totalTips: situationTips.length,
+      averageConfidence: this.calculateAverageConfidence(keyInsights),
+      highPriorityCount: keyInsights.filter(i => i.priority === 'high' || i.priority === 'critical').length,
+      highActionabilityTips: situationTips.filter(t => t.actionability === 'high').length,
+      visualAnalysisIncluded: insights.visual_analysis_included || false,
+      participantsCount: insights.participants_analyzed?.length || 0
+    };
+  }
+
+  calculateAverageConfidence(insights) {
+    if (!insights || insights.length === 0) return 0;
+    
+    const totalConfidence = insights.reduce((sum, insight) => sum + (insight.confidence || 0), 0);
+    return (totalConfidence / insights.length * 100).toFixed(1);
+  }
+
+  // Format insights for display
+  formatInsightsForDisplay(insights) {
+    if (!insights) return null;
+
+    return {
+      ...insights,
+      key_insights: insights.key_insights?.map(insight => ({
+        ...insight,
+        confidence_percentage: Math.round(insight.confidence * 100),
+        category_display: this.formatCategoryDisplay(insight.category),
+        priority_display: this.formatPriorityDisplay(insight.priority)
+      })) || [],
+      situation_tips: insights.situation_tips?.map(tip => ({
+        ...tip,
+        category_display: this.formatCategoryDisplay(tip.category),
+        actionability_display: this.formatActionabilityDisplay(tip.actionability)
+      })) || []
+    };
+  }
+
+  formatCategoryDisplay(category) {
+    return category?.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) || 'General';
+  }
+
+  formatPriorityDisplay(priority) {
+    const priorityMap = {
+      low: { text: 'Low', color: '#6B7280' },
+      medium: { text: 'Medium', color: '#F59E0B' },
+      high: { text: 'High', color: '#EF4444' },
+      critical: { text: 'Critical', color: '#DC2626' }
+    };
+    return priorityMap[priority] || priorityMap.medium;
+  }
+
+  formatActionabilityDisplay(actionability) {
+    const actionabilityMap = {
+      low: { text: 'Low', color: '#6B7280' },
+      medium: { text: 'Medium', color: '#F59E0B' },
+      high: { text: 'High', color: '#10B981' }
+    };
+    return actionabilityMap[actionability] || actionabilityMap.medium;
+  }
+
+  // Export insights data
+  exportInsightsToJSON(insights) {
+    if (!insights) return null;
+    
+    const exportData = {
+      export_timestamp: new Date().toISOString(),
+      insight_id: insights.insight_id,
+      meeting_id: insights.meeting_id,
+      generated_at: insights.generated_at,
+      confidence_score: insights.confidence_score,
+      visual_analysis_included: insights.visual_analysis_included,
+      participants_analyzed: insights.participants_analyzed,
+      key_insights: insights.key_insights,
+      situation_tips: insights.situation_tips,
+      metrics: this.calculateInsightsMetrics(insights)
+    };
+
+    return JSON.stringify(exportData, null, 2);
+  }
+
+  // Import insights data
+  importInsightsFromJSON(jsonString) {
+    try {
+      const data = JSON.parse(jsonString);
+      
+      // Validate required fields
+      if (!data.insight_id || !data.key_insights || !data.situation_tips) {
+        throw new Error('Invalid insights data format');
+      }
+      
+      return data;
+    } catch (error) {
+      throw new Error(`Failed to import insights: ${error.message}`);
+    }
+  }
+
+  // Clean up resources
+  cleanup() {
+    // Clear all polling intervals
+    for (const [insightId] of this.pollingIntervals) {
+      this.stopStatusPolling(insightId);
+    }
+    
+    this.pollingIntervals.clear();
+    this.requestTimeouts.clear();
+  }
+
+  // Health check for the API
+  async healthCheck() {
+    try {
+      const response = await fetch(`${this.baseUrl.replace('/key-insights', '')}/health`, {
+        method: 'GET',
+        headers: { 'Accept': 'application/json' }
+      });
+      
+      if (response.ok) {
+        return { status: 'healthy', timestamp: new Date().toISOString() };
+      } else {
+        return { status: 'unhealthy', error: `HTTP ${response.status}` };
+      }
+    } catch (error) {
+      return { status: 'unreachable', error: error.message };
+    }
+  }
+
+  // Get API configuration info
+  getApiInfo() {
+    return {
+      baseUrl: this.baseUrl,
+      endpoints: {
+        analyze: `${this.baseUrl}/analyze`,
+        simplify: `${this.baseUrl}/simplify`,
+        status: `${this.baseUrl}/status/:id`,
+        history: `${this.baseUrl}/history/:meeting_id`,
+        delete: `${this.baseUrl}/insights/:id`,
+        batchAnalyze: `${this.baseUrl}/batch-analyze`
+      },
+      supportedMethods: ['POST', 'GET', 'DELETE'],
+      supportedFileTypes: ['image/jpeg', 'image/png', 'image/gif', 'image/webp'],
+      maxFileSize: '10MB',
+      maxBatchSize: 10
+    };
+  }
+}
+
+// Factory function to create service instance
+function createKeyInsightsService(baseUrl) {
+  return new KeyInsightsService(baseUrl);
+}
+
+// Singleton instance for default usage
+const defaultService = new KeyInsightsService();
+
+// Export for different module systems
+if (typeof module !== 'undefined' && module.exports) {
+  // CommonJS
+  module.exports = {
+    KeyInsightsService,
+    createKeyInsightsService,
+    defaultService
+  };
+} else if (typeof window !== 'undefined') {
+  // Browser globals
+  window.KeyInsightsService = KeyInsightsService;
+  window.createKeyInsightsService = createKeyInsightsService;
+  window.keyInsightsService = defaultService;
+}
+
+// ES6 modules export (if supported)
+export { KeyInsightsService, createKeyInsightsService, defaultService };
