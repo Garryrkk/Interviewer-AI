@@ -1,560 +1,777 @@
-import React, { useState, useEffect, useRef } from "react";
-import { checkingMicrophonePermission, calibrateAudio, detectNoise } from './voiceUtils';
-import {
-    Mic,
-    MicOff,
-    Activity,
-    CheckCircle,
-    AlertCircle,
-    Volume2,
-    Settings,
-    Play,
-    Square
-} from 'lucide-react';
-import { PreOpVoice } from "../../services/voiceService";
+import React, { useState, useEffect, useRef } from 'react';
+import { AudioService } from './VoicePreoputils';
 
-const PreOpVoice = ({ onComplete, micPermission, setMicPermission }) => {
-    const [currentCheck, setCurrentCheck] = useState('permission');
-    const [permissionStatus, setPermissionStatus] = useState('pending');
-    const [calibrationStatus, setCalibrationStatus] = useState('pending');
-    const [noiseLevel, setNoiseLevel] = useState(0);
-    const [isCalibrating, setIsCalibrating] = useState(false);
-    const [audioContext, setAudioContext] = useState(null);
-    const [mediaStream, setMediaStream] = useState(null);
-    const [calibrationData, setCalibrationData] = useState(null);
-    const [allChecksComplete, setAllChecksComplete] = useState(false);
+// For demo purposes, we'll include the AudioService inline
+class AudioService {
+  constructor() {
+    this.baseURL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+    this.apiPrefix = '/api/v1/audio';
+    this.defaultTimeout = 10000;
+    this.transcriptionTimeout = 30000;
+  }
 
-    // Voice transcription states
-    const [isRecording, setIsRecording] = useState(false);
-    const [transcript, setTranscript] = useState('');
-    const [mediaRecorder, setMediaRecorder] = useState(null);
-    const [audioChunks, setAudioChunks] = useState([]);
+  async makeRequest(endpoint, options = {}) {
+    const url = `${this.baseURL}${this.apiPrefix}${endpoint}`;
+    const timeout = options.timeout || this.defaultTimeout;
+    
+    const defaultOptions = {
+      headers: {
+        'Accept': 'application/json',
+        ...options.headers
+      },
+      ...options
+    };
 
-    const animationRef = useRef();
-    const analyserRef = useRef();
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeout);
+    
+    try {
+      const response = await fetch(url, {
+        ...defaultOptions,
+        signal: controller.signal
+      });
 
-    useEffect(() => {
-        if (micPermission === 'granted') {
-            setPermissionStatus('granted');
-            setCurrentCheck('calibration');
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || `HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const contentType = response.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        return await response.json();
+      }
+      
+      return await response.text();
+    } catch (error) {
+      clearTimeout(timeoutId);
+      
+      if (error.name === 'AbortError') {
+        throw new Error('Request timed out');
+      }
+      
+      if (error.message.includes('Failed to fetch')) {
+        throw new Error('Unable to connect to audio service. Please check if the server is running.');
+      }
+      
+      throw error;
+    }
+  }
+
+  async calibrateAudio({ duration = 3, sampleRate = 16000, channels = 1 }) {
+    const response = await this.makeRequest('/calibrate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        duration,
+        sample_rate: sampleRate,
+        channels
+      }),
+      timeout: (duration + 5) * 1000
+    });
+    return response;
+  }
+
+  async testRecording({ duration = 5, sampleRate = 16000, channels = 1, applyCalibration = true }) {
+    const response = await this.makeRequest('/test-record', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        duration,
+        sample_rate: sampleRate,
+        channels,
+        apply_calibration: applyCalibration
+      }),
+      timeout: (duration + 10) * 1000
+    });
+    return response;
+  }
+
+  async transcribeAudio(audioFile, language = 'auto', modelSize = 'base') {
+    if (!audioFile.type.startsWith('audio/')) {
+      throw new Error('Please select a valid audio file');
+    }
+
+    const maxSize = 50 * 1024 * 1024;
+    if (audioFile.size > maxSize) {
+      throw new Error('Audio file is too large. Maximum size is 50MB.');
+    }
+
+    const formData = new FormData();
+    formData.append('audio_file', audioFile);
+    
+    const queryParams = new URLSearchParams({
+      language,
+      model_size: modelSize
+    });
+
+    const response = await this.makeRequest(`/transcribe?${queryParams}`, {
+      method: 'POST',
+      body: formData,
+      timeout: this.transcriptionTimeout,
+      headers: {}
+    });
+    return response;
+  }
+
+  async transcribeTestRecording() {
+    const response = await this.makeRequest('/transcribe-test', {
+      method: 'POST',
+      timeout: this.transcriptionTimeout
+    });
+    return response;
+  }
+
+  async getCalibrationStatus() {
+    const response = await this.makeRequest('/calibration-status', {
+      method: 'GET'
+    });
+    return response;
+  }
+
+  async resetCalibration() {
+    const response = await this.makeRequest('/reset-calibration', {
+      method: 'DELETE'
+    });
+    return response;
+  }
+}
+
+const AudioTranscriptionApp = () => {
+  const [activeTab, setActiveTab] = useState('transcribe');
+  const [isCalibrated, setIsCalibrated] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [calibrationStatus, setCalibrationStatus] = useState(null);
+  const [transcriptionResult, setTranscriptionResult] = useState(null);
+  const [testRecordingResult, setTestRecordingResult] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [audioFile, setAudioFile] = useState(null);
+  const [recordingTimer, setRecordingTimer] = useState(0);
+  const [calibrationSettings, setCalibrationSettings] = useState({
+    duration: 3,
+    sampleRate: 16000,
+    channels: 1
+  });
+  const [testSettings, setTestSettings] = useState({
+    duration: 5,
+    sampleRate: 16000,
+    channels: 1,
+    applyCalibration: true
+  });
+  const [transcriptionSettings, setTranscriptionSettings] = useState({
+    language: 'auto',
+    modelSize: 'base'
+  });
+
+  const fileInputRef = useRef(null);
+  const recordingTimerRef = useRef(null);
+  const audioService = new AudioService();
+
+  useEffect(() => {
+    checkCalibrationStatus();
+    return () => {
+      if (recordingTimerRef.current) {
+        clearInterval(recordingTimerRef.current);
+      }
+    };
+  }, []);
+
+  const checkCalibrationStatus = async () => {
+    try {
+      const status = await audioService.getCalibrationStatus();
+      setCalibrationStatus(status);
+      setIsCalibrated(status.is_calibrated);
+    } catch (err) {
+      console.error('Failed to check calibration status:', err);
+    }
+  };
+
+  const startRecordingTimer = (duration) => {
+    setRecordingTimer(duration);
+    recordingTimerRef.current = setInterval(() => {
+      setRecordingTimer(prev => {
+        if (prev <= 1) {
+          clearInterval(recordingTimerRef.current);
+          setIsRecording(false);
+          return 0;
         }
-    }, [micPermission]);
+        return prev - 1;
+      });
+    }, 1000);
+  };
 
-    useEffect(() => {
-        return () => {
-            if (mediaStream) {
-                mediaStream.getTracks().forEach(track => track.stop());
-            }
-            if (audioContext) {
-                audioContext.close();
-            }
-            if (animationRef.current) {
-                cancelAnimationFrame(animationRef.current);
-            }
-            if (mediaRecorder && mediaRecorder.state !== 'inactive') {
-                mediaRecorder.stop();
-            }
-        };
-    }, [mediaStream, audioContext, mediaRecorder]);
+  const handleCalibrate = async () => {
+    setLoading(true);
+    setError(null);
+    setIsRecording(true);
+    
+    try {
+      startRecordingTimer(calibrationSettings.duration);
+      const result = await audioService.calibrateAudio(calibrationSettings);
+      setCalibrationStatus(result);
+      setIsCalibrated(true);
+    } catch (err) {
+      setError(`Calibration failed: ${err.message}`);
+      setIsRecording(false);
+      if (recordingTimerRef.current) {
+        clearInterval(recordingTimerRef.current);
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
 
-    const requestMicrophonePermission = async () => {
-        setPermissionStatus('requesting');
+  const handleTestRecording = async () => {
+    setLoading(true);
+    setError(null);
+    setIsRecording(true);
+    
+    try {
+      startRecordingTimer(testSettings.duration);
+      const result = await audioService.testRecording(testSettings);
+      setTestRecordingResult(result);
+    } catch (err) {
+      setError(`Test recording failed: ${err.message}`);
+      setIsRecording(false);
+      if (recordingTimerRef.current) {
+        clearInterval(recordingTimerRef.current);
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
 
-        try {
-            const permission = await checkingMicrophonePermission();
-            setPermissionStatus(permission);
-            setMicPermission(permission);
+  const handleFileUpload = (event) => {
+    const file = event.target.files[0];
+    if (file) {
+      setAudioFile(file);
+      setError(null);
+    }
+  };
 
-            if (permission === 'granted') {
-                setTimeout(() => {
-                    setCurrentCheck('calibration');
-                }, 1000);
-            }
-        } catch (error) {
-            console.error('Error requesting microphone permission:', error);
-            setPermissionStatus('denied');
-        }
-    };
+  const handleTranscribeFile = async () => {
+    if (!audioFile) {
+      setError('Please select an audio file first');
+      return;
+    }
 
-    const startCalibration = async () => {
-        setIsCalibrating(true);
-        setCalibrationStatus('calibrating');
+    setLoading(true);
+    setError(null);
 
-        try {
-            const stream = await navigator.mediaDevices.getUserMedia({
-                audio: {
-                    echoCancellation: true,
-                    noiseSuppression: true,
-                    autoGainControl: true
-                }
-            });
+    try {
+      const result = await audioService.transcribeAudio(
+        audioFile, 
+        transcriptionSettings.language, 
+        transcriptionSettings.modelSize
+      );
+      setTranscriptionResult(result);
+    } catch (err) {
+      setError(`Transcription failed: ${err.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-            setMediaStream(stream);
-            const context = new (window.AudioContext || window.webkitAudioContext)();
-            setAudioContext(context);
+  const handleTranscribeTest = async () => {
+    setLoading(true);
+    setError(null);
 
-            const source = context.createMediaStreamSource(stream);
-            const analyser = context.createAnalyser();
-            analyser.fftSize = 256;
-            analyser.smoothingTimeConstant = 0.8;
+    try {
+      const result = await audioService.transcribeTestRecording();
+      setTranscriptionResult(result);
+    } catch (err) {
+      setError(`Test transcription failed: ${err.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-            source.connect(analyser);
-            analyserRef.current = analyser;
+  const handleResetCalibration = async () => {
+    try {
+      await audioService.resetCalibration();
+      setIsCalibrated(false);
+      setCalibrationStatus(null);
+    } catch (err) {
+      setError(`Reset failed: ${err.message}`);
+    }
+  };
 
-            // Setup MediaRecorder for transcription
-            const recorder = new MediaRecorder(stream);
-            setMediaRecorder(recorder);
+  const formatTime = (seconds) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
 
-            recorder.ondataavailable = (event) => {
-                if (event.data.size > 0) {
-                    setAudioChunks(prev => [...prev, event.data]);
-                }
-            };
+  return (
+    <div className="min-h-screen p-6" style={{ backgroundColor: '#1E1E2F', color: '#F8FAFC', fontFamily: 'Roboto, sans-serif' }}>
+      <div className="max-w-6xl mx-auto">
+        {/* Header */}
+        <div className="text-center mb-8">
+          <h1 className="text-3xl font-bold mb-2">Audio Transcription Service</h1>
+          <p className="text-gray-300">Professional speech-to-text conversion with audio calibration</p>
+        </div>
 
-            recorder.onstop = () => {
-                const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
-                sendAudioToBackend(audioBlob);
-            };
+        {/* Status Bar */}
+        <div className="mb-6 p-4 rounded-lg bg-gray-800">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-4">
+              <div className="flex items-center space-x-2">
+                <div className={`w-3 h-3 rounded-full ${isCalibrated ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                <span className="text-sm">
+                  {isCalibrated ? 'Calibrated' : 'Not Calibrated'}
+                </span>
+              </div>
+              {calibrationStatus && (
+                <span className="text-sm text-gray-300">
+                  Noise Level: {calibrationStatus.noise_level?.toFixed(1)}dB
+                </span>
+              )}
+            </div>
+            {isRecording && (
+              <div className="flex items-center space-x-2">
+                <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse"></div>
+                <span className="text-sm font-mono">Recording: {recordingTimer}s</span>
+              </div>
+            )}
+          </div>
+        </div>
 
-            // Start noise detection
-            monitorNoise();
+        {/* Progress Indicator */}
+        {loading && (
+          <div className="mb-6 p-4 bg-gray-800 rounded-lg">
+            <div className="flex items-center space-x-3">
+              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-purple-500"></div>
+              <div className="flex-1">
+                <div className="text-sm font-medium text-gray-200">
+                  {isRecording ? 'Recording in progress...' : 'Processing...'}
+                </div>
+                <div className="w-full bg-gray-700 rounded-full h-2 mt-2">
+                  <div 
+                    className="bg-purple-500 h-2 rounded-full transition-all duration-300 animate-pulse" 
+                    style={{ width: '45%' }}
+                  ></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+        {error && (
+          <div className="mb-6 p-4 bg-red-900 border border-red-700 rounded-lg">
+            <p className="text-red-200">{error}</p>
+          </div>
+        )}
 
-            // Calibrate for 3 secs
-            setTimeout(() => {
-                finishCalibration();
-            }, 3000);
+        {/* Navigation Tabs */}
+        <div className="flex space-x-1 mb-6">
+          {[
+            { id: 'transcribe', label: 'Transcribe Audio' },
+            { id: 'calibrate', label: 'Audio Calibration' },
+            { id: 'test', label: 'Test Recording' }
+          ].map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`px-6 py-3 rounded-lg font-medium transition-all duration-200 ${
+                activeTab === tab.id
+                  ? 'text-white shadow-lg'
+                  : 'text-gray-300 hover:text-white hover:bg-gray-700'
+              }`}
+              style={{
+                backgroundColor: activeTab === tab.id ? '#8F74D4' : 'transparent'
+              }}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
 
-        } catch (error) {
-            console.error('Error during calibration:', error);
-            setCalibrationStatus('failed');
-            setIsCalibrating(false);
-        }
-    };
+        {/* Tab Content */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Main Content */}
+          <div className="lg:col-span-2 space-y-6">
+            {activeTab === 'transcribe' && (
+              <div className="bg-gray-800 p-6 rounded-lg">
+                <h2 className="text-xl font-semibold mb-4">Audio Transcription</h2>
+                
+                <div className="space-y-4">
+                  {/* File Upload */}
+                  <div>
+                    <label className="block text-sm font-medium mb-2">Upload Audio File</label>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="audio/*"
+                      onChange={handleFileUpload}
+                      className="block w-full text-sm text-gray-300 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-purple-600 file:text-white hover:file:bg-purple-700 file:cursor-pointer"
+                    />
+                    {audioFile && (
+                      <p className="text-sm text-gray-300 mt-1">Selected: {audioFile.name}</p>
+                    )}
+                  </div>
 
-    const monitorNoise = () => {
-        if (!analyserRef.current) return;
-
-        const dataArray = new Uint8Array(analyserRef.current.frequencyBinCount);
-
-        const checkNoise = () => {
-            analyserRef.current.getByteFrequencyData(dataArray);
-
-            const average = dataArray.reduce((a, b) => a + b) / dataArray.length;
-            setNoiseLevel(Math.round((average / 255) * 100));
-
-            if (isCalibrating) {
-                animationRef.current = requestAnimationFrame(checkNoise);
-            }
-        };
-
-        checkNoise();
-    };
-
-    const finishCalibration = () => {
-        setIsCalibrating(false);
-        setCalibrationStatus('completed');
-
-        const data = calibrateAudio(noiseLevel);
-        setCalibrationData(data);
-
-        setTimeout(() => {
-            setCurrentCheck('complete');
-            setAllChecksComplete(true);
-        }, 1000);
-    };
-
-    // Voice transcription functions
-    const startRecording = () => {
-        if (mediaRecorder && mediaRecorder.state === 'inactive') {
-            setAudioChunks([]);
-            setIsRecording(true);
-            mediaRecorder.start();
-        }
-    };
-
-    const stopRecording = () => {
-        if (mediaRecorder && mediaRecorder.state === 'recording') {
-            setIsRecording(false);
-            mediaRecorder.stop();
-        }
-    };
-
-    const sendAudioToBackend = async (audioBlob) => {
-        try {
-            const formData = new FormData();
-            formData.append("audio", audioBlob);
-
-            const res = await fetch("/api/transcribe", {
-                method: "POST",
-                body: formData,
-            });
-
-            if (!res.ok) throw new Error("Failed to transcribe audio");
-            const data = await res.json();
-
-            setTranscript(data.transcript); // update state with backend response
-        } catch (error) {
-            console.error("Error in sendAudioToBackend:", error);
-            alert("Transcription failed");
-        }
-    };
-
-    const handleComplete = () => {
-        if (allChecksComplete) {
-            onComplete();
-        }
-    };
-
-    const getStatusColor = (status) => {
-        switch (status) {
-            case 'granted':
-            case 'completed':
-                return 'text-green-500';
-            case 'requesting':
-            case 'calibrating':
-                return 'text-yellow-500';
-            case 'denied':
-            case 'failed':
-                return 'text-red-500';
-            default:
-                return 'text-slate-400';
-        }
-    };
-
-    const getStatusIcon = (status, isActive = false) => {
-        switch (status) {
-            case 'granted':
-            case 'completed':
-                return <CheckCircle size={24} className="text-green-500" />;
-            case 'requesting':
-            case 'calibrating':
-                return <Activity size={24} className={`text-yellow-500 ${isActive ? 'animate-spin' : ''}`} />;
-            case 'denied':
-            case 'failed':
-                return <AlertCircle size={24} className="text-red-500" />;
-            default:
-                return <div className="w-6 h-6 border-2 border-slate-500 rounded-full"></div>;
-        }
-    };
-
-    return (
-        <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-slate-100 font-sans">
-            {/* Header */}
-            <div className="bg-slate-800/50 backdrop-blur border-b border-slate-700 px-6 py-4">
-                <div className="flex items-center space-x-4">
-                    <div className="w-8 h-8 bg-gradient-to-r from-purple-600 to-pink-600 rounded-lg flex items-center justify-center">
-                        <Mic size={18} className="text-white" />
+                  {/* Transcription Settings */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Language</label>
+                      <select
+                        value={transcriptionSettings.language}
+                        onChange={(e) => setTranscriptionSettings(prev => ({ ...prev, language: e.target.value }))}
+                        className="w-full p-2 bg-gray-700 border border-gray-600 rounded-lg text-white"
+                      >
+                        <option value="auto">Auto Detect</option>
+                        <option value="en">English</option>
+                        <option value="es">Spanish</option>
+                        <option value="fr">French</option>
+                        <option value="de">German</option>
+                        <option value="hi">Hindi</option>
+                      </select>
                     </div>
                     <div>
-                        <h1 className="text-xl font-bold">Voice Setup Assistant</h1>
-                        <p className="text-sm text-slate-400">Preparing your microphone for optimal performance</p>
+                      <label className="block text-sm font-medium mb-1">Model Size</label>
+                      <select
+                        value={transcriptionSettings.modelSize}
+                        onChange={(e) => setTranscriptionSettings(prev => ({ ...prev, modelSize: e.target.value }))}
+                        className="w-full p-2 bg-gray-700 border border-gray-600 rounded-lg text-white"
+                      >
+                        <option value="tiny">Tiny (Fast)</option>
+                        <option value="base">Base</option>
+                        <option value="small">Small</option>
+                        <option value="medium">Medium</option>
+                        <option value="large">Large (Best Quality)</option>
+                      </select>
                     </div>
-                </div>
-            </div>
+                  </div>
 
-            <div className="p-8">
-                {/* Progress Steps */}
-                <div className="mb-12">
-                    <div className="flex items-center justify-center space-x-8">
-                        <div className="flex flex-col items-center space-y-2">
-                            <div className={`w-16 h-16 rounded-full flex items-center justify-center border-2 transition-all duration-300 ${currentCheck === 'permission'
-                                    ? 'border-pink-500 bg-pink-600/20'
-                                    : permissionStatus === 'granted'
-                                        ? 'border-green-500 bg-green-600/20'
-                                        : 'border-slate-600 bg-slate-800/50'
-                                }`}>
-                                {permissionStatus === 'granted'
-                                    ? <CheckCircle size={24} className="text-green-500" />
-                                    : <Mic size={24} className={currentCheck === 'permission' ? 'text-pink-500' : 'text-slate-400'} />
-                                }
-                            </div>
-                            <span className={`text-sm font-medium ${currentCheck === 'permission' ? 'text-pink-400' : 'text-slate-400'
-                                }`}>
-                                Permission
-                            </span>
-                        </div>
+                  {/* Action Buttons */}
+                  <div className="flex space-x-3">
+                    <button
+                      onClick={handleTranscribeFile}
+                      disabled={loading || !audioFile}
+                      className="flex-1 py-3 px-6 rounded-lg font-medium transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed hover:shadow-lg"
+                      style={{ backgroundColor: '#8F74D4' }}
+                    >
+                      {loading ? 'Transcribing...' : 'Transcribe File'}
+                    </button>
+                    {testRecordingResult && (
+                      <button
+                        onClick={handleTranscribeTest}
+                        disabled={loading}
+                        className="flex-1 py-3 px-6 bg-green-600 hover:bg-green-700 rounded-lg font-medium transition-all duration-200 disabled:opacity-50"
+                      >
+                        Transcribe Test Recording
+                      </button>
+                    )}
+                  </div>
 
-                        <div className={`h-0.5 w-24 transition-colors duration-300 ${permissionStatus === 'granted' ? 'bg-green-500' : 'bg-slate-600'
-                            }`}></div>
-
-                        <div className="flex flex-col items-center space-y-2">
-                            <div className={`w-16 h-16 rounded-full flex items-center justify-center border-2 transition-all duration-300 ${currentCheck === 'calibration'
-                                    ? 'border-pink-500 bg-pink-600/20'
-                                    : calibrationStatus === 'completed'
-                                        ? 'border-green-500 bg-green-600/20'
-                                        : 'border-slate-600 bg-slate-800/50'
-                                }`}>
-                                {calibrationStatus === 'completed'
-                                    ? <CheckCircle size={24} className="text-green-500" />
-                                    : calibrationStatus === 'calibrating'
-                                        ? <Activity size={24} className="text-pink-500 animate-pulse" />
-                                        : <Settings size={24} className={currentCheck === 'calibration' ? 'text-pink-500' : 'text-slate-400'} />
-                                }
-                            </div>
-                            <span className={`text-sm font-medium ${currentCheck === 'calibration' ? 'text-pink-400' : 'text-slate-400'
-                                }`}>
-                                Calibration
-                            </span>
-                        </div>
-
-                        <div className={`h-0.5 w-24 transition-colors duration-300 ${allChecksComplete ? 'bg-green-500' : 'bg-slate-600'
-                            }`}></div>
-
-                        <div className="flex flex-col items-center space-y-2">
-                            <div className={`w-16 h-16 rounded-full flex items-center justify-center border-2 transition-all duration-300 ${allChecksComplete
-                                    ? 'border-green-500 bg-green-600/20'
-                                    : 'border-slate-600 bg-slate-800/50'
-                                }`}>
-                                {allChecksComplete
-                                    ? <CheckCircle size={24} className="text-green-500" />
-                                    : <Play size={24} className="text-slate-400" />
-                                }
-                            </div>
-                            <span className={`text-sm font-medium ${allChecksComplete ? 'text-green-400' : 'text-slate-400'
-                                }`}>
-                                Ready
-                            </span>
-                        </div>
+                  {/* Quick Actions */}
+                  <div className="mt-4 p-3 bg-gray-700 rounded-lg">
+                    <h4 className="text-sm font-medium mb-2 text-gray-300">Quick Actions</h4>
+                    <div className="flex flex-wrap gap-2 text-xs">
+                      <button
+                        onClick={async () => {
+                          try {
+                            const formats = await audioService.getSupportedFormats();
+                            alert(`Supported formats: ${formats.supported_formats.join(', ')}`);
+                          } catch (err) {
+                            console.error('Failed to get formats:', err);
+                          }
+                        }}
+                        className="px-3 py-1 bg-blue-600 hover:bg-blue-700 rounded text-white"
+                      >
+                        View Supported Formats
+                      </button>
+                      {transcriptionResult && (
+                        <>
+                          <button
+                            onClick={() => {
+                              const success = navigator.clipboard?.writeText(transcriptionResult.text);
+                              if (success) {
+                                alert('Text copied to clipboard!');
+                              }
+                            }}
+                            className="px-3 py-1 bg-green-600 hover:bg-green-700 rounded text-white"
+                          >
+                            Copy Text
+                          </button>
+                          <button
+                            onClick={() => {
+                              const element = document.createElement('a');
+                              const file = new Blob([transcriptionResult.text], {type: 'text/plain'});
+                              element.href = URL.createObjectURL(file);
+                              element.download = 'transcription.txt';
+                              document.body.appendChild(element);
+                              element.click();
+                              document.body.removeChild(element);
+                            }}
+                            className="px-3 py-1 bg-purple-600 hover:bg-purple-700 rounded text-white"
+                          >
+                            Download TXT
+                          </button>
+                        </>
+                      )}
                     </div>
+                  </div>
                 </div>
+              </div>
+            )}
 
-                {/* Main Content Area */}
-                <div className="max-w-4xl mx-auto">
-                    {currentCheck === 'permission' && (
-                        <div className="bg-slate-800/50 backdrop-blur p-8 rounded-xl border border-slate-700 text-center">
-                            <div className="mb-6">
-                                <div className={`w-24 h-24 rounded-full flex items-center justify-center mx-auto mb-4 transition-all duration-300 ${permissionStatus === 'requesting'
-                                        ? 'bg-yellow-600/20 animate-pulse'
-                                        : permissionStatus === 'granted'
-                                            ? 'bg-green-600/20'
-                                            : 'bg-slate-900'
-                                    }`}>
-                                    {permissionStatus === 'denied'
-                                        ? <MicOff size={48} className="text-red-500" />
-                                        : <Mic size={48} className={
-                                            permissionStatus === 'granted'
-                                                ? 'text-green-500'
-                                                : permissionStatus === 'requesting'
-                                                    ? 'text-yellow-500'
-                                                    : 'text-slate-400'
-                                        } />
-                                    }
-                                </div>
-                                <h2 className="text-2xl font-bold mb-2 text-slate-100">Microphone Permission</h2>
-                                <p className="text-slate-400 mb-6">
-                                    {permissionStatus === 'pending' && 'We need access to your microphone to continue'}
-                                    {permissionStatus === 'requesting' && 'Requesting microphone access...'}
-                                    {permissionStatus === 'granted' && 'Microphone access granted! Moving to calibration...'}
-                                    {permissionStatus === 'denied' && 'Microphone access denied. Please enable it in your browser settings.'}
-                                </p>
-                            </div>
+            {activeTab === 'calibrate' && (
+              <div className="bg-gray-800 p-6 rounded-lg">
+                <h2 className="text-xl font-semibold mb-4">Audio Calibration</h2>
+                
+                <div className="space-y-4">
+                  <p className="text-gray-300 text-sm">
+                    Calibration measures background noise to optimize voice detection. 
+                    Stay quiet during calibration for best results.
+                  </p>
 
-                            {permissionStatus === 'pending' && (
-                                <button
-                                    onClick={requestMicrophonePermission}
-                                    className="bg-gradient-to-r from-pink-600 to-pink-700 text-white py-4 px-8 rounded-lg hover:from-pink-700 hover:to-pink-800 transition-all font-medium text-lg shadow-lg"
-                                >
-                                    Grant Microphone Permission
-                                </button>
-                            )}
+                  {/* Calibration Settings */}
+                  <div className="grid grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Duration (s)</label>
+                      <input
+                        type="number"
+                        min="1"
+                        max="10"
+                        value={calibrationSettings.duration}
+                        onChange={(e) => setCalibrationSettings(prev => ({ ...prev, duration: parseInt(e.target.value) }))}
+                        className="w-full p-2 bg-gray-700 border border-gray-600 rounded-lg text-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Sample Rate</label>
+                      <select
+                        value={calibrationSettings.sampleRate}
+                        onChange={(e) => setCalibrationSettings(prev => ({ ...prev, sampleRate: parseInt(e.target.value) }))}
+                        className="w-full p-2 bg-gray-700 border border-gray-600 rounded-lg text-white"
+                      >
+                        <option value="8000">8000 Hz</option>
+                        <option value="16000">16000 Hz</option>
+                        <option value="22050">22050 Hz</option>
+                        <option value="44100">44100 Hz</option>
+                        <option value="48000">48000 Hz</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Channels</label>
+                      <select
+                        value={calibrationSettings.channels}
+                        onChange={(e) => setCalibrationSettings(prev => ({ ...prev, channels: parseInt(e.target.value) }))}
+                        className="w-full p-2 bg-gray-700 border border-gray-600 rounded-lg text-white"
+                      >
+                        <option value="1">Mono</option>
+                        <option value="2">Stereo</option>
+                      </select>
+                    </div>
+                  </div>
 
-                            {permissionStatus === 'denied' && (
-                                <div className="bg-red-900/30 border border-red-700/50 p-4 rounded-lg">
-                                    <p className="text-red-300 text-sm">
-                                        Please refresh the page and allow microphone access when prompted, or check your browser settings.
-                                    </p>
-                                </div>
-                            )}
-                        </div>
+                  {/* Action Buttons */}
+                  <div className="flex space-x-3">
+                    <button
+                      onClick={handleCalibrate}
+                      disabled={loading || isRecording}
+                      className="flex-1 py-3 px-6 rounded-lg font-medium transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed hover:shadow-lg"
+                      style={{ backgroundColor: '#8F74D4' }}
+                    >
+                      {isRecording ? 'Calibrating...' : 'Start Calibration'}
+                    </button>
+                    {isCalibrated && (
+                      <button
+                        onClick={handleResetCalibration}
+                        className="px-6 py-3 bg-red-600 hover:bg-red-700 rounded-lg font-medium transition-all duration-200"
+                      >
+                        Reset
+                      </button>
                     )}
-
-                    {currentCheck === 'calibration' && (
-                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                            {/* Calibration Control */}
-                            <div className="lg:col-span-2 bg-slate-800/50 backdrop-blur p-8 rounded-xl border border-slate-700">
-                                <h2 className="text-2xl font-bold mb-6 text-slate-100">Audio Calibration</h2>
-
-                                <div className="text-center mb-8">
-                                    <div className={`w-32 h-32 rounded-full flex items-center justify-center mx-auto mb-6 transition-all duration-300 ${isCalibrating
-                                            ? 'bg-pink-600/20 animate-pulse'
-                                            : calibrationStatus === 'completed'
-                                                ? 'bg-green-600/20'
-                                                : 'bg-slate-900'
-                                        }`}>
-                                        {calibrationStatus === 'completed'
-                                            ? <CheckCircle size={64} className="text-green-500" />
-                                            : isCalibrating
-                                                ? <Activity size={64} className="text-pink-500 animate-spin" />
-                                                : <Volume2 size={64} className="text-slate-400" />
-                                        }
-                                    </div>
-
-                                    <div className="space-y-4">
-                                        <div>
-                                            <div className="flex justify-between mb-2">
-                                                <span className="text-slate-300">Noise Level</span>
-                                                <span className="text-slate-400">{noiseLevel}%</span>
-                                            </div>
-                                            <div className="w-full bg-slate-700 rounded-full h-3">
-                                                <div
-                                                    className={`h-3 rounded-full transition-all duration-300 ${noiseLevel > 70 ? 'bg-red-500' : noiseLevel > 40 ? 'bg-yellow-500' : 'bg-green-500'
-                                                        }`}
-                                                    style={{ width: `${Math.min(noiseLevel, 100)}%` }}
-                                                ></div>
-                                            </div>
-                                        </div>
-
-                                        {calibrationStatus === 'pending' && (
-                                            <button
-                                                onClick={startCalibration}
-                                                className="bg-gradient-to-r from-pink-600 to-pink-700 text-white py-4 px-8 rounded-lg hover:from-pink-700 hover:to-pink-800 transition-all font-medium text-lg shadow-lg"
-                                            >
-                                                Start Calibration
-                                            </button>
-                                        )}
-
-                                        {isCalibrating && (
-                                            <div className="bg-yellow-900/30 border border-yellow-700/50 p-4 rounded-lg">
-                                                <p className="text-yellow-300 text-sm">
-                                                    Calibrating... Please speak normally for a few seconds.
-                                                </p>
-                                            </div>
-                                        )}
-
-                                        {calibrationStatus === 'completed' && (
-                                            <div className="bg-green-900/30 border border-green-700/50 p-4 rounded-lg">
-                                                <p className="text-green-300 text-sm">
-                                                    Calibration completed successfully!
-                                                </p>
-                                            </div>
-                                        )}
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Status Panel */}
-                            <div className="bg-slate-800/50 backdrop-blur p-6 rounded-xl border border-slate-700">
-                                <h3 className="text-lg font-semibold mb-4 text-slate-200">Setup Status</h3>
-                                <div className="space-y-4">
-                                    <div className="flex items-center justify-between p-3 rounded-lg bg-slate-900/50">
-                                        <span className="text-slate-300 font-medium">Permission</span>
-                                        <div className="flex items-center space-x-2">
-                                            {getStatusIcon(permissionStatus)}
-                                            <span className={`text-sm font-medium ${getStatusColor(permissionStatus)}`}>
-                                                {permissionStatus === 'granted' ? 'Granted' :
-                                                    permissionStatus === 'requesting' ? 'Requesting...' :
-                                                        permissionStatus === 'denied' ? 'Denied' : 'Pending'}
-                                            </span>
-                                        </div>
-                                    </div>
-
-                                    <div className="flex items-center justify-between p-3 rounded-lg bg-slate-900/50">
-                                        <span className="text-slate-300 font-medium">Calibration</span>
-                                        <div className="flex items-center space-x-2">
-                                            {getStatusIcon(calibrationStatus, isCalibrating)}
-                                            <span className={`text-sm font-medium ${getStatusColor(calibrationStatus)}`}>
-                                                {calibrationStatus === 'completed' ? 'Complete' :
-                                                    calibrationStatus === 'calibrating' ? 'In Progress' :
-                                                        calibrationStatus === 'failed' ? 'Failed' : 'Pending'}
-                                            </span>
-                                        </div>
-                                    </div>
-
-                                    <div className="flex items-center justify-between p-3 rounded-lg bg-slate-900/50">
-                                        <span className="text-slate-300 font-medium">Noise Level</span>
-                                        <div className="flex items-center space-x-2">
-                                            <div className={`w-2 h-2 rounded-full ${noiseLevel > 70 ? 'bg-red-500' :
-                                                    noiseLevel > 40 ? 'bg-yellow-500' :
-                                                        'bg-green-500'
-                                                }`}></div>
-                                            <span className="text-sm font-medium text-slate-400">{noiseLevel}%</span>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {currentCheck === 'complete' && allChecksComplete && (
-                        <div className="bg-slate-800/50 backdrop-blur p-12 rounded-xl border border-slate-700 text-center">
-                            <div className="mb-6">
-                                <div className="w-24 h-24 bg-green-600/20 rounded-full flex items-center justify-center mx-auto mb-4">
-                                    <CheckCircle size={48} className="text-green-500" />
-                                </div>
-                                <h2 className="text-3xl font-bold mb-4 text-slate-100">Setup Complete!</h2>
-                                <p className="text-slate-400 mb-8 text-lg">
-                                    Your voice recognition system is now ready for optimal performance.
-                                </p>
-
-                                {calibrationData && (
-                                    <div className="bg-slate-900/50 p-6 rounded-lg mb-6 max-w-md mx-auto">
-                                        <h4 className="font-semibold text-slate-200 mb-3">Calibration Results</h4>
-                                        <div className="space-y-2 text-sm">
-                                            <div className="flex justify-between">
-                                                <span className="text-slate-400">Background Noise:</span>
-                                                <span className="text-slate-300">{noiseLevel}%</span>
-                                            </div>
-                                            <div className="flex justify-between">
-                                                <span className="text-slate-400">Quality:</span>
-                                                <span className="text-green-400">Excellent</span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                )}
-
-                                {/* Voice Transcription Section */}
-                                <div className="bg-slate-900/50 p-6 rounded-lg mb-6 max-w-2xl mx-auto">
-                                    <h4 className="font-semibold text-slate-200 mb-4">Test Voice Transcription</h4>
-
-                                    <div className="flex justify-center space-x-4 mb-4">
-                                        <button
-                                            onClick={startRecording}
-                                            className="flex items-center space-x-2 px-4 py-2 rounded-lg font-medium transition-all bg-red-600 hover:bg-red-700 text-white"
-                                        >
-                                            <Mic size={16} />
-                                            <span>Start Recording</span>
-                                        </button>
-
-
-                                        <button
-                                            onClick={stopRecording}
-                                            className="flex items-center space-x-2 px-4 py-2 rounded-lg font-medium transition-all bg-red-600 hover:bg-red-700 text-white"
-                                        >
-                                            <Square size={16} />
-                                            <span>Stop Recording</span>
-                                        </button>
-                                    </div>
-
-                                    {isRecording && (
-                                        <div className="bg-red-900/30 border border-red-700/50 p-3 rounded-lg mb-4">
-                                            <div className="flex items-center justify-center space-x-2">
-                                                <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
-                                                <span className="text-red-300 text-sm">Recording in progress...</span>
-                                            </div>
-                                        </div>
-                                    )}
-
-                                    {transcript && (
-                                        <div className="bg-slate-800 p-4 rounded-lg border border-slate-600">
-                                            <h5 className="text-slate-300 text-sm mb-2">Transcript:</h5>
-                                            <p className="text-slate-100">{transcript}</p>
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-
-                            <button
-                                onClick={handleComplete}
-                                className="bg-gradient-to-r from-green-600 to-green-700 text-white py-4 px-8 rounded-lg hover:from-green-700 hover:to-green-800 transition-all font-medium text-lg shadow-lg"
-                            >
-                                Continue to Application
-                            </button>
-                        </div>
-                    )}
+                  </div>
                 </div>
-            </div>
+              </div>
+            )}
+
+            {activeTab === 'test' && (
+              <div className="bg-gray-800 p-6 rounded-lg">
+                <h2 className="text-xl font-semibold mb-4">Test Recording</h2>
+                
+                <div className="space-y-4">
+                  <p className="text-gray-300 text-sm">
+                    Record a test clip to verify audio quality before transcription.
+                  </p>
+
+                  {/* Test Settings */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Duration (s)</label>
+                      <input
+                        type="number"
+                        min="1"
+                        max="30"
+                        value={testSettings.duration}
+                        onChange={(e) => setTestSettings(prev => ({ ...prev, duration: parseInt(e.target.value) }))}
+                        className="w-full p-2 bg-gray-700 border border-gray-600 rounded-lg text-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Apply Calibration</label>
+                      <select
+                        value={testSettings.applyCalibration ? 'true' : 'false'}
+                        onChange={(e) => setTestSettings(prev => ({ ...prev, applyCalibration: e.target.value === 'true' }))}
+                        className="w-full p-2 bg-gray-700 border border-gray-600 rounded-lg text-white"
+                      >
+                        <option value="true">Yes</option>
+                        <option value="false">No</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={handleTestRecording}
+                    disabled={loading || isRecording}
+                    className="w-full py-3 px-6 rounded-lg font-medium transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed hover:shadow-lg"
+                    style={{ backgroundColor: '#8F74D4' }}
+                  >
+                    {isRecording ? 'Recording...' : 'Start Test Recording'}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Results Panel */}
+          <div className="space-y-6">
+            {/* Calibration Results */}
+            {calibrationStatus && (
+              <div className="bg-gray-800 p-4 rounded-lg">
+                <h3 className="font-semibold mb-3">Calibration Status</h3>
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span>Status:</span>
+                    <span className="text-green-400">{calibrationStatus.status}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Noise Level:</span>
+                    <span>{calibrationStatus.noise_level?.toFixed(1)}dB</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Quality Score:</span>
+                    <span>{(calibrationStatus.quality_score * 100)?.toFixed(0)}%</span>
+                  </div>
+                  {calibrationStatus.recommendations && (
+                    <div className="mt-3">
+                      <p className="font-medium text-yellow-400">Recommendations:</p>
+                      <ul className="list-disc list-inside text-xs text-gray-300 mt-1">
+                        {calibrationStatus.recommendations.map((rec, idx) => (
+                          <li key={idx}>{rec}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Test Recording Results */}
+            {testRecordingResult && (
+              <div className="bg-gray-800 p-4 rounded-lg">
+                <h3 className="font-semibold mb-3">Test Recording Results</h3>
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span>Duration:</span>
+                    <span>{testRecordingResult.duration?.toFixed(1)}s</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>File Size:</span>
+                    <span>{(testRecordingResult.file_size / 1024)?.toFixed(1)}KB</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Peak Level:</span>
+                    <span>{(testRecordingResult.peak_amplitude * 100)?.toFixed(0)}%</span>
+                  </div>
+                  {testRecordingResult.signal_to_noise_ratio && (
+                    <div className="flex justify-between">
+                      <span>SNR:</span>
+                      <span>{testRecordingResult.signal_to_noise_ratio?.toFixed(1)}dB</span>
+                    </div>
+                  )}
+                  {testRecordingResult.recommendations && (
+                    <div className="mt-3">
+                      <p className="font-medium text-yellow-400">Analysis:</p>
+                      <ul className="list-disc list-inside text-xs text-gray-300 mt-1">
+                        {testRecordingResult.recommendations.map((rec, idx) => (
+                          <li key={idx}>{rec}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Transcription Results */}
+            {transcriptionResult && (
+              <div className="bg-gray-800 p-4 rounded-lg">
+                <h3 className="font-semibold mb-3">Transcription Results</h3>
+                <div className="space-y-3">
+                  <div className="bg-gray-900 p-3 rounded text-sm">
+                    <p className="font-medium text-green-400 mb-2">Transcribed Text:</p>
+                    <p className="text-gray-200">{transcriptionResult.text}</p>
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-4 text-xs">
+                    <div className="space-y-1">
+                      <div className="flex justify-between">
+                        <span>Language:</span>
+                        <span>{transcriptionResult.language}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Confidence:</span>
+                        <span>{(transcriptionResult.confidence * 100).toFixed(0)}%</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Duration:</span>
+                        <span>{transcriptionResult.duration?.toFixed(1)}s</span>
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <div className="flex justify-between">
+                        <span>Word Count:</span>
+                        <span>{transcriptionResult.word_count}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Processing:</span>
+                        <span>{transcriptionResult.processing_time?.toFixed(1)}s</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Quality:</span>
+                        <span>{(transcriptionResult.audio_quality_score * 100).toFixed(0)}%</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {transcriptionResult.segments && transcriptionResult.segments.length > 0 && (
+                    <div className="mt-3">
+                      <p className="font-medium text-blue-400 mb-2">Segments:</p>
+                      <div className="max-h-32 overflow-y-auto space-y-1 text-xs">
+                        {transcriptionResult.segments.map((segment, idx) => (
+                          <div key={idx} className="bg-gray-900 p-2 rounded">
+                            <div className="text-gray-400">
+                              {formatTime(Math.floor(segment.start))} - {formatTime(Math.floor(segment.end))}
+                            </div>
+                            <div className="text-gray-200">{segment.text}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
-    );
+      </div>
+    </div>
+  );
 };
 
-export default PreOpVoice;
+export default AudioTranscriptionApp;
