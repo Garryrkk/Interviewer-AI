@@ -1,78 +1,221 @@
-from pydantic import BaseModel, Field
-from typing import Optional, List, Union
+from pydantic import BaseModel, Field, validator
+from typing import Optional, List, Dict, Any, Union
 from datetime import datetime
-from pydantic import BaseModel
+from enum import Enum
+
+class ResponseFormat(str, Enum):
+    """Available response formats for AI responses"""
+    SUMMARY = "summary"
+    KEY_INSIGHTS = "key_insights"
+    DETAILED = "detailed"
+    BULLET_POINTS = "bullet_points"
+
+class SimplificationLevel(str, Enum):
+    """Levels of response simplification"""
+    BASIC = "basic"
+    INTERMEDIATE = "intermediate"
+    ADVANCED = "advanced"
+
+class AudioQuality(str, Enum):
+    """Audio quality assessment levels"""
+    EXCELLENT = "excellent"
+    GOOD = "good"
+    FAIR = "fair"
+    POOR = "poor"
+
+# Request Models
+class VoiceSessionRequest(BaseModel):
+    """Request to start a new voice session"""
+    user_id: str = Field(..., description="Unique identifier for the user")
+    meeting_id: Optional[str] = Field(None, description="Optional meeting identifier")
+    preferences: Optional[Dict[str, Any]] = Field(default_factory=dict, description="User preferences")
+
+class MicrophoneStatusRequest(BaseModel):
+    """Request to check or toggle microphone status"""
+    session_id: str = Field(..., description="Active session identifier")
+    turn_on: bool = Field(..., description="Whether to turn microphone on or off")
+    device_id: Optional[str] = Field(None, description="Specific device to connect to")
+
+class DeviceSelectionRequest(BaseModel):
+    """Request to select a specific audio device"""
+    session_id: str = Field(..., description="Active session identifier")
+    device_id: str = Field(..., description="ID of the device to select")
+    device_name: Optional[str] = Field(None, description="Human-readable device name")
+
+class AudioProcessingRequest(BaseModel):
+    """Request to process audio data"""
+    session_id: str = Field(..., description="Active session identifier")
+    audio_data: Union[str, bytes] = Field(..., description="Base64 encoded audio data or raw bytes")
+    format: Optional[str] = Field("wav", description="Audio format")
+    sample_rate: Optional[int] = Field(16000, description="Audio sample rate")
+
+class AIResponseRequest(BaseModel):
+    """Request for AI response generation"""
+    session_id: str = Field(..., description="Active session identifier")
+    question: str = Field(..., description="Transcribed question or text")
+    response_format: ResponseFormat = Field(ResponseFormat.SUMMARY, description="Desired response format")
+    context: Optional[str] = Field(None, description="Additional context for the AI")
+    max_length: Optional[int] = Field(500, description="Maximum response length")
+
+class SimplifiedAnswerRequest(BaseModel):
+    """Request for simplified version of AI response"""
+    session_id: str = Field(..., description="Active session identifier")
+    original_response: str = Field(..., description="Original AI response to simplify")
+    simplification_level: SimplificationLevel = Field(SimplificationLevel.BASIC, description="Level of simplification")
+    target_audience: Optional[str] = Field(None, description="Target audience for simplification")
+
+# Response Models
+class AudioDevice(BaseModel):
+    """Audio device information"""
+    id: str = Field(..., description="Unique device identifier")
+    name: str = Field(..., description="Human-readable device name")
+    is_default: bool = Field(False, description="Whether this is the default device")
+    is_available: bool = Field(True, description="Whether device is currently available")
+    device_type: str = Field("microphone", description="Type of audio device")
+
+class VoiceSessionResponse(BaseModel):
+    """Response for voice session creation"""
+    success: bool = Field(..., description="Whether the operation was successful")
+    session_id: str = Field(..., description="Unique session identifier")
+    message: str = Field(..., description="Human-readable status message")
+    timestamp: datetime = Field(..., description="Session creation timestamp")
+    expires_at: Optional[datetime] = Field(None, description="Session expiration time")
+
+class MicrophoneStatusResponse(BaseModel):
+    """Response for microphone status check"""
+    success: bool = Field(..., description="Whether the check was successful")
+    is_available: bool = Field(..., description="Whether microphone is available")
+    is_enabled: bool = Field(..., description="Whether microphone is currently enabled")
+    current_device: Optional[AudioDevice] = Field(None, description="Currently selected device")
+    message: str = Field(..., description="Status message for user")
+    alert_required: bool = Field(False, description="Whether user alert is needed")
+
+class DeviceListResponse(BaseModel):
+    """Response containing list of audio devices"""
+    success: bool = Field(..., description="Whether the operation was successful")
+    devices: List[AudioDevice] = Field(..., description="List of available audio devices")
+    default_device: Optional[AudioDevice] = Field(None, description="Default audio device")
+    message: str = Field(..., description="Operation status message")
 
 class TranscriptionResponse(BaseModel):
-    transcript: str
+    """Response for audio transcription"""
+    success: bool = Field(..., description="Whether transcription was successful")
+    text: str = Field(..., description="Transcribed text")
+    confidence: float = Field(..., ge=0.0, le=1.0, description="Transcription confidence score")
+    language: str = Field("en", description="Detected language")
+    duration: float = Field(..., ge=0.0, description="Audio duration in seconds")
+    message: str = Field(..., description="Operation status message")
 
+class AudioProcessingResponse(BaseModel):
+    """Response for audio processing operations"""
+    success: bool = Field(..., description="Whether processing was successful")
+    transcription: str = Field(..., description="Transcribed text from audio")
+    confidence_score: float = Field(..., ge=0.0, le=1.0, description="Overall confidence score")
+    audio_quality: AudioQuality = Field(..., description="Assessed audio quality")
+    processing_time: float = Field(..., ge=0.0, description="Processing time in seconds")
+    message: str = Field(..., description="Operation status message")
 
-class PreopConfig(BaseModel):
-    device: str = Field(..., description="Audio input device identifier")
-    noise_cancellation: bool = Field(default=False, description="Enable noise cancelation")
-    sample_rate: Optional[int] = Field(default=16000, description="Audio sample rate in Hz")
-    language: Optional[str] = Field(default="en-US", description="Recognition language")
+class VoiceCharacteristics(BaseModel):
+    """Voice analysis characteristics"""
+    pitch_average: float = Field(..., description="Average pitch in Hz")
+    volume_level: float = Field(..., ge=0.0, le=1.0, description="Average volume level")
+    speech_rate: float = Field(..., description="Words per minute")
+    clarity_score: float = Field(..., ge=0.0, le=1.0, description="Speech clarity score")
+    emotion_indicators: Dict[str, float] = Field(default_factory=dict, description="Emotional indicators")
 
-class PreopResponse(BaseModel):
-    status: str = Field(..., description="Configuration status")
-    message: str = Field(..., description="Status message")
-    config_validated: bool = Field(..., description="Whether config is valid")
-    ai_service_ready: bool = Field(..., description="Whether AI service is ready")
+class VoiceAnalysisResponse(BaseModel):
+    """Response for voice confidence analysis"""
+    success: bool = Field(..., description="Whether analysis was successful")
+    confidence_rating: float = Field(..., ge=0.0, le=10.0, description="Voice confidence rating (1-10)")
+    voice_characteristics: VoiceCharacteristics = Field(..., description="Detailed voice characteristics")
+    situational_tips: List[str] = Field(..., description="Tips based on current situation")
+    recommendations: List[str] = Field(..., description="Recommendations for improvement")
+    analysis_summary: str = Field(..., description="Summary of voice analysis")
 
-class AudioChunk(BaseModel):
-    data: str = Field(..., description="Base64 encoded audio data")
-    timestamp: float = Field(..., description="Timestamp of audio chunk")
-    sequence_id: Optional[int] = Field(default=None, description="Sequence number for ordering")
-    chunk_size: Optional[int] = Field(default=None, description="Size of audio chunk in bytes")
+class AIResponseResponse(BaseModel):
+    """Response containing AI-generated answer"""
+    success: bool = Field(..., description="Whether AI response generation was successful")
+    response: str = Field(..., description="Generated AI response")
+    format_type: str = Field(..., description="Format of the response")
+    confidence: float = Field(..., ge=0.0, le=1.0, description="AI response confidence")
+    processing_time: float = Field(..., ge=0.0, description="Response generation time")
+    message: str = Field(..., description="Operation status message")
+    related_topics: Optional[List[str]] = Field(None, description="Related topics for further exploration")
 
-class ProcessingResponse(BaseModel):
-    partial_transcript: str = Field(..., description="Partial transcription")
-    is_final: bool = Field(default=False, description="Whether this is final transcript")
-    confidence: float = Field(..., description="Confidence score 0.0-1.0")
-    timestamp: float = Field(..., description="Processing timestamp")  
+# Internal Models for Service Layer
+class VoiceSession(BaseModel):
+    """Internal model for managing voice sessions"""
+    session_id: str
+    user_id: str
+    created_at: datetime
+    last_activity: datetime
+    is_active: bool = True
+    current_device: Optional[AudioDevice] = None
+    microphone_enabled: bool = False
+    total_interactions: int = 0
+    session_settings: Dict[str, Any] = Field(default_factory=dict)
 
-class RecognitionSession(BaseModel):
-    session_id: str = Field(..., description="Unique session identifier")
-    device: str = Field(..., description="Audio input device")
-    noise_cancellation: bool = Field(default=False)
-    language: str = Field(default="en-US")
-    enable_ai_insights: bool = Field(default=True, description="Enable AI-powered insights")
-    max_duration: Optional[int] = Field(default=3600, description="Max session duration in seconds")
+class ProcessingResult(BaseModel):
+    """Internal model for audio processing results"""
+    transcription: str
+    confidence: float
+    audio_quality: AudioQuality
+    processing_time: float
+    audio_duration: float
+    detected_language: str = "en"
+    voice_characteristics: Optional[VoiceCharacteristics] = None
 
-class Insight(BaseModel):
-    """AI-generated insight from transcript"""
-    type: str = Field(..., description="Type of insight (summary, action_item, key_point)")
-    content: str = Field(..., description="Insight content")
-    confidence: float = Field(..., description="Confidence score")
-    timestamp: Optional[float] = Field(default=None, description="Related timestamp in audio")
-   
-class RecognitionResponse(BaseModel):
-    """Complete voice recognition response"""
-    session_id: str = Field(..., description="Session identifier")
-    transcript: str = Field(..., description="Complete transcript")
-    confidence: float = Field(..., description="Overall confidence score")
-    duration: float = Field(..., description="Audio duration in seconds")
-    insights: Optional[List[Insight]] = Field(default=None, description="AI-generated insights")
-    language_detected: Optional[str] = Field(default=None, description="Detected language")
-    speaker_count: Optional[int] = Field(default=None, description="Number of speakers detected")
-    created_at: datetime = Field(default_factory=datetime.now, description="Response timestamp")
+class OllamaRequest(BaseModel):
+    """Request model for Ollama API"""
+    model: str = Field("nous-hermes", description="Ollama model to use")
+    prompt: str = Field(..., description="Prompt for the model")
+    stream: bool = Field(False, description="Whether to stream the response")
+    options: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Additional model options")
 
-class SessionControl(BaseModel):
-    """Session control commands"""
-    action: str = Field(..., description="Action: start, stop, pause, resume")
-    session_id: Optional[str] = Field(default=None, description="Session ID for control")
+class OllamaResponse(BaseModel):
+    """Response model from Ollama API"""
+    response: str = Field(..., description="Generated response")
+    done: bool = Field(..., description="Whether generation is complete")
+    context: Optional[List[int]] = Field(None, description="Context tokens")
+    total_duration: Optional[int] = Field(None, description="Total processing duration")
+    load_duration: Optional[int] = Field(None, description="Model loading duration")
 
-class SessionStatus(BaseModel):
-    """Current session status"""
-    session_id: str = Field(..., description="Session identifier")
-    status: str = Field(..., description="Session status: active, paused, stopped")
-    duration: float = Field(..., description="Current session duration")
-    transcript_length: int = Field(..., description="Current transcript character count")
-    last_activity: datetime = Field(..., description="Last activity timestamp")
+# Validation methods
+@validator('confidence', 'confidence_score')
+def validate_confidence_score(cls, v):
+    """Validate confidence scores are between 0 and 1"""
+    if not 0.0 <= v <= 1.0:
+        raise ValueError('Confidence score must be between 0.0 and 1.0')
+    return v
 
-class ErrorResponse(BaseModel):
-    """Error response model"""
-    error: str = Field(..., description="Error type")
-    message: str = Field(..., description="Error message")
-    details: Optional[dict] = Field(default=None, description="Additional error details")
-    timestamp: datetime = Field(default_factory=datetime.now, description="Error timestamp")                         
+@validator('confidence_rating')
+def validate_confidence_rating(cls, v):
+    """Validate confidence rating is between 0 and 10"""
+    if not 0.0 <= v <= 10.0:
+        raise ValueError('Confidence rating must be between 0.0 and 10.0')
+    return v
+
+# Configuration Models
+class VoiceProcessingConfig(BaseModel):
+    """Configuration for voice processing services"""
+    ollama_base_url: str = Field("http://localhost:11434", description="Ollama API base URL")
+    ollama_model: str = Field("nous-hermes", description="Default Ollama model")
+    max_session_duration: int = Field(7200, description="Maximum session duration in seconds")
+    audio_chunk_size: int = Field(1024, description="Audio processing chunk size")
+    transcription_timeout: int = Field(30, description="Transcription timeout in seconds")
+    max_audio_duration: int = Field(300, description="Maximum audio duration in seconds")
+    supported_audio_formats: List[str] = Field(
+        default=["wav", "mp3", "m4a", "ogg", "webm"],
+        description="Supported audio formats"
+    )
+    voice_analysis_enabled: bool = Field(True, description="Whether to enable voice analysis")
+    ai_response_max_tokens: int = Field(1000, description="Maximum tokens for AI responses")
+
+# Error Models
+class VoiceProcessingError(BaseModel):
+    """Standard error response model"""
+    success: bool = Field(False, description="Always false for errors")
+    error_code: str = Field(..., description="Specific error code")
+    error_message: str = Field(..., description="Human-readable error message")
+    details: Optional[Dict[str, Any]] = Field(None, description="Additional error details")
+    timestamp: datetime = Field(default_factory=datetime.now, description="Error timestamp")

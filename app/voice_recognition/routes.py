@@ -1,288 +1,344 @@
-from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect, Depends, UploadFile, File
+from fastapi import APIRouter, HTTPException, Depends, File, UploadFile, BackgroundTasks
 from fastapi.responses import JSONResponse
+from typing import Optional, List, Dict, Any
 import asyncio
 import json
-import base64
-from typing import Dict, List, Optional
 import logging
+from datetime import datetime
 
-from .services import VoiceRecognitionService
 from .schemas import (
-    PreopConfig,   
-    PreopResponse, 
-    AudioChunk, 
-    ProcessingResponse, 
-    RecognitionSession, 
-    RecognitionResponse,
-    SessionStatus
+    VoiceSessionRequest,
+    VoiceSessionResponse,
+    MicrophoneStatusRequest,
+    MicrophoneStatusResponse,
+    DeviceListResponse,
+    DeviceSelectionRequest,
+    AudioProcessingRequest,
+    AudioProcessingResponse,
+    TranscriptionResponse,
+    AIResponseRequest,
+    AIResponseResponse,
+    VoiceAnalysisResponse,
+    SimplifiedAnswerRequest
 )
-
-from fastapi import APIRouter, UploadFile, File
-from schemas import TranscriptionResponse
-from service import transcribe_audio_file
-
-router = APIRouter()
-
-@router.post("/api/transcribe", response_model=TranscriptionResponse)
-async def transcribe_audio(audio: UploadFile = File(...)):
-    transcript = await transcribe_audio_file(audio)
-    return {"transcript": transcript}
-
+from .service import VoiceProcessingService
 
 # Setup logging
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Create router
-router = APIRouter(prefix="/voice", tags=["voice"])
+router = APIRouter(prefix="/api/voice", tags=["voice-processing"])
+voice_service = VoiceProcessingService()
 
-# Initialize service
-voice_service = VoiceRecognitionService()   
-  
-# Active WebSocket connections for real-time processing
-active_connections: Dict[str, WebSocket] = {}
-
-@router.post("/preop", response_model=PreopResponse)
-async def voice_prep_check(config: PreopConfig):
+@router.post("/session/start", response_model=VoiceSessionResponse)
+async def start_voice_session(request: VoiceSessionRequest):
+    """
+    Start a new voice recognition session
+    """
     try:
-        logger.info(f"Preop check requested for device: {config.device}")
+        session_id = await voice_service.create_session(request.user_id)
         
-        # Use service to perform preop checks
-        result = await voice_service.preop_check(config)
-        
-        if result.status == "ready":
-            logger.info("Preop check successful")
-            return result
-        else:
-            logger.warning(f"Preop check failed: {result.message}")
-            raise HTTPException(status_code=400, detail=result.message)
-            
+        return VoiceSessionResponse(
+            success=True,
+            session_id=session_id,
+            message="Voice session started successfully",
+            timestamp=datetime.now()
+        )
     except Exception as e:
-        logger.error(f"Preop check error: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Preop check failed: {str(e)}")
-
-
-@router.get("/preop/devices")
-async def get_available_devices():
-    try:
-        devices = await voice_service.get_available_devices()
-        return {"devices": devices}
-    except Exception as e:
-        logger.error(f"Failed to get devices: {str(e)}")
-        raise HTTPException(status_code=500, detail="Failed to retrieve audio devices")
-
-@router.post("/process", response_model=ProcessingResponse)
-async def process_audio_chunk(audio_chunk: AudioChunk):
-    try:
-        logger.debug(f"Processing audio chunk at timestamp: {audio_chunk.timestamp}")
-        
-        # Decode base64 audio data
-        try:
-            audio_data = base64.b64decode(audio_chunk.data)
-        except Exception as e:
-            raise HTTPException(status_code=400, detail="Invalid base64 audio data")
-        
-        # Process through service
-        result = await voice_service.process_audio_chunk(audio_data, audio_chunk.timestamp)
-        
-        return result
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Audio processing error: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Audio processing failed: {str(e)}")
-    
-@router.websocket("/process/stream")
-async def websocket_audio_stream(websocket: WebSocket):
-    await websocket.accept()
-    connection_id = f"conn_{id(websocket)}"
-    active_connections[connection_id] = websocket
-    
-    logger.info(f"WebSocket connection established: {connection_id}")
-    
-    try:
-        while True:
-            # Receive audio data from frontend
-            data = await websocket.receive_text()
-            
-            try:
-                # Parse incoming message
-                message = json.loads(data)
-                
-                if message.get("type") == "audio_chunk":
-                    # Decode and process audio
-                    audio_data = base64.b64decode(message["data"])
-                    timestamp = message.get("timestamp", 0)
-                    
-                    # Process through service
-                    result = await voice_service.process_audio_chunk(audio_data, timestamp)
-                    
-                    # Send response back
-                    await websocket.send_text(json.dumps({
-                        "type": "transcription",
-                        "transcript": result.transcript,
-                        "confidence": result.confidence,
-                        "timestamp": timestamp,
-                        "is_final": result.is_final
-                    }))
-                    
-                elif message.get("type") == "ping":
-                    # Health check
-                    await websocket.send_text(json.dumps({"type": "pong"}))
-                    
-            except json.JSONDecodeError:
-                await websocket.send_text(json.dumps({
-                    "type": "error",
-                    "message": "Invalid JSON format"
-                }))
-            except Exception as e:
-                logger.error(f"WebSocket processing error: {str(e)}")
-                await websocket.send_text(json.dumps({
-                    "type": "error",
-                    "message": str(e)
-                }))
-                
-    except WebSocketDisconnect:
-        logger.info(f"WebSocket disconnected: {connection_id}")
-    except Exception as e:
-        logger.error(f"WebSocket error: {str(e)}")
-    finally:
-        # Cleanup connection
-        if connection_id in active_connections:
-            del active_connections[connection_id]
-
-@router.post("/recognize/start", response_model=RecognitionResponse)
-async def start_recognition_session(session: RecognitionSession):
-    try:
-        logger.info(f"Starting recognition session: {session.session_id}")
-        
-        result = await voice_service.start_recognition_session(session)
-        
-        if result.session_id:
-            logger.info(f"Recognition session started successfully: {result.session_id}")
-            return result
-        else:
-            raise HTTPException(status_code=400, detail="Failed to start recognition session")
-            
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Session start error: {str(e)}")
+        logger.error(f"Failed to start voice session: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to start session: {str(e)}")
-    
-@router.post("/recognize/stop/{session_id}", response_model=RecognitionResponse)
-async def stop_recognition_session(session_id: str):
+
+@router.get("/microphone/status/{session_id}", response_model=MicrophoneStatusResponse)
+async def check_microphone_status(session_id: str):
+    """
+    Check microphone status before and during meeting
+    """
     try:
-        logger.info(f"Stopping recognition session: {session_id}")
+        mic_status = await voice_service.check_microphone_status(session_id)
         
-        result = await voice_service.stop_recognition_session(session_id)
-        
-        if result:
-            logger.info(f"Recognition session stopped: {session_id}")
-            return result
-        else:
-            raise HTTPException(status_code=404, detail="Session not found")
-            
-    except HTTPException:
-        raise
+        return MicrophoneStatusResponse(
+            success=True,
+            is_available=mic_status["is_available"],
+            is_enabled=mic_status["is_enabled"],
+            current_device=mic_status.get("current_device"),
+            message=mic_status["message"],
+            alert_required=not mic_status["is_enabled"]
+        )
     except Exception as e:
-        logger.error(f"Session stop error: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to stop session: {str(e)}")
-    
-@router.get("/recognize/status/{session_id}", response_model=SessionStatus)
-async def get_session_status(session_id: str):  
+        logger.error(f"Failed to check microphone status: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Microphone check failed: {str(e)}")
+
+@router.get("/devices/list/{session_id}", response_model=DeviceListResponse)
+async def get_audio_devices(session_id: str):
+    """
+    Get list of available audio input devices
+    """
+    try:
+        devices = await voice_service.get_audio_devices(session_id)
+        
+        return DeviceListResponse(
+            success=True,
+            devices=devices,
+            default_device=devices[0] if devices else None,
+            message="Audio devices retrieved successfully"
+        )
+    except Exception as e:
+        logger.error(f"Failed to get audio devices: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to get devices: {str(e)}")
+
+@router.post("/device/select", response_model=JSONResponse)
+async def select_audio_device(request: DeviceSelectionRequest):
+    """
+    Select and connect to a specific audio device
+    """
+    try:
+        result = await voice_service.select_audio_device(
+            request.session_id, 
+            request.device_id
+        )
+        
+        return JSONResponse(
+            status_code=200,
+            content={
+                "success": True,
+                "connected_device": result["device_name"],
+                "device_id": result["device_id"],
+                "message": "Device connected successfully"
+            }
+        )
+    except Exception as e:
+        logger.error(f"Failed to select audio device: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Device selection failed: {str(e)}")
+
+@router.post("/microphone/toggle")
+async def toggle_microphone(request: MicrophoneStatusRequest):
+    """
+    Turn microphone on/off and handle device connection
+    """
+    try:
+        if request.turn_on:
+            # Check if mic is available, if not prompt user
+            mic_status = await voice_service.check_microphone_status(request.session_id)
+            
+            if not mic_status["is_available"]:
+                return JSONResponse(
+                    status_code=200,
+                    content={
+                        "success": False,
+                        "message": "Please enable microphone access in your browser settings",
+                        "action_required": "enable_permissions"
+                    }
+                )
+            
+            # Get devices and connect to default or user-selected
+            devices = await voice_service.get_audio_devices(request.session_id)
+            if not devices:
+                raise HTTPException(status_code=404, detail="No audio devices found")
+            
+            # Connect to default device if no specific device requested
+            device_to_use = request.device_id if hasattr(request, 'device_id') and request.device_id else devices[0]["id"]
+            result = await voice_service.select_audio_device(request.session_id, device_to_use)
+            
+            return JSONResponse(
+                status_code=200,
+                content={
+                    "success": True,
+                    "microphone_on": True,
+                    "connected_device": result["device_name"],
+                    "message": "Microphone turned on and connected"
+                }
+            )
+        else:
+            await voice_service.disable_microphone(request.session_id)
+            return JSONResponse(
+                status_code=200,
+                content={
+                    "success": True,
+                    "microphone_on": False,
+                    "message": "Microphone turned off"
+                }
+            )
+            
+    except Exception as e:
+        logger.error(f"Failed to toggle microphone: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Microphone toggle failed: {str(e)}")
+
+@router.post("/audio/process", response_model=AudioProcessingResponse)
+async def process_audio(
+    session_id: str,
+    audio_file: UploadFile = File(...),
+    background_tasks: BackgroundTasks = BackgroundTasks()
+):
+    """
+    Process uploaded audio: analyze, transcribe, and prepare for AI response
+    """
+    try:
+        # Validate audio file
+        if not audio_file.content_type.startswith('audio/'):
+            raise HTTPException(status_code=400, detail="Invalid audio file format")
+        
+        # Read audio data
+        audio_data = await audio_file.read()
+        
+        # Process audio in background
+        processing_result = await voice_service.process_audio(
+            session_id=session_id,
+            audio_data=audio_data,
+            filename=audio_file.filename
+        )
+        
+        return AudioProcessingResponse(
+            success=True,
+            transcription=processing_result["transcription"],
+            confidence_score=processing_result["confidence"],
+            audio_quality=processing_result["audio_quality"],
+            processing_time=processing_result["processing_time"],
+            message="Audio processed successfully"
+        )
+        
+    except Exception as e:
+        logger.error(f"Audio processing failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Audio processing failed: {str(e)}")
+
+@router.post("/transcribe", response_model=TranscriptionResponse)
+async def transcribe_audio(request: AudioProcessingRequest):
+    """
+    Transcribe audio to text
+    """
+    try:
+        transcription_result = await voice_service.transcribe_audio(
+            request.session_id,
+            request.audio_data
+        )
+        
+        return TranscriptionResponse(
+            success=True,
+            text=transcription_result["text"],
+            confidence=transcription_result["confidence"],
+            language=transcription_result.get("language", "en"),
+            duration=transcription_result.get("duration", 0),
+            message="Transcription completed successfully"
+        )
+        
+    except Exception as e:
+        logger.error(f"Transcription failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Transcription failed: {str(e)}")
+
+@router.post("/ai/respond", response_model=AIResponseResponse)
+async def get_ai_response(request: AIResponseRequest):
+    """
+    Get AI response using Ollama Nous Hermes model
+    """
+    try:
+        ai_response = await voice_service.generate_ai_response(
+            session_id=request.session_id,
+            question=request.question,
+            response_format=request.response_format,
+            context=request.context
+        )
+        
+        return AIResponseResponse(
+            success=True,
+            response=ai_response["response"],
+            format_type=request.response_format,
+            confidence=ai_response["confidence"],
+            processing_time=ai_response["processing_time"],
+            message="AI response generated successfully"
+        )
+        
+    except Exception as e:
+        logger.error(f"AI response generation failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"AI response failed: {str(e)}")
+
+@router.post("/analyze/voice", response_model=VoiceAnalysisResponse)
+async def analyze_voice_confidence(request: AudioProcessingRequest):
+    """
+    Analyze voice confidence and provide situational tips
+    """
+    try:
+        analysis_result = await voice_service.analyze_voice_characteristics(
+            request.session_id,
+            request.audio_data
+        )
+        
+        return VoiceAnalysisResponse(
+            success=True,
+            confidence_rating=analysis_result["confidence_rating"],
+            voice_characteristics=analysis_result["characteristics"],
+            situational_tips=analysis_result["tips"],
+            recommendations=analysis_result["recommendations"],
+            analysis_summary=analysis_result["summary"]
+        )
+        
+    except Exception as e:
+        logger.error(f"Voice analysis failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Voice analysis failed: {str(e)}")
+
+@router.post("/simplify", response_model=AIResponseResponse)
+async def get_simplified_answer(request: SimplifiedAnswerRequest):
+    """
+    Get a more simplified version of the AI response
+    """
+    try:
+        simplified_response = await voice_service.simplify_response(
+            session_id=request.session_id,
+            original_response=request.original_response,
+            simplification_level=request.simplification_level
+        )
+        
+        return AIResponseResponse(
+            success=True,
+            response=simplified_response["response"],
+            format_type="simplified",
+            confidence=simplified_response["confidence"],
+            processing_time=simplified_response["processing_time"],
+            message="Simplified response generated successfully"
+        )
+        
+    except Exception as e:
+        logger.error(f"Response simplification failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Simplification failed: {str(e)}")
+
+@router.delete("/session/{session_id}")
+async def end_voice_session(session_id: str):
+    """
+    End voice session and cleanup resources
+    """
+    try:
+        await voice_service.end_session(session_id)
+        
+        return JSONResponse(
+            status_code=200,
+            content={
+                "success": True,
+                "message": "Voice session ended successfully"
+            }
+        )
+        
+    except Exception as e:
+        logger.error(f"Failed to end session: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Session cleanup failed: {str(e)}")
+
+@router.get("/session/{session_id}/status")
+async def get_session_status(session_id: str):
+    """
+    Get current session status and statistics
+    """
     try:
         status = await voice_service.get_session_status(session_id)
         
-        if status:
-            return status
-        else:
-            raise HTTPException(status_code=404, detail="Session not found")
-            
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Status check error: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to get session status: {str(e)}")
-
-@router.post("/recognize/process/{session_id}")
-async def add_audio_to_session(session_id: str, audio_file: UploadFile = File(...)):
-    try:
-        logger.info(f"Adding audio to session: {session_id}")
-        
-        # Read audio file
-        audio_data = await audio_file.read()
-        
-        # Process through service
-        result = await voice_service.add_audio_to_session(session_id, audio_data)
-        
-        return {"message": "Audio added successfully", "status": result}
+        return JSONResponse(
+            status_code=200,
+            content={
+                "success": True,
+                "session_active": status["active"],
+                "microphone_connected": status["mic_connected"],
+                "current_device": status.get("current_device"),
+                "session_duration": status.get("duration"),
+                "total_interactions": status.get("interactions", 0)
+            }
+        )
         
     except Exception as e:
-        logger.error(f"Audio addition error: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to add audio: {str(e)}")
-
-@router.get("/health")
-async def health_check():
-    try:
-        # Check service health
-        health_status = await voice_service.health_check()
-        
-        return {
-            "status": "healthy" if health_status else "unhealthy",
-            "service": "voice_recognition",
-            "active_connections": len(active_connections),
-            "timestamp": voice_service.get_current_timestamp()
-        }
-    except Exception as e:
-        logger.error(f"Health check error: {str(e)}")
-        return {
-            "status": "unhealthy",
-            "error": str(e),
-            "timestamp": voice_service.get_current_timestamp()
-        }
-
-@router.get("/sessions")
-async def list_active_sessions():
-    """
-    List all active recognition sessions.
-    Admin/debug endpoint.
-    """
-    try:
-        sessions = await voice_service.list_active_sessions()
-        return {"active_sessions": sessions}
-    except Exception as e:
-        logger.error(f"Session list error: {str(e)}")
-        raise HTTPException(status_code=500, detail="Failed to retrieve sessions")
-
-
-@router.delete("/sessions/{session_id}")
-async def force_close_session(session_id: str):
-    """
-    Force close a recognition session.
-    Admin/cleanup endpoint.
-    """
-    try:
-        result = await voice_service.force_close_session(session_id)
-        
-        if result:
-            return {"message": f"Session {session_id} closed successfully"}
-        else:
-            raise HTTPException(status_code=404, detail="Session not found")
-            
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Force close error: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to close session: {str(e)}")
-
-
-async def general_exception_handler(request, exc):
-    """
-    General exception handler for voice routes.
-    """
-    logger.error(f"Unhandled exception in voice routes: {str(exc)}")
-    return JSONResponse(
-        status_code=500,
-        content={"detail": "Internal server error in voice recognition module"}
-    )
+        logger.error(f"Failed to get session status: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Status check failed: {str(e)}")
