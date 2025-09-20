@@ -1,6 +1,11 @@
 from pydantic import BaseModel, Field
 from typing import Optional, List, Union
 from datetime import datetime
+from pydantic import BaseModel
+
+class TranscriptionResponse(BaseModel):
+    transcript: str
+
 
 class PreopConfig(BaseModel):
     device: str = Field(..., description="Audio input device identifier")

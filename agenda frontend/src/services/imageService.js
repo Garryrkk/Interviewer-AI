@@ -25,7 +25,7 @@ export async function analyzeImage(imageFile) {
  * Opens the user's webcam, returns a single captured frame as a Blob.
  * @returns {Promise<Blob>}
  */
-export async function captureFromCamera() {
+export async function CameraCapture() {
   return new Promise(async (resolve, reject) => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: true });
@@ -56,14 +56,14 @@ export async function captureFromCamera() {
 }
 
 /**
- * ===========================
+ * ===========================  
  * 3️⃣  SCREEN CAPTURE (Entire Screen or Window)
  * ===========================
  * Opens a browser prompt to choose a screen/window to capture.
  * Returns a Blob of the screenshot.
  * @returns {Promise<Blob>}
  */
-export async function captureScreen() {
+export async function ScreenCapture() {
   return new Promise(async (resolve, reject) => {
     try {
       // Prompt user to share screen

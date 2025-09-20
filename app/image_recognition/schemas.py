@@ -1,18 +1,48 @@
 from pydantic import BaseModel
+from typing import Optional, Dict, Any
 
-# --- Screen Capture ---
+# --- Original Requests ---
+class UserRequest(BaseModel):
+    user_id: str
+
+class ImageBase64Request(BaseModel):
+    image_base64: str
+
+# --- New Screen Capture Requests ---
 class ScreenCaptureRequest(BaseModel):
-    image_base64: str  # screenshot sent as base64 string
+    region: Optional[str] = None
+    analysis_type: str = "general"
+    include_text: bool = True
 
-class ScreenCaptureResponse(BaseModel):
-    description: str   # AI's interpretation of the screen
-
-
-# --- Camera Capture ---
 class CameraCaptureRequest(BaseModel):
-    image_base64: str  # camera frame as base64 string
+    camera_id: int = 0
+    analysis_type: str = "emotion"
+    duration: Optional[int] = None
+
+# --- Original Responses ---
+class StreamResponse(BaseModel):
+    status: str
+    user: str
+
+class EmotionResponse(BaseModel):
+    label: str = None
+    confidence: float = None
+    advice: str = None
+
+class AnalyzeScreenResponse(BaseModel):
+    result: str
+
+class AnalyzeCameraResponse(BaseModel):
+    emotion: str
+    advice: str
+
+# --- New Screen Capture Responses ---
+class ScreenCaptureResponse(BaseModel):
+    analysis: str
+    timestamp: float
+    region_captured: Optional[str] = None
 
 class CameraCaptureResponse(BaseModel):
-    emotion: str       # e.g. "stressed", "confused", "neutral"
-    advice: str        # suggestion or simplified answer
-   
+    analysis: str
+    timestamp: float
+    camera_used: int

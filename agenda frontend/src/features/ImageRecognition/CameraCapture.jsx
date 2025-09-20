@@ -7,6 +7,7 @@ import {
 import { sendQuickReply } from "../QuickRespond/quickRespondUtils";
 import { summarizeText } from "../Summarization/summarizationUtils";
 import { Camera, Play, Square, Activity, MessageSquare, Eye, Brain, Zap } from 'lucide-react';
+import { CameraCapture } from "../../services/imageService";
 
 export default function CameraCapture() {
   const videoRef = useRef(null);

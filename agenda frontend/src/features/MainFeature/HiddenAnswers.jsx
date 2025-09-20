@@ -27,28 +27,32 @@ const HiddenAnswers = () => {
     }
   }, [answer]);
 
-  const sendToOverlay = () => {
+  const sendToOverlay = async () => {
     if (!answer.trim()) {
       alert('Please enter an answer to send to the overlay.');
       return;
     }
 
     try {
-      if (isElectronAvailable) {
-        // Sending to overlay via ipc
-        window.agenda.sendAnswer({
-          text: answer,
-          timestamp: new Date().toISOString(),
-          settings: overlaySettings
-        });
-        console.log('Answer sent to overlay:', answer);
-      } else {
-        console.log('Electron is not available - answer would be:', answer);
-        alert('Overlay feature requires Electron app. Answer logged to console.');
-      }
+      const response = await fetch("/invisibility/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          user_id: "demo_user",   // <- change to real user id if you have auth
+          response: answer
+        })
+      });
+
+      if (!response.ok) throw new Error("Failed to send answer");
+
+      const result = await response.json();
+      console.log("Answer sent to backend:", result);
+
+      // clear text after sending
+      setAnswer("");
     } catch (error) {
-      console.error('Error sending answer to overlay:', error);
-      alert('Failed to send answer to overlay.');
+      console.error("Error sending answer:", error);
+      alert("Failed to send answer to backend.");
     }
   };
 
@@ -122,7 +126,7 @@ const HiddenAnswers = () => {
               <p className="text-slate-400">Send answers to your private overlay. Only you can see them during screen sharing.</p>
             </div>
           </div>
-          
+
           {!isElectronAvailable && (
             <div className="bg-amber-900/20 border border-amber-600/30 rounded-lg p-4">
               <div className="flex items-center space-x-2">
@@ -144,16 +148,16 @@ const HiddenAnswers = () => {
               <div className="flex items-center justify-between p-3 rounded-lg bg-slate-900/50">
                 <span className="text-slate-300 font-medium">Electron Connection</span>
                 <div className="flex items-center space-x-2">
-                  <Circle 
-                    size={8} 
-                    className={`fill-current ${isElectronAvailable ? 'text-green-500' : 'text-red-500'}`} 
+                  <Circle
+                    size={8}
+                    className={`fill-current ${isElectronAvailable ? 'text-green-500' : 'text-red-500'}`}
                   />
                   <span className={`text-sm font-medium ${isElectronAvailable ? 'text-green-400' : 'text-red-400'}`}>
                     {isElectronAvailable ? 'Connected' : 'Unavailable'}
                   </span>
                 </div>
               </div>
-              
+
               <div className="flex items-center justify-between p-3 rounded-lg bg-slate-900/50">
                 <span className="text-slate-300 font-medium">Overlay Status</span>
                 <div className="flex items-center space-x-2">
@@ -188,7 +192,7 @@ const HiddenAnswers = () => {
         {/* Main input area */}
         <div className="bg-slate-800/50 backdrop-blur p-8 rounded-xl border border-slate-700 space-y-6">
           <h3 className="text-xl font-semibold text-slate-200">Answer Input</h3>
-          
+
           <div className="relative">
             <textarea
               ref={textareaRef}
@@ -228,8 +232,7 @@ Tips:
 
             <button
               onClick={copyToClipboard}
-              disabled={!answer.trim()}
-              className="flex items-center gap-3 px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-slate-600 disabled:cursor-not-allowed transition-colors font-medium"
+              className="flex items-center gap-3 px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium"
             >
               {isCopied ? <Check className="w-5 h-5" /> : <Copy className="w-5 h-5" />}
               {isCopied ? 'Copied!' : 'Copy Text'}
@@ -237,12 +240,12 @@ Tips:
 
             <button
               onClick={clearAnswer}
-              disabled={!answer.trim()}
-              className="flex items-center gap-3 px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:bg-slate-600 disabled:cursor-not-allowed transition-colors font-medium"
+              className="flex items-center gap-3 px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium"
             >
               <Trash2 className="w-5 h-5" />
               Clear
             </button>
+
           </div>
         </div>
 
@@ -252,7 +255,7 @@ Tips:
             <Settings className="w-6 h-6 text-slate-400" />
             <h3 className="text-xl font-semibold text-slate-200">Overlay Settings</h3>
           </div>
-          
+
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="bg-slate-900/50 p-6 rounded-lg">
               <label className="block text-sm font-medium text-slate-300 mb-3">
@@ -337,7 +340,7 @@ Tips:
           </div>
         </div>
       </div>
-      
+
       <style jsx>{`
         .slider::-webkit-slider-thumb {
           appearance: none;

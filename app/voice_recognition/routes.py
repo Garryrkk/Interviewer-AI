@@ -17,6 +17,18 @@ from .schemas import (
     SessionStatus
 )
 
+from fastapi import APIRouter, UploadFile, File
+from schemas import TranscriptionResponse
+from service import transcribe_audio_file
+
+router = APIRouter()
+
+@router.post("/api/transcribe", response_model=TranscriptionResponse)
+async def transcribe_audio(audio: UploadFile = File(...)):
+    transcript = await transcribe_audio_file(audio)
+    return {"transcript": transcript}
+
+
 # Setup logging
 logger = logging.getLogger(__name__)
 

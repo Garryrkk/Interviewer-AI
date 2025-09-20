@@ -1,15 +1,15 @@
 import React, { useState, useEffect, useRef } from "react";
 import { checkingMicrophonePermission, calibrateAudio, detectNoise } from './voiceUtils';
-import { 
-  Mic, 
-  MicOff, 
-  Activity, 
-  CheckCircle, 
-  AlertCircle, 
-  Volume2,
-  Settings,  
-  Play,
-  Square
+import {
+    Mic,
+    MicOff,
+    Activity,
+    CheckCircle,
+    AlertCircle,
+    Volume2,
+    Settings,
+    Play,
+    Square
 } from 'lucide-react';
 import { PreOpVoice } from "../../services/voiceService";
 
@@ -100,7 +100,7 @@ const PreOpVoice = ({ onComplete, micPermission, setMicPermission }) => {
 
             source.connect(analyser);
             analyserRef.current = analyser;
-            
+
             // Setup MediaRecorder for transcription
             const recorder = new MediaRecorder(stream);
             setMediaRecorder(recorder);
@@ -115,7 +115,7 @@ const PreOpVoice = ({ onComplete, micPermission, setMicPermission }) => {
                 const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
                 sendAudioToBackend(audioBlob);
             };
-            
+
             // Start noise detection
             monitorNoise();
 
@@ -182,18 +182,20 @@ const PreOpVoice = ({ onComplete, micPermission, setMicPermission }) => {
     const sendAudioToBackend = async (audioBlob) => {
         try {
             const formData = new FormData();
-            formData.append('audio', audioBlob);
-            
-            const response = await fetch('/api/transcribe', {
-                method: 'POST',
-                body: formData
+            formData.append("audio", audioBlob);
+
+            const res = await fetch("/api/transcribe", {
+                method: "POST",
+                body: formData,
             });
-            
-            const { transcript: newTranscript } = await response.json();
-            setTranscript(newTranscript);
+
+            if (!res.ok) throw new Error("Failed to transcribe audio");
+            const data = await res.json();
+
+            setTranscript(data.transcript); // update state with backend response
         } catch (error) {
-            console.error('Error transcribing audio:', error);
-            setTranscript('Error: Could not transcribe audio');
+            console.error("Error in sendAudioToBackend:", error);
+            alert("Transcription failed");
         }
     };
 
@@ -255,69 +257,61 @@ const PreOpVoice = ({ onComplete, micPermission, setMicPermission }) => {
                 <div className="mb-12">
                     <div className="flex items-center justify-center space-x-8">
                         <div className="flex flex-col items-center space-y-2">
-                            <div className={`w-16 h-16 rounded-full flex items-center justify-center border-2 transition-all duration-300 ${
-                                currentCheck === 'permission' 
-                                    ? 'border-pink-500 bg-pink-600/20' 
-                                    : permissionStatus === 'granted' 
-                                        ? 'border-green-500 bg-green-600/20' 
+                            <div className={`w-16 h-16 rounded-full flex items-center justify-center border-2 transition-all duration-300 ${currentCheck === 'permission'
+                                    ? 'border-pink-500 bg-pink-600/20'
+                                    : permissionStatus === 'granted'
+                                        ? 'border-green-500 bg-green-600/20'
                                         : 'border-slate-600 bg-slate-800/50'
-                            }`}>
-                                {permissionStatus === 'granted' 
+                                }`}>
+                                {permissionStatus === 'granted'
                                     ? <CheckCircle size={24} className="text-green-500" />
                                     : <Mic size={24} className={currentCheck === 'permission' ? 'text-pink-500' : 'text-slate-400'} />
                                 }
                             </div>
-                            <span className={`text-sm font-medium ${
-                                currentCheck === 'permission' ? 'text-pink-400' : 'text-slate-400'
-                            }`}>
+                            <span className={`text-sm font-medium ${currentCheck === 'permission' ? 'text-pink-400' : 'text-slate-400'
+                                }`}>
                                 Permission
                             </span>
                         </div>
 
-                        <div className={`h-0.5 w-24 transition-colors duration-300 ${
-                            permissionStatus === 'granted' ? 'bg-green-500' : 'bg-slate-600'
-                        }`}></div>
+                        <div className={`h-0.5 w-24 transition-colors duration-300 ${permissionStatus === 'granted' ? 'bg-green-500' : 'bg-slate-600'
+                            }`}></div>
 
                         <div className="flex flex-col items-center space-y-2">
-                            <div className={`w-16 h-16 rounded-full flex items-center justify-center border-2 transition-all duration-300 ${
-                                currentCheck === 'calibration' 
-                                    ? 'border-pink-500 bg-pink-600/20' 
-                                    : calibrationStatus === 'completed' 
-                                        ? 'border-green-500 bg-green-600/20' 
+                            <div className={`w-16 h-16 rounded-full flex items-center justify-center border-2 transition-all duration-300 ${currentCheck === 'calibration'
+                                    ? 'border-pink-500 bg-pink-600/20'
+                                    : calibrationStatus === 'completed'
+                                        ? 'border-green-500 bg-green-600/20'
                                         : 'border-slate-600 bg-slate-800/50'
-                            }`}>
-                                {calibrationStatus === 'completed' 
+                                }`}>
+                                {calibrationStatus === 'completed'
                                     ? <CheckCircle size={24} className="text-green-500" />
                                     : calibrationStatus === 'calibrating'
                                         ? <Activity size={24} className="text-pink-500 animate-pulse" />
                                         : <Settings size={24} className={currentCheck === 'calibration' ? 'text-pink-500' : 'text-slate-400'} />
                                 }
                             </div>
-                            <span className={`text-sm font-medium ${
-                                currentCheck === 'calibration' ? 'text-pink-400' : 'text-slate-400'
-                            }`}>
+                            <span className={`text-sm font-medium ${currentCheck === 'calibration' ? 'text-pink-400' : 'text-slate-400'
+                                }`}>
                                 Calibration
                             </span>
                         </div>
 
-                        <div className={`h-0.5 w-24 transition-colors duration-300 ${
-                            allChecksComplete ? 'bg-green-500' : 'bg-slate-600'
-                        }`}></div>
+                        <div className={`h-0.5 w-24 transition-colors duration-300 ${allChecksComplete ? 'bg-green-500' : 'bg-slate-600'
+                            }`}></div>
 
                         <div className="flex flex-col items-center space-y-2">
-                            <div className={`w-16 h-16 rounded-full flex items-center justify-center border-2 transition-all duration-300 ${
-                                allChecksComplete 
-                                    ? 'border-green-500 bg-green-600/20' 
+                            <div className={`w-16 h-16 rounded-full flex items-center justify-center border-2 transition-all duration-300 ${allChecksComplete
+                                    ? 'border-green-500 bg-green-600/20'
                                     : 'border-slate-600 bg-slate-800/50'
-                            }`}>
-                                {allChecksComplete 
+                                }`}>
+                                {allChecksComplete
                                     ? <CheckCircle size={24} className="text-green-500" />
                                     : <Play size={24} className="text-slate-400" />
                                 }
                             </div>
-                            <span className={`text-sm font-medium ${
-                                allChecksComplete ? 'text-green-400' : 'text-slate-400'
-                            }`}>
+                            <span className={`text-sm font-medium ${allChecksComplete ? 'text-green-400' : 'text-slate-400'
+                                }`}>
                                 Ready
                             </span>
                         </div>
@@ -329,18 +323,17 @@ const PreOpVoice = ({ onComplete, micPermission, setMicPermission }) => {
                     {currentCheck === 'permission' && (
                         <div className="bg-slate-800/50 backdrop-blur p-8 rounded-xl border border-slate-700 text-center">
                             <div className="mb-6">
-                                <div className={`w-24 h-24 rounded-full flex items-center justify-center mx-auto mb-4 transition-all duration-300 ${
-                                    permissionStatus === 'requesting' 
-                                        ? 'bg-yellow-600/20 animate-pulse' 
+                                <div className={`w-24 h-24 rounded-full flex items-center justify-center mx-auto mb-4 transition-all duration-300 ${permissionStatus === 'requesting'
+                                        ? 'bg-yellow-600/20 animate-pulse'
                                         : permissionStatus === 'granted'
                                             ? 'bg-green-600/20'
                                             : 'bg-slate-900'
-                                }`}>
-                                    {permissionStatus === 'denied' 
+                                    }`}>
+                                    {permissionStatus === 'denied'
                                         ? <MicOff size={48} className="text-red-500" />
                                         : <Mic size={48} className={
-                                            permissionStatus === 'granted' 
-                                                ? 'text-green-500' 
+                                            permissionStatus === 'granted'
+                                                ? 'text-green-500'
                                                 : permissionStatus === 'requesting'
                                                     ? 'text-yellow-500'
                                                     : 'text-slate-400'
@@ -357,7 +350,7 @@ const PreOpVoice = ({ onComplete, micPermission, setMicPermission }) => {
                             </div>
 
                             {permissionStatus === 'pending' && (
-                                <button 
+                                <button
                                     onClick={requestMicrophonePermission}
                                     className="bg-gradient-to-r from-pink-600 to-pink-700 text-white py-4 px-8 rounded-lg hover:from-pink-700 hover:to-pink-800 transition-all font-medium text-lg shadow-lg"
                                 >
@@ -380,16 +373,15 @@ const PreOpVoice = ({ onComplete, micPermission, setMicPermission }) => {
                             {/* Calibration Control */}
                             <div className="lg:col-span-2 bg-slate-800/50 backdrop-blur p-8 rounded-xl border border-slate-700">
                                 <h2 className="text-2xl font-bold mb-6 text-slate-100">Audio Calibration</h2>
-                                
+
                                 <div className="text-center mb-8">
-                                    <div className={`w-32 h-32 rounded-full flex items-center justify-center mx-auto mb-6 transition-all duration-300 ${
-                                        isCalibrating 
-                                            ? 'bg-pink-600/20 animate-pulse' 
+                                    <div className={`w-32 h-32 rounded-full flex items-center justify-center mx-auto mb-6 transition-all duration-300 ${isCalibrating
+                                            ? 'bg-pink-600/20 animate-pulse'
                                             : calibrationStatus === 'completed'
                                                 ? 'bg-green-600/20'
                                                 : 'bg-slate-900'
-                                    }`}>
-                                        {calibrationStatus === 'completed' 
+                                        }`}>
+                                        {calibrationStatus === 'completed'
                                             ? <CheckCircle size={64} className="text-green-500" />
                                             : isCalibrating
                                                 ? <Activity size={64} className="text-pink-500 animate-spin" />
@@ -404,17 +396,16 @@ const PreOpVoice = ({ onComplete, micPermission, setMicPermission }) => {
                                                 <span className="text-slate-400">{noiseLevel}%</span>
                                             </div>
                                             <div className="w-full bg-slate-700 rounded-full h-3">
-                                                <div 
-                                                    className={`h-3 rounded-full transition-all duration-300 ${
-                                                        noiseLevel > 70 ? 'bg-red-500' : noiseLevel > 40 ? 'bg-yellow-500' : 'bg-green-500'
-                                                    }`}
+                                                <div
+                                                    className={`h-3 rounded-full transition-all duration-300 ${noiseLevel > 70 ? 'bg-red-500' : noiseLevel > 40 ? 'bg-yellow-500' : 'bg-green-500'
+                                                        }`}
                                                     style={{ width: `${Math.min(noiseLevel, 100)}%` }}
                                                 ></div>
                                             </div>
                                         </div>
 
                                         {calibrationStatus === 'pending' && (
-                                            <button 
+                                            <button
                                                 onClick={startCalibration}
                                                 className="bg-gradient-to-r from-pink-600 to-pink-700 text-white py-4 px-8 rounded-lg hover:from-pink-700 hover:to-pink-800 transition-all font-medium text-lg shadow-lg"
                                             >
@@ -450,9 +441,9 @@ const PreOpVoice = ({ onComplete, micPermission, setMicPermission }) => {
                                         <div className="flex items-center space-x-2">
                                             {getStatusIcon(permissionStatus)}
                                             <span className={`text-sm font-medium ${getStatusColor(permissionStatus)}`}>
-                                                {permissionStatus === 'granted' ? 'Granted' : 
-                                                 permissionStatus === 'requesting' ? 'Requesting...' : 
-                                                 permissionStatus === 'denied' ? 'Denied' : 'Pending'}
+                                                {permissionStatus === 'granted' ? 'Granted' :
+                                                    permissionStatus === 'requesting' ? 'Requesting...' :
+                                                        permissionStatus === 'denied' ? 'Denied' : 'Pending'}
                                             </span>
                                         </div>
                                     </div>
@@ -462,9 +453,9 @@ const PreOpVoice = ({ onComplete, micPermission, setMicPermission }) => {
                                         <div className="flex items-center space-x-2">
                                             {getStatusIcon(calibrationStatus, isCalibrating)}
                                             <span className={`text-sm font-medium ${getStatusColor(calibrationStatus)}`}>
-                                                {calibrationStatus === 'completed' ? 'Complete' : 
-                                                 calibrationStatus === 'calibrating' ? 'In Progress' : 
-                                                 calibrationStatus === 'failed' ? 'Failed' : 'Pending'}
+                                                {calibrationStatus === 'completed' ? 'Complete' :
+                                                    calibrationStatus === 'calibrating' ? 'In Progress' :
+                                                        calibrationStatus === 'failed' ? 'Failed' : 'Pending'}
                                             </span>
                                         </div>
                                     </div>
@@ -472,11 +463,10 @@ const PreOpVoice = ({ onComplete, micPermission, setMicPermission }) => {
                                     <div className="flex items-center justify-between p-3 rounded-lg bg-slate-900/50">
                                         <span className="text-slate-300 font-medium">Noise Level</span>
                                         <div className="flex items-center space-x-2">
-                                            <div className={`w-2 h-2 rounded-full ${
-                                                noiseLevel > 70 ? 'bg-red-500' : 
-                                                noiseLevel > 40 ? 'bg-yellow-500' : 
-                                                'bg-green-500'
-                                            }`}></div>
+                                            <div className={`w-2 h-2 rounded-full ${noiseLevel > 70 ? 'bg-red-500' :
+                                                    noiseLevel > 40 ? 'bg-yellow-500' :
+                                                        'bg-green-500'
+                                                }`}></div>
                                             <span className="text-sm font-medium text-slate-400">{noiseLevel}%</span>
                                         </div>
                                     </div>
@@ -495,7 +485,7 @@ const PreOpVoice = ({ onComplete, micPermission, setMicPermission }) => {
                                 <p className="text-slate-400 mb-8 text-lg">
                                     Your voice recognition system is now ready for optimal performance.
                                 </p>
-                                
+
                                 {calibrationData && (
                                     <div className="bg-slate-900/50 p-6 rounded-lg mb-6 max-w-md mx-auto">
                                         <h4 className="font-semibold text-slate-200 mb-3">Calibration Results</h4>
@@ -515,29 +505,20 @@ const PreOpVoice = ({ onComplete, micPermission, setMicPermission }) => {
                                 {/* Voice Transcription Section */}
                                 <div className="bg-slate-900/50 p-6 rounded-lg mb-6 max-w-2xl mx-auto">
                                     <h4 className="font-semibold text-slate-200 mb-4">Test Voice Transcription</h4>
-                                    
+
                                     <div className="flex justify-center space-x-4 mb-4">
-                                        <button 
+                                        <button
                                             onClick={startRecording}
-                                            disabled={isRecording}
-                                            className={`flex items-center space-x-2 px-4 py-2 rounded-lg font-medium transition-all ${
-                                                isRecording 
-                                                    ? 'bg-gray-600 cursor-not-allowed' 
-                                                    : 'bg-red-600 hover:bg-red-700'
-                                            } text-white`}
+                                            className="flex items-center space-x-2 px-4 py-2 rounded-lg font-medium transition-all bg-red-600 hover:bg-red-700 text-white"
                                         >
                                             <Mic size={16} />
                                             <span>Start Recording</span>
                                         </button>
-                                        
-                                        <button 
+
+
+                                        <button
                                             onClick={stopRecording}
-                                            disabled={!isRecording}
-                                            className={`flex items-center space-x-2 px-4 py-2 rounded-lg font-medium transition-all ${
-                                                !isRecording 
-                                                    ? 'bg-gray-600 cursor-not-allowed' 
-                                                    : 'bg-red-600 hover:bg-red-700'
-                                            } text-white`}
+                                            className="flex items-center space-x-2 px-4 py-2 rounded-lg font-medium transition-all bg-red-600 hover:bg-red-700 text-white"
                                         >
                                             <Square size={16} />
                                             <span>Stop Recording</span>
@@ -562,7 +543,7 @@ const PreOpVoice = ({ onComplete, micPermission, setMicPermission }) => {
                                 </div>
                             </div>
 
-                            <button 
+                            <button
                                 onClick={handleComplete}
                                 className="bg-gradient-to-r from-green-600 to-green-700 text-white py-4 px-8 rounded-lg hover:from-green-700 hover:to-green-800 transition-all font-medium text-lg shadow-lg"
                             >

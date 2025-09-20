@@ -22,7 +22,7 @@ import {
   WifiOff,
   AlertCircle
 } from 'lucide-react';
-
+import { ScreenCapture } from "../../services/imageService";
 // Backend Communication Layer
 const screenCaptureAPI = {
   startCapture: async (config) => {
@@ -487,12 +487,7 @@ export default function ScreenCapture() {
 
             <button 
               onClick={handleSnapshot} 
-              disabled={!running || processing}
-              className={`flex items-center space-x-3 py-3 px-6 rounded-lg font-medium transition-all ${
-                !running || processing 
-                  ? 'bg-slate-700 text-slate-500 cursor-not-allowed' 
-                  : 'bg-green-600 hover:bg-green-700 text-white'
-              }`}
+              className={`flex items-center space-x-3 py-3 px-6 rounded-lg font-medium transition-all`}
             >
               <Camera size={20} />
               <span>{processing ? "Processing…" : "Capture Now"}</span>
@@ -512,13 +507,11 @@ export default function ScreenCapture() {
             </button>
 
             <button 
-              onClick={copyLatest} 
-              disabled={!messages.length}
-              className={`flex items-center space-x-3 py-3 px-6 rounded-lg font-medium transition-all ${
-                !messages.length 
-                  ? 'bg-slate-700 text-slate-500 cursor-not-allowed' 
-                  : 'bg-orange-600 hover:bg-orange-700 text-white'
-              }`}
+              onClick={() => {
+                console.log("copyLatest clicked");
+                copyLatest();
+              }}
+              className={`flex items-center space-x-3 py-3 px-6 rounded-lg font-medium transition-all `}
             >
               <Copy size={20} />
               <span>Copy Latest</span>

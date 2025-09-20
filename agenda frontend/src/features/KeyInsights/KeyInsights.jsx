@@ -9,7 +9,7 @@ import {
   Star,
   Clock,
   TrendingUp
-} from 'lucide-react';
+} from 'lucide-react';  
 import { 
   extractKeyInsights, 
   formatInsight, 

@@ -316,17 +316,17 @@ const VoiceProcessing = ({ onBackToSetup, isReady }) => {
                             }`}>
                                 <Mic size={32} className="text-white" />
                             </div>
-                            <button 
-                                onClick={isRecording ? handleStopRecording : handleStartRecording}
-                                className={`w-full py-3 px-4 rounded-lg transition-all font-medium ${
-                                    isRecording 
-                                        ? 'bg-red-600 hover:bg-red-700 shadow-lg hover:shadow-red-600/30' 
-                                        : 'bg-pink-600 hover:bg-pink-700 shadow-lg hover:shadow-pink-600/30'
-                                } text-white`}
-                                disabled={!isReady}
+                           <button
+                            onClick={isRecording ? handleStopRecording : handleStartRecording}
+                            className={`w-full py-3 px-4 rounded-lg transition-all font-medium ${
+                                isRecording
+                                ? 'bg-red-600 hover:bg-red-700 shadow-lg hover:shadow-red-600/30'
+                                : 'bg-pink-600 hover:bg-pink-700 shadow-lg hover:shadow-pink-600/30'
+                            } text-white`}
                             >
-                                {isRecording ? 'Stop Recording' : 'Start Recording'}
+                            {isRecording ? 'Stop Recording' : 'Start Recording'}
                             </button>
+
                         </div>
                     </div>
 

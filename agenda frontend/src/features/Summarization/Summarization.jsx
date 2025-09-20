@@ -10,7 +10,7 @@ export default function Summarization() {
   const [autoGenerate, setAutoGenerate] = useState(false);
   const [includeTimestamps, setIncludeTimestamps] = useState(false);
 
-  async function handleSummarize() {
+  async function Summarization() {
     if (!input.trim()) return;
     setLoading(true);
     const result = await summarizeText(input);
@@ -73,26 +73,23 @@ export default function Summarization() {
                   {input.length} characters
                 </span>
                 <button
-                  onClick={handleSummarize}
-                  disabled={loading || !input.trim()}
-                  className={`px-6 py-3 rounded-lg transition-all font-medium flex items-center space-x-2 ${
-                    loading || !input.trim()
-                      ? 'bg-slate-700 text-slate-500 cursor-not-allowed'
-                      : 'bg-gradient-to-r from-orange-600 to-orange-700 hover:from-orange-700 hover:to-orange-800 text-white shadow-lg'
-                  }`}
-                >
-                  {loading ? (
-                    <>
-                      <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
-                      <span>Summarizing...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Zap size={16} />
-                      <span>Summarize</span>
-                    </>
-                  )}
-                </button>
+  onClick={Summarization}
+  className="px-6 py-3 rounded-lg transition-all font-medium flex items-center space-x-2 
+             bg-gradient-to-r from-orange-600 to-orange-700 hover:from-orange-700 hover:to-orange-800 
+             text-white shadow-lg"
+>
+  {loading ? (
+    <>
+      <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
+      <span>Summarizing...</span>
+    </>
+  ) : (
+    <>
+      <Zap size={16} />
+      <span>Summarize</span>
+    </>
+  )}
+</button>
               </div>
             </div>
 
@@ -176,7 +173,7 @@ export default function Summarization() {
               <h3 className="text-lg font-semibold mb-4 text-slate-200">Quick Actions</h3>
               <div className="space-y-3">
                 <button
-                  onClick={handleSummarize}
+                  onClick={Summarization}
                   disabled={loading || !input.trim()}
                   className={`w-full py-3 px-4 rounded-lg transition-colors font-medium flex items-center justify-center space-x-2 ${
                     loading || !input.trim()

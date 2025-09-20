@@ -18,6 +18,20 @@ from .schemas import (
     ErrorResponse
 )
 
+import tempfile
+import speech_recognition as sr
+
+async def transcribe_audio_file(audio_file):
+    recognizer = sr.Recognizer()
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
+        tmp.write(await audio_file.read())
+        tmp.flush()
+        with sr.AudioFile(tmp.name) as source:
+            audio_data = recognizer.record(source)
+            text = recognizer.recognize_google(audio_data)  # or any model you prefer
+    return text
+
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 

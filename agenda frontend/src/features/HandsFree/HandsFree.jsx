@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { startListening } from "./handsFreeUtils";
-import { sendQuickReply } from "../QuickRespond/quickRespondUtils";
+import { sendToBackend } from "./handsFreeUtils";
 import { HandsFreeMode } from "../../services/aiService";
 import { Zap, Mic, Activity, Volume2, User, Bot } from 'lucide-react';
 
@@ -16,7 +16,7 @@ export default function HandsFreeMode() {
         setMessages((prev) => [...prev, { from: "interviewer", text: transcript }]);
 
         // AI generates quick response
-        const aiReply = await sendQuickReply(transcript);
+        const aiReply = await sendToBackend(transcript);
         setMessages((prev) => [...prev, { from: "ai", text: aiReply }]);
       });
     }
