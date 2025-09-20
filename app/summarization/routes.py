@@ -10,8 +10,6 @@ from .schemas import (
     AudioUploadResponse
 )
 from .service import SummarizationService
-from ..auth.dependencies import get_current_user
-from ..models.user import User
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
