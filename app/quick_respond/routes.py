@@ -1,205 +1,162 @@
-from fastapi import APIRouter, HTTPException, status
-import logging
-import requests
+from fastapi import APIRouter, HTTPException, Depends, UploadFile, File
+from fastapi.responses import StreamingResponse
+import asyncio
 import json
-from typing import Dict, Any
-from .schemas import QuickResponseRequest, QuickResponse
-
-logger = logging.getLogger(__name__)
-
-OLLAMA_BASE_URL = "http://localhost:11434"  
-OLLAMA_MODEL = "nous-hermes2" 
-
-router = APIRouter(
-    prefix="/quick-respond",
-    tags=["Quick Respond"],
-    responses={404: {"description": "Not found"}}
+from typing import Optional
+from .schemas import (
+    QuickRespondRequest, 
+    QuickRespondResponse, 
+    SimplifyRequest,
+    SimplifyResponse,
+    MeetingContext
 )
+from .services import QuickRespondService
 
-async def generate_quick_response_ollama(prompt: str) -> str:
-    """Generate response using Ollama API"""
+router = APIRouter(prefix="/api/quick-respond", tags=["quick-respond"])
+quick_respond_service = QuickRespondService()
+
+@router.post("/analyze-screenshot", response_model=QuickRespondResponse)
+async def analyze_meeting_screenshot(
+    screenshot: UploadFile = File(...),
+    meeting_context: Optional[str] = None,
+    audio_transcript: Optional[str] = None
+):
+    """
+    Analyze live meeting screenshot and provide key insights
+    """
     try:
-        payload: Dict[str, Any] = {
-            "model": OLLAMA_MODEL,
-            "prompt": prompt,
-            "stream": False,
-            "options": {
-                "temperature": 0.7,
-                "top_p": 0.9,
-                "max_tokens": 2000
-            }
-        }
+        # Validate file type
+        if not screenshot.content_type.startswith('image/'):
+            raise HTTPException(status_code=400, detail="File must be an image")
         
-        # Make request to Ollama
-        response = requests.post(
-            f"{OLLAMA_BASE_URL}/api/generate",
-            json=payload,
-            headers={"Content-Type": "application/json"},
-            timeout=30
+        # Read screenshot data
+        screenshot_data = await screenshot.read()
+        
+        # Create request object
+        request_data = QuickRespondRequest(
+            screenshot_data=screenshot_data,
+            meeting_context=meeting_context,
+            audio_transcript=audio_transcript,
+            analysis_type="key_insights"
         )
+        
+        # Get analysis from service
+        response = await quick_respond_service.analyze_meeting_content(request_data)
+        
+        return response
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
 
-        response.raise_for_status()
+@router.post("/analyze-screenshot/stream")
+async def analyze_meeting_screenshot_stream(
+    screenshot: UploadFile = File(...),
+    meeting_context: Optional[str] = None,
+    audio_transcript: Optional[str] = None
+):
+    """
+    Stream real-time analysis of meeting screenshot
+    """
+    try:
+        if not screenshot.content_type.startswith('image/'):
+            raise HTTPException(status_code=400, detail="File must be an image")
         
-        # Parse response
-        result = response.json()
+        screenshot_data = await screenshot.read()
         
-        # Extract the generated text
-        if "response" in result:
-            return result["response"]
-        else:
-            raise Exception("Invalid response format from Ollama")
+        request_data = QuickRespondRequest(
+            screenshot_data=screenshot_data,
+            meeting_context=meeting_context,
+            audio_transcript=audio_transcript,
+            analysis_type="key_insights"
+        )
+        
+        async def generate_stream():
+            async for chunk in quick_respond_service.analyze_meeting_content_stream(request_data):
+                yield f"data: {json.dumps(chunk)}\n\n"
+        
+        return StreamingResponse(generate_stream(), media_type="text/plain")
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Streaming analysis failed: {str(e)}")
+
+@router.post("/simplify", response_model=SimplifyResponse)
+async def simplify_response(request: SimplifyRequest):
+    """
+    Simplify a complex analysis response
+    """
+    try:
+        response = await quick_respond_service.simplify_analysis(request)
+        return response
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Simplification failed: {str(e)}")
+
+@router.post("/batch-analyze")
+async def batch_analyze_screenshots(
+    screenshots: list[UploadFile] = File(...),
+    meeting_context: Optional[str] = None
+):
+    """
+    Analyze multiple screenshots from a meeting session
+    """
+    try:
+        results = []
+        
+        for screenshot in screenshots:
+            if not screenshot.content_type.startswith('image/'):
+                continue
+                
+            screenshot_data = await screenshot.read()
             
-    except requests.exceptions.RequestException as e:
-        logger.error(f"Ollama request failed: {str(e)}")
-        raise Exception(f"Failed to connect to Ollama: {str(e)}")
-    except json.JSONDecodeError as e:
-        logger.error(f"Failed to parse Ollama response: {str(e)}")
-        raise Exception("Invalid response from Ollama")
-    except Exception as e:
-        logger.error(f"Error in Ollama generation: {str(e)}")
-        raise
-
-@router.post("/", response_model=QuickResponse)
-async def quick_response(request: QuickResponseRequest) -> QuickResponse:
-    """Generate a quick response using Ollama"""
-    try:
-        # Validate prompt is not empty
-        if not request.prompt.strip():
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Prompt cannot be empty"
+            request_data = QuickRespondRequest(
+                screenshot_data=screenshot_data,
+                meeting_context=meeting_context,
+                analysis_type="key_insights"
             )
+            
+            result = await quick_respond_service.analyze_meeting_content(request_data)
+            results.append({
+                "filename": screenshot.filename,
+                "analysis": result
+            })
         
-        # Log the incoming request
-        logger.info(f"Received quick response request for prompt: {request.prompt[:50]}...")
+        return {"batch_results": results}
         
-        # Generate response using Ollama
-        response_text = await generate_quick_response_ollama(request.prompt)
-        
-        # Log successful response
-        logger.info("Quick response generated successfully via Ollama")
-        
-        return QuickResponse(response=response_text)
-        
-    except HTTPException:
-        # Re-raise HTTP exceptions
-        raise
     except Exception as e:
-        # Log the error
-        logger.error(f"Error generating quick response: {str(e)}")
-        
-        # Return generic error to client
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to generate quick response"
-        )
+        raise HTTPException(status_code=500, detail=f"Batch analysis failed: {str(e)}")
 
 @router.get("/health")
-async def health_check() -> Dict[str, str]:
+async def health_check():
     """
-    Health check endpoint for the Quick Respond service and Ollama connection.
-    
-    Returns:
-        dict: Service status including Ollama connectivity
+    Check if LLAVA/Ollama services are available
     """
     try:
-        # Test Ollama connection
-        response = requests.get(f"{OLLAMA_BASE_URL}/api/tags", timeout=5)
-        ollama_status = "connected" if response.status_code == 200 else "disconnected"
-    except Exception:
-        ollama_status = "disconnected"
-    
-    return {
-        "status": "healthy",
-        "service": "quick-respond",
-        "message": "Quick Respond service is running",
-        "ollama_status": ollama_status,
-        "model": OLLAMA_MODEL,
-        "ollama_url": OLLAMA_BASE_URL
-    }
-
-@router.post("/validate")
-async def validate_prompt(request: QuickResponseRequest) -> Dict[str, Any]:
-    """Validate the prompt before processing"""
-    try:
-        if not request.prompt.strip():
-            return {
-                "valid": False,
-                "message": "Prompt cannot be empty"
-            }
-        
-        if len(request.prompt) > 4000:  # Increased limit for local models
-            return {
-                "valid": False,
-                "message": "Prompt too long (max 4000 characters)"
-            }
-        
-        return {
-            "valid": True,
-            "message": "Prompt is valid"
-        }
+        health_status = await quick_respond_service.check_service_health()
+        return health_status
         
     except Exception as e:
-        logger.error(f"Error validating prompt: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to validate prompt"
-        )
+        raise HTTPException(status_code=503, detail=f"Service unavailable: {str(e)}")
 
-@router.get("/models")
-async def list_available_models() -> Dict[str, Any]:
-    """List available models from Ollama"""
+@router.post("/context/update")
+async def update_meeting_context(context: MeetingContext):
+    """
+    Update meeting context for better analysis
+    """
     try:
-        response = requests.get(f"{OLLAMA_BASE_URL}/api/tags", timeout=10)
-        response.raise_for_status()
-        
-        models = response.json()
-        return {
-            "available_models": models.get("models", []),
-            "current_model": OLLAMA_MODEL
-        }
+        await quick_respond_service.update_meeting_context(context)
+        return {"status": "success", "message": "Meeting context updated"}
         
     except Exception as e:
-        logger.error(f"Error fetching models: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to fetch available models"
-        )
+        raise HTTPException(status_code=500, detail=f"Context update failed: {str(e)}")
 
-@router.post("/switch-model")
-async def switch_model(model_name: str) -> Dict[str, str]:
-    """Switch to a different Ollama model"""
-    global OLLAMA_MODEL
-    
+@router.delete("/context/clear")
+async def clear_meeting_context():
+    """
+    Clear stored meeting context
+    """
     try:
-        # Verify model exists
-        response = requests.get(f"{OLLAMA_BASE_URL}/api/tags", timeout=10)
-        response.raise_for_status()
+        await quick_respond_service.clear_meeting_context()
+        return {"status": "success", "message": "Meeting context cleared"}
         
-        models = response.json()
-        available_models = [model["name"] for model in models.get("models", [])]
-        
-        if model_name not in available_models:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Model '{model_name}' not found. Available models: {available_models}"
-            )
-        
-        previous_model = OLLAMA_MODEL
-        OLLAMA_MODEL = "nous_hermes"
-        logger.info(f"Switched to model: {model_name}")
-        
-        return {
-            "message": f"Successfully switched to model: {model_name}",
-            "previous_model": previous_model,
-            "current_model": model_name
-        }
-        
-    except HTTPException:
-        raise
     except Exception as e:
-        logger.error(f"Error switching models: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to switch models"
-        )
+        raise HTTPException(status_code=500, detail=f"Context clearing failed: {str(e)}")
