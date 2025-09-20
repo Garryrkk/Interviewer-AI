@@ -219,3 +219,272 @@ class VoiceProcessingError(BaseModel):
     error_message: str = Field(..., description="Human-readable error message")
     details: Optional[Dict[str, Any]] = Field(None, description="Additional error details")
     timestamp: datetime = Field(default_factory=datetime.now, description="Error timestamp")
+
+class AudioFormat(str, Enum):
+    WAV = "wav"
+    MP3 = "mp3"
+    FLAC = "flac"
+    OGG = "ogg"
+    M4A = "m4a"
+    AAC = "aac"
+
+class CalibrationStatus(str, Enum):
+    NOT_CALIBRATED = "not_calibrated"
+    CALIBRATING = "calibrating"
+    CALIBRATED = "calibrated"
+    FAILED = "failed"
+
+class TranscriptionModel(str, Enum):
+    TINY = "tiny"
+    BASE = "base"
+    SMALL = "small"
+    MEDIUM = "medium"
+    LARGE = "large"
+
+# Request Models
+class CalibrationRequest(BaseModel):
+    duration: int = Field(
+        default=3,
+        ge=1,
+        le=10,
+        description="Calibration duration in seconds"
+    )
+    sample_rate: int = Field(
+        default=16000,
+        ge=8000,
+        le=48000,
+        description="Audio sample rate in Hz"
+    )
+    channels: int = Field(
+        default=1,
+        ge=1,
+        le=2,
+        description="Number of audio channels (1=mono, 2=stereo)"
+    )
+    
+    class Config:
+        schema_extra = {
+            "example": {
+                "duration": 3,
+                "sample_rate": 16000,
+                "channels": 1
+            }
+        }
+
+class AudioTestRequest(BaseModel):
+    duration: int = Field(
+        default=5,
+        ge=1,
+        le=30,
+        description="Test recording duration in seconds"
+    )
+    sample_rate: int = Field(
+        default=16000,
+        ge=8000,
+        le=48000,
+        description="Audio sample rate in Hz"
+    )
+    channels: int = Field(
+        default=1,
+        ge=1,
+        le=2,
+        description="Number of audio channels"
+    )
+    apply_calibration: bool = Field(
+        default=True,
+        description="Whether to apply calibration settings"
+    )
+    
+    class Config:
+        schema_extra = {
+            "example": {
+                "duration": 5,
+                "sample_rate": 16000,
+                "channels": 1,
+                "apply_calibration": True
+            }
+        }
+
+# Response Models
+class CalibrationResponse(BaseModel):
+    status: CalibrationStatus
+    noise_level: float = Field(description="Background noise level in dB")
+    recommended_threshold: float = Field(description="Recommended voice detection threshold")
+    sample_rate: int
+    channels: int
+    calibration_time: datetime
+    quality_score: float = Field(
+        ge=0.0,
+        le=1.0,
+        description="Audio environment quality score (0-1)"
+    )
+    recommendations: List[str] = Field(
+        description="List of recommendations for better audio quality"
+    )
+    
+    class Config:
+        schema_extra = {
+            "example": {
+                "status": "calibrated",
+                "noise_level": -45.2,
+                "recommended_threshold": -30.0,
+                "sample_rate": 16000,
+                "channels": 1,
+                "calibration_time": "2024-01-15T10:30:00Z",
+                "quality_score": 0.85,
+                "recommendations": [
+                    "Good audio environment detected",
+                    "Consider using a microphone closer to your mouth for better clarity"
+                ]
+            }
+        }
+
+class AudioTestResponse(BaseModel):
+    success: bool
+    duration: float = Field(description="Actual recording duration")
+    file_size: int = Field(description="Size of recorded audio in bytes")
+    audio_quality: Dict[str, Any] = Field(description="Audio quality metrics")
+    peak_amplitude: float = Field(description="Peak audio amplitude")
+    average_amplitude: float = Field(description="Average audio amplitude")
+    signal_to_noise_ratio: Optional[float] = Field(description="SNR if calibration available")
+    recommendations: List[str]
+    audio_preview_url: Optional[str] = Field(description="URL to preview the recorded audio")
+    
+    class Config:
+        schema_extra = {
+            "example": {
+                "success": True,
+                "duration": 5.02,
+                "file_size": 160640,
+                "audio_quality": {
+                    "bit_rate": 16,
+                    "sample_rate": 16000,
+                    "channels": 1
+                },
+                "peak_amplitude": 0.78,
+                "average_amplitude": 0.23,
+                "signal_to_noise_ratio": 15.3,
+                "recommendations": [
+                    "Audio quality is good for transcription",
+                    "Clear voice detected"
+                ],
+                "audio_preview_url": "/api/v1/audio/preview/test_recording_123.wav"
+            }
+        }
+
+class TranscriptionSegment(BaseModel):
+    start: float = Field(description="Segment start time in seconds")
+    end: float = Field(description="Segment end time in seconds") 
+    text: str = Field(description="Transcribed text for this segment")
+    confidence: float = Field(
+        ge=0.0,
+        le=1.0,
+        description="Confidence score for this segment"
+    )
+
+class TranscriptionResponse(BaseModel):
+    success: bool
+    text: str = Field(description="Complete transcribed text")
+    language: str = Field(description="Detected or specified language")
+    confidence: float = Field(
+        ge=0.0,
+        le=1.0,
+        description="Overall transcription confidence"
+    )
+    duration: float = Field(description="Audio duration in seconds")
+    segments: List[TranscriptionSegment] = Field(
+        description="Detailed transcription segments with timestamps"
+    )
+    word_count: int = Field(description="Number of words transcribed")
+    processing_time: float = Field(description="Time taken to process in seconds")
+    model_used: str = Field(description="Transcription model used")
+    audio_quality_score: float = Field(
+        ge=0.0,
+        le=1.0,
+        description="Audio quality assessment"
+    )
+    
+    class Config:
+        schema_extra = {
+            "example": {
+                "success": True,
+                "text": "Hello, this is a test recording for speech to text transcription.",
+                "language": "en",
+                "confidence": 0.92,
+                "duration": 5.02,
+                "segments": [
+                    {
+                        "start": 0.0,
+                        "end": 2.5,
+                        "text": "Hello, this is a test recording",
+                        "confidence": 0.95
+                    },
+                    {
+                        "start": 2.5,
+                        "end": 5.02,
+                        "text": "for speech to text transcription.",
+                        "confidence": 0.89
+                    }
+                ],
+                "word_count": 12,
+                "processing_time": 1.23,
+                "model_used": "base",
+                "audio_quality_score": 0.88
+            }
+        }
+
+# Error Response Model
+class ErrorResponse(BaseModel):
+    error: bool = True
+    message: str
+    error_code: Optional[str] = None
+    details: Optional[Dict[str, Any]] = None
+    timestamp: datetime = Field(default_factory=datetime.now)
+    
+    class Config:
+        schema_extra = {
+            "example": {
+                "error": True,
+                "message": "Audio file format not supported",
+                "error_code": "INVALID_FORMAT",
+                "details": {
+                    "supported_formats": ["wav", "mp3", "flac"],
+                    "received_format": "txt"
+                },
+                "timestamp": "2024-01-15T10:30:00Z"
+            }
+        }
+
+# Status Models
+class CalibrationStatus(BaseModel):
+    is_calibrated: bool
+    last_calibration: Optional[datetime]
+    current_settings: Optional[Dict[str, Any]]
+    noise_level: Optional[float]
+    quality_score: Optional[float]
+
+class ServiceHealth(BaseModel):
+    status: str = Field(description="Service health status")
+    version: str = Field(description="Service version")
+    uptime: float = Field(description="Service uptime in seconds")
+    dependencies: Dict[str, str] = Field(description="Status of service dependencies")
+    last_check: datetime = Field(default_factory=datetime.now)
+
+# Validation helpers
+class AudioValidationMixin:
+    @validator('sample_rate')
+    def validate_sample_rate(cls, v):
+        valid_rates = [8000, 16000, 22050, 44100, 48000]
+        if v not in valid_rates:
+            raise ValueError(f'Sample rate must be one of {valid_rates}')
+        return v
+    
+    @validator('channels')
+    def validate_channels(cls, v):
+        if v not in [1, 2]:
+            raise ValueError('Channels must be 1 (mono) or 2 (stereo)')
+        return v
+
+# Apply validation mixin to request models
+CalibrationRequest.__bases__ += (AudioValidationMixin,)
+AudioTestRequest.__bases__ += (AudioValidationMixin,)

@@ -19,16 +19,25 @@ from .schemas import (
     AIResponseRequest,
     AIResponseResponse,
     VoiceAnalysisResponse,
-    SimplifiedAnswerRequest
+    SimplifiedAnswerRequest,
+    CalibrationRequest, 
+    CalibrationResponse, 
+    TranscriptionResponse,
+    AudioTestRequest,
+    AudioTestResponse,
+    ErrorResponse
 )
-from .service import VoiceProcessingService
+from .services import VoiceProcessingService
+from .services import AudioService
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+router = APIRouter(prefix="/api/v1/audio", tags=["audio"])
 router = APIRouter(prefix="/api/voice", tags=["voice-processing"])
 voice_service = VoiceProcessingService()
+audio_service = AudioService()
 
 @router.post("/session/start", response_model=VoiceSessionResponse)
 async def start_voice_session(request: VoiceSessionRequest):
@@ -342,3 +351,192 @@ async def get_session_status(session_id: str):
     except Exception as e:
         logger.error(f"Failed to get session status: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Status check failed: {str(e)}")
+    
+@router.post("/calibrate", response_model=CalibrationResponse)
+async def calibrate_audio(request: CalibrationRequest):
+    """
+    Audio Calibration endpoint - measures background noise and sets optimal levels
+    for clear voice recognition.
+    """
+    try:
+        logger.info(f"Starting audio calibration with duration: {request.duration}s")
+        
+        # Perform calibration
+        result = await audio_service.calibrate_audio(
+            duration=request.duration,
+            sample_rate=request.sample_rate,
+            channels=request.channels
+        )
+        
+        logger.info(f"Calibration completed. Noise level: {result.noise_level}dB")
+        return result
+        
+    except Exception as e:
+        logger.error(f"Calibration failed: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Audio calibration failed: {str(e)}"
+        )
+
+@router.post("/test-record", response_model=AudioTestResponse)
+async def test_audio_recording(request: AudioTestRequest):
+    """
+    Test audio recording endpoint - records a test clip and validates audio quality
+    before transcription.
+    """
+    try:
+        logger.info(f"Starting test recording with duration: {request.duration}s")
+        
+        # Record test audio
+        result = await audio_service.test_recording(
+            duration=request.duration,
+            sample_rate=request.sample_rate,
+            channels=request.channels,
+            apply_calibration=request.apply_calibration
+        )
+        
+        logger.info("Test recording completed successfully")
+        return result
+        
+    except Exception as e:
+        logger.error(f"Test recording failed: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Test recording failed: {str(e)}"
+        )
+
+@router.post("/transcribe", response_model=TranscriptionResponse)
+async def transcribe_audio(
+    audio_file: UploadFile = File(..., description="Audio file to transcribe"),
+    language: Optional[str] = "auto",
+    model_size: Optional[str] = "base"
+):
+    """
+    Speech-to-text transcription endpoint - converts uploaded audio to text.
+    """
+    try:
+        # Validate file type
+        if not audio_file.content_type.startswith('audio/'):
+            raise HTTPException(
+                status_code=400,
+                detail="File must be an audio file"
+            )
+        
+        logger.info(f"Starting transcription for file: {audio_file.filename}")
+        logger.info(f"File size: {audio_file.size} bytes, Content type: {audio_file.content_type}")
+        
+        # Read audio file
+        audio_data = await audio_file.read()
+        
+        # Perform transcription
+        result = await audio_service.transcribe_audio(
+            audio_data=audio_data,
+            filename=audio_file.filename,
+            content_type=audio_file.content_type,
+            language=language,
+            model_size=model_size
+        )
+        
+        logger.info("Transcription completed successfully")
+        return result
+        
+    except Exception as e:
+        logger.error(f"Transcription failed: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Transcription failed: {str(e)}"
+        )
+
+@router.post("/transcribe-test", response_model=TranscriptionResponse)
+async def transcribe_test_recording():
+    """
+    Transcribe the most recent test recording.
+    """
+    try:
+        logger.info("Transcribing latest test recording")
+        
+        result = await audio_service.transcribe_latest_test()
+        
+        if not result:
+            raise HTTPException(
+                status_code=404,
+                detail="No test recording found. Please record a test clip first."
+            )
+        
+        logger.info("Test recording transcription completed")
+        return result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Test transcription failed: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Test transcription failed: {str(e)}"
+        )
+
+@router.get("/calibration-status")
+async def get_calibration_status():
+    """
+    Get current audio calibration status and settings.
+    """
+    try:
+        status = await audio_service.get_calibration_status()
+        return JSONResponse(content=status)
+        
+    except Exception as e:
+        logger.error(f"Failed to get calibration status: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to get calibration status: {str(e)}"
+        )
+
+@router.delete("/reset-calibration")
+async def reset_calibration():
+    """
+    Reset audio calibration settings to defaults.
+    """
+    try:
+        await audio_service.reset_calibration()
+        return JSONResponse(content={"message": "Calibration reset successfully"})
+        
+    except Exception as e:
+        logger.error(f"Failed to reset calibration: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to reset calibration: {str(e)}"
+        )
+
+@router.get("/supported-formats")
+async def get_supported_formats():
+    """
+    Get list of supported audio formats for upload.
+    """
+    return JSONResponse(content={
+        "supported_formats": [
+            "audio/wav",
+            "audio/mp3", 
+            "audio/flac",
+            "audio/ogg",
+            "audio/m4a",
+            "audio/aac"
+        ],
+        "recommended_format": "audio/wav",
+        "max_file_size_mb": 50
+    })
+
+# Health check endpoint
+@router.get("/health")
+async def health_check():
+    """
+    Health check endpoint for audio service.
+    """
+    try:
+        health_status = await audio_service.health_check()
+        return JSONResponse(content=health_status)
+    except Exception as e:
+        logger.error(f"Health check failed: {str(e)}")
+        return JSONResponse(
+            status_code=503,
+            content={"status": "unhealthy", "error": str(e)}
+        )

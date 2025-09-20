@@ -8,6 +8,7 @@ import wave
 import time
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any, Union
+from pathlib import Path
 import httpx
 import speech_recognition as sr
 import pyaudio
@@ -16,6 +17,17 @@ import librosa
 from pydub import AudioSegment
 import tempfile
 import os
+
+try:
+    import sounddevice as sd
+    import soundfile as sf
+    import librosa
+    import whisper
+    from scipy import signal
+    from scipy.io import wavfile
+except ImportError as e:
+    logging.warning(f"Some audio libraries not available: {e}")
+
 
 from .schemas import (
     VoiceSession,
@@ -27,7 +39,13 @@ from .schemas import (
     OllamaResponse,
     ResponseFormat,
     SimplificationLevel,
-    VoiceProcessingConfig
+    VoiceProcessingConfig,
+    CalibrationResponse,
+    AudioTestResponse, 
+    TranscriptionResponse,
+    TranscriptionSegment,
+    CalibrationStatus,
+    ServiceHealth
 )
 
 logger = logging.getLogger(__name__)
@@ -675,3 +693,547 @@ class VoiceProcessingService:
                 asyncio.create_task(self.http_client.aclose())
         except:
             pass
+
+    
+class AudioService:
+    """
+    Service class handling audio calibration, recording, and transcription operations.
+    """
+    
+    def __init__(self):
+        self.calibration_data = {}
+        self.test_recordings = {}
+        self.whisper_model = None
+        self.temp_dir = tempfile.mkdtemp()
+        self.service_start_time = time.time()
+        
+        # Default audio settings
+        self.default_sample_rate = 16000
+        self.default_channels = 1
+        self.max_recording_duration = 300  # 5 minutes
+        
+        # Initialize Whisper model lazily
+        self._model_loaded = False
+        
+        logger.info(f"AudioService initialized. Temp dir: {self.temp_dir}")
+
+    async def _load_whisper_model(self, model_size: str = "base"):
+        """Load Whisper model if not already loaded."""
+        if not self._model_loaded or (self.whisper_model and model_size not in str(self.whisper_model)):
+            try:
+                logger.info(f"Loading Whisper model: {model_size}")
+                self.whisper_model = whisper.load_model(model_size)
+                self._model_loaded = True
+                logger.info(f"Whisper model {model_size} loaded successfully")
+            except Exception as e:
+                logger.error(f"Failed to load Whisper model: {e}")
+                raise Exception(f"Failed to load speech recognition model: {e}")
+
+    async def calibrate_audio(
+        self,
+        duration: int = 3,
+        sample_rate: int = 16000,
+        channels: int = 1
+    ) -> CalibrationResponse:
+        """
+        Perform audio calibration by measuring background noise levels.
+        """
+        try:
+            logger.info(f"Starting calibration: {duration}s, {sample_rate}Hz, {channels}ch")
+            
+            # Record ambient noise
+            logger.info("Recording ambient noise for calibration...")
+            audio_data = sd.rec(
+                int(duration * sample_rate), 
+                samplerate=sample_rate, 
+                channels=channels,
+                dtype='float32'
+            )
+            sd.wait()  # Wait for recording to complete
+            
+            # Analyze audio data
+            audio_flat = audio_data.flatten()
+            
+            # Calculate noise metrics
+            rms = np.sqrt(np.mean(audio_flat ** 2))
+            noise_level_db = 20 * np.log10(rms + 1e-10)  # Add small value to avoid log(0)
+            
+            # Calculate spectral characteristics
+            freqs, psd = signal.welch(audio_flat, sample_rate, nperseg=1024)
+            dominant_freq = freqs[np.argmax(psd)]
+            
+            # Determine quality score and recommendations
+            quality_score = self._calculate_quality_score(noise_level_db, psd)
+            recommendations = self._generate_recommendations(noise_level_db, quality_score)
+            
+            # Set recommended threshold (typically 10-15 dB above noise floor)
+            recommended_threshold = noise_level_db + 12.0
+            
+            # Store calibration data
+            calibration_data = {
+                'noise_level': noise_level_db,
+                'recommended_threshold': recommended_threshold,
+                'sample_rate': sample_rate,
+                'channels': channels,
+                'dominant_frequency': dominant_freq,
+                'quality_score': quality_score,
+                'calibration_time': datetime.now(),
+                'audio_statistics': {
+                    'rms': float(rms),
+                    'peak': float(np.max(np.abs(audio_flat))),
+                    'mean': float(np.mean(audio_flat)),
+                    'std': float(np.std(audio_flat))
+                }
+            }
+            
+            self.calibration_data = calibration_data
+            
+            logger.info(f"Calibration completed. Noise level: {noise_level_db:.2f}dB")
+            
+            return CalibrationResponse(
+                status=CalibrationStatus.CALIBRATED,
+                noise_level=noise_level_db,
+                recommended_threshold=recommended_threshold,
+                sample_rate=sample_rate,
+                channels=channels,
+                calibration_time=calibration_data['calibration_time'],
+                quality_score=quality_score,
+                recommendations=recommendations
+            )
+            
+        except Exception as e:
+            logger.error(f"Calibration failed: {e}")
+            raise Exception(f"Audio calibration failed: {e}")
+
+    def _calculate_quality_score(self, noise_level_db: float, psd: np.ndarray) -> float:
+        """Calculate audio environment quality score (0-1)."""
+        # Better score for lower noise levels
+        noise_score = max(0, min(1, (noise_level_db + 60) / 40))  # -60dB = 1.0, -20dB = 0.0
+        
+        # Check for consistent spectrum (avoid harsh frequency spikes)
+        psd_normalized = psd / np.max(psd)
+        spectral_flatness = np.exp(np.mean(np.log(psd_normalized + 1e-10))) / np.mean(psd_normalized)
+        spectral_score = min(1.0, spectral_flatness * 2)  # Higher flatness = better
+        
+        # Combine scores
+        quality_score = (noise_score * 0.7 + spectral_score * 0.3)
+        return float(quality_score)
+
+    def _generate_recommendations(self, noise_level_db: float, quality_score: float) -> List[str]:
+        """Generate recommendations based on calibration results."""
+        recommendations = []
+        
+        if noise_level_db > -30:
+            recommendations.append("High background noise detected. Consider moving to a quieter environment.")
+        elif noise_level_db > -45:
+            recommendations.append("Moderate background noise. Audio quality may be affected.")
+        else:
+            recommendations.append("Good audio environment detected.")
+            
+        if quality_score < 0.5:
+            recommendations.append("Consider using a higher quality microphone.")
+            recommendations.append("Ensure microphone is positioned close to your mouth.")
+        elif quality_score < 0.8:
+            recommendations.append("Consider using a microphone closer to your mouth for better clarity.")
+        else:
+            recommendations.append("Excellent audio setup for speech recognition.")
+            
+        return recommendations
+
+    async def test_recording(
+        self,
+        duration: int = 5,
+        sample_rate: int = 16000,
+        channels: int = 1,
+        apply_calibration: bool = True
+    ) -> AudioTestResponse:
+        """
+        Record a test audio clip and analyze its quality.
+        """
+        try:
+            logger.info(f"Starting test recording: {duration}s")
+            
+            # Record audio
+            audio_data = sd.rec(
+                int(duration * sample_rate),
+                samplerate=sample_rate,
+                channels=channels,
+                dtype='float32'
+            )
+            sd.wait()
+            
+            # Save to temporary file
+            test_filename = f"test_recording_{int(time.time())}.wav"
+            test_path = os.path.join(self.temp_dir, test_filename)
+            
+            sf.write(test_path, audio_data, sample_rate)
+            actual_duration = len(audio_data) / sample_rate
+            file_size = os.path.getsize(test_path)
+            
+            # Analyze audio quality
+            audio_flat = audio_data.flatten()
+            peak_amplitude = float(np.max(np.abs(audio_flat)))
+            average_amplitude = float(np.mean(np.abs(audio_flat)))
+            
+            # Calculate SNR if calibration available
+            snr = None
+            if apply_calibration and self.calibration_data:
+                noise_rms = np.sqrt(self.calibration_data.get('audio_statistics', {}).get('rms', 0.01) ** 2)
+                signal_rms = np.sqrt(np.mean(audio_flat ** 2))
+                if noise_rms > 0:
+                    snr = 20 * np.log10(signal_rms / noise_rms)
+            
+            # Generate quality recommendations
+            recommendations = []
+            if peak_amplitude > 0.95:
+                recommendations.append("Audio may be clipping. Reduce input volume.")
+            elif peak_amplitude < 0.1:
+                recommendations.append("Audio level is low. Speak louder or move closer to microphone.")
+            else:
+                recommendations.append("Audio quality is good for transcription.")
+                
+            if average_amplitude > 0.1:
+                recommendations.append("Clear voice detected.")
+            else:
+                recommendations.append("Voice level is low. Ensure you're speaking clearly.")
+            
+            # Store test recording info
+            self.test_recordings[test_filename] = {
+                'path': test_path,
+                'duration': actual_duration,
+                'sample_rate': sample_rate,
+                'channels': channels,
+                'timestamp': datetime.now()
+            }
+            
+            audio_quality = {
+                'bit_rate': 16,  # Using float32, equivalent to 16-bit
+                'sample_rate': sample_rate,
+                'channels': channels,
+                'format': 'WAV'
+            }
+            
+            return AudioTestResponse(
+                success=True,
+                duration=actual_duration,
+                file_size=file_size,
+                audio_quality=audio_quality,
+                peak_amplitude=peak_amplitude,
+                average_amplitude=average_amplitude,
+                signal_to_noise_ratio=snr,
+                recommendations=recommendations,
+                audio_preview_url=f"/api/v1/audio/preview/{test_filename}"
+            )
+            
+        except Exception as e:
+            logger.error(f"Test recording failed: {e}")
+            raise Exception(f"Test recording failed: {e}")
+
+    async def transcribe_audio(
+        self,
+        audio_data: bytes,
+        filename: str,
+        content_type: str,
+        language: str = "auto",
+        model_size: str = "base"
+    ) -> TranscriptionResponse:
+        """
+        Transcribe uploaded audio file to text.
+        """
+        try:
+            start_time = time.time()
+            
+            # Load Whisper model
+            await self._load_whisper_model(model_size)
+            
+            # Save uploaded file temporarily
+            temp_filename = f"upload_{int(time.time())}_{filename}"
+            temp_path = os.path.join(self.temp_dir, temp_filename)
+            
+            with open(temp_path, 'wb') as f:
+                f.write(audio_data)
+            
+            # Load and preprocess audio
+            audio, sample_rate = librosa.load(temp_path, sr=16000)
+            duration = len(audio) / sample_rate
+            
+            # Perform transcription
+            logger.info("Starting Whisper transcription...")
+            
+            # Set language parameter
+            language_param = None if language == "auto" else language
+            
+            result = self.whisper_model.transcribe(
+                temp_path,
+                language=language_param,
+                word_timestamps=True,
+                verbose=False
+            )
+            
+            # Extract segments with timestamps
+            segments = []
+            for segment in result.get('segments', []):
+                segments.append(TranscriptionSegment(
+                    start=segment['start'],
+                    end=segment['end'],
+                    text=segment['text'].strip(),
+                    confidence=segment.get('avg_logprob', 0.0)  # Convert log prob to confidence-like score
+                ))
+            
+            # Calculate overall confidence (average of segment confidences)
+            overall_confidence = np.mean([seg.confidence for seg in segments]) if segments else 0.0
+            overall_confidence = max(0.0, min(1.0, (overall_confidence + 1.0) / 2.0))  # Normalize log prob
+            
+            # Calculate audio quality score
+            audio_quality_score = self._assess_audio_quality(audio, sample_rate)
+            
+            # Count words
+            word_count = len(result['text'].split())
+            
+            processing_time = time.time() - start_time
+            
+            # Clean up temp file
+            try:
+                os.remove(temp_path)
+            except:
+                pass
+            
+            logger.info(f"Transcription completed in {processing_time:.2f}s")
+            
+            return TranscriptionResponse(
+                success=True,
+                text=result['text'].strip(),
+                language=result.get('language', language if language != "auto" else "unknown"),
+                confidence=overall_confidence,
+                duration=duration,
+                segments=segments,
+                word_count=word_count,
+                processing_time=processing_time,
+                model_used=model_size,
+                audio_quality_score=audio_quality_score
+            )
+            
+        except Exception as e:
+            logger.error(f"Transcription failed: {e}")
+            raise Exception(f"Transcription failed: {e}")
+
+    def _assess_audio_quality(self, audio: np.ndarray, sample_rate: int) -> float:
+        """Assess audio quality for transcription purposes."""
+        # Calculate various quality metrics
+        
+        # 1. Signal level
+        rms = np.sqrt(np.mean(audio ** 2))
+        signal_level_score = min(1.0, max(0.0, (rms - 0.01) / 0.1))
+        
+        # 2. Dynamic range
+        dynamic_range = np.max(audio) - np.min(audio)
+        dynamic_score = min(1.0, dynamic_range / 0.5)
+        
+        # 3. Spectral characteristics
+        freqs, psd = signal.welch(audio, sample_rate, nperseg=1024)
+        # Focus on speech frequency range (85-255 Hz fundamental, 2-4kHz formants)
+        speech_band = (freqs >= 85) & (freqs <= 4000)
+        speech_energy = np.sum(psd[speech_band])
+        total_energy = np.sum(psd)
+        speech_ratio = speech_energy / (total_energy + 1e-10)
+        
+        # 4. Clipping detection
+        clipping_score = 1.0 - (np.sum(np.abs(audio) > 0.99) / len(audio))
+        
+        # Combine scores
+        quality_score = (
+            signal_level_score * 0.3 +
+            dynamic_score * 0.2 +
+            speech_ratio * 0.3 +
+            clipping_score * 0.2
+        )
+        
+        return float(min(1.0, max(0.0, quality_score)))
+
+    async def transcribe_latest_test(self) -> Optional[TranscriptionResponse]:
+        """
+        Transcribe the most recent test recording.
+        """
+        if not self.test_recordings:
+            return None
+        
+        # Get most recent test recording
+        latest_test = max(
+            self.test_recordings.items(),
+            key=lambda x: x[1]['timestamp']
+        )
+        
+        test_filename, test_info = latest_test
+        
+        try:
+            # Read the test file
+            with open(test_info['path'], 'rb') as f:
+                audio_data = f.read()
+            
+            # Transcribe using the existing method
+            return await self.transcribe_audio(
+                audio_data=audio_data,
+                filename=test_filename,
+                content_type="audio/wav",
+                language="auto",
+                model_size="base"
+            )
+            
+        except Exception as e:
+            logger.error(f"Failed to transcribe test recording: {e}")
+            raise Exception(f"Failed to transcribe test recording: {e}")
+
+    async def get_calibration_status(self) -> Dict[str, Any]:
+        """
+        Get current calibration status and settings.
+        """
+        if not self.calibration_data:
+            return {
+                "is_calibrated": False,
+                "last_calibration": None,
+                "current_settings": None,
+                "noise_level": None,
+                "quality_score": None
+            }
+        
+        return {
+            "is_calibrated": True,
+            "last_calibration": self.calibration_data['calibration_time'].isoformat(),
+            "current_settings": {
+                "sample_rate": self.calibration_data['sample_rate'],
+                "channels": self.calibration_data['channels'],
+                "recommended_threshold": self.calibration_data['recommended_threshold']
+            },
+            "noise_level": self.calibration_data['noise_level'],
+            "quality_score": self.calibration_data['quality_score']
+        }
+
+    async def reset_calibration(self):
+        """
+        Reset calibration settings to defaults.
+        """
+        self.calibration_data = {}
+        logger.info("Calibration settings reset")
+
+    async def health_check(self) -> Dict[str, Any]:
+        """
+        Perform health check for the audio service.
+        """
+        uptime = time.time() - self.service_start_time
+        
+        # Check dependencies
+        dependencies = {}
+        
+        # Check audio device availability
+        try:
+            devices = sd.query_devices()
+            dependencies["audio_devices"] = "healthy" if len(devices) > 0 else "no_devices"
+        except Exception:
+            dependencies["audio_devices"] = "error"
+        
+        # Check Whisper model
+        dependencies["whisper_model"] = "loaded" if self._model_loaded else "not_loaded"
+        
+        # Check temp directory
+        dependencies["temp_directory"] = "healthy" if os.path.exists(self.temp_dir) else "error"
+        
+        # Overall status
+        status = "healthy" if all(v in ["healthy", "loaded", "not_loaded"] for v in dependencies.values()) else "degraded"
+        
+        return ServiceHealth(
+            status=status,
+            version="1.0.0",
+            uptime=uptime,
+            dependencies=dependencies,
+            last_check=datetime.now()
+        ).dict()
+
+    def cleanup_old_files(self, max_age_hours: int = 24):
+        """
+        Clean up old temporary files.
+        """
+        try:
+            current_time = time.time()
+            
+            # Clean up test recordings
+            for filename, info in list(self.test_recordings.items()):
+                file_age = (datetime.now() - info['timestamp']).total_seconds() / 3600
+                
+                if file_age > max_age_hours:
+                    try:
+                        if os.path.exists(info['path']):
+                            os.remove(info['path'])
+                        del self.test_recordings[filename]
+                        logger.info(f"Cleaned up old test recording: {filename}")
+                    except Exception as e:
+                        logger.warning(f"Failed to clean up {filename}: {e}")
+            
+            # Clean up other temp files
+            if os.path.exists(self.temp_dir):
+                for file_path in Path(self.temp_dir).glob("*"):
+                    try:
+                        file_age = (current_time - file_path.stat().st_mtime) / 3600
+                        if file_age > max_age_hours:
+                            file_path.unlink()
+                            logger.info(f"Cleaned up temp file: {file_path.name}")
+                    except Exception as e:
+                        logger.warning(f"Failed to clean up {file_path}: {e}")
+                        
+        except Exception as e:
+            logger.error(f"Cleanup failed: {e}")
+
+    async def get_audio_devices(self) -> Dict[str, Any]:
+        """
+        Get available audio input devices.
+        """
+        try:
+            devices = sd.query_devices()
+            input_devices = []
+            
+            for i, device in enumerate(devices):
+                if device['max_input_channels'] > 0:
+                    input_devices.append({
+                        'id': i,
+                        'name': device['name'],
+                        'channels': device['max_input_channels'],
+                        'sample_rate': device['default_samplerate']
+                    })
+            
+            return {
+                'devices': input_devices,
+                'default_device': sd.default.device[0] if sd.default.device[0] is not None else -1
+            }
+            
+        except Exception as e:
+            logger.error(f"Failed to get audio devices: {e}")
+            return {'devices': [], 'default_device': -1, 'error': str(e)}
+
+    async def set_audio_device(self, device_id: int):
+        """
+        Set the default audio input device.
+        """
+        try:
+            devices = sd.query_devices()
+            if 0 <= device_id < len(devices):
+                sd.default.device[0] = device_id
+                logger.info(f"Audio input device set to: {devices[device_id]['name']}")
+                return True
+            else:
+                raise ValueError(f"Invalid device ID: {device_id}")
+                
+        except Exception as e:
+            logger.error(f"Failed to set audio device: {e}")
+            raise Exception(f"Failed to set audio device: {e}")
+
+    def __del__(self):
+        """
+        Cleanup when service is destroyed.
+        """
+        try:
+            # Clean up all temporary files
+            if hasattr(self, 'temp_dir') and os.path.exists(self.temp_dir):
+                import shutil
+                shutil.rmtree(self.temp_dir, ignore_errors=True)
+                logger.info("Temporary directory cleaned up")
+        except Exception as e:
+            logger.warning(f"Cleanup warning: {e}")
