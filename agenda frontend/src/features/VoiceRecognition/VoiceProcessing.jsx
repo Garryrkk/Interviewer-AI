@@ -25,10 +25,10 @@ const sendToAI = async (text, history) => {
         `Based on your input: "${text}", here are some thoughts...`,
         `I heard: "${text}". Is there anything specific you'd like me to explain?`
     ];
-    
+
     // Simulate API delay
     await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 2000));
-    
+
     return responses[Math.floor(Math.random() * responses.length)];
 };
 
@@ -44,7 +44,7 @@ const audioToText = (blob) => {
 
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         const recognition = new SpeechRecognition();
-        
+
         recognition.continuous = false;
         recognition.interimResults = false;
         recognition.lang = 'en-US';
@@ -53,7 +53,7 @@ const audioToText = (blob) => {
         const audio = new Audio();
         const url = URL.createObjectURL(blob);
         audio.src = url;
-        
+
         recognition.onresult = (event) => {
             const transcript = event.results[0][0].transcript;
             resolve(transcript);
@@ -108,7 +108,7 @@ const VoiceProcessing = ({ onBack }) => {
         try {
             setError('');
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            
+
             const audioContext = new AudioContext();
             const source = audioContext.createMediaStreamSource(stream);
             const analyser = audioContext.createAnalyser();
@@ -137,7 +137,7 @@ const VoiceProcessing = ({ onBack }) => {
                     audioChunksRef.current.push(event.data);
                 }
             };
-            
+
             mediaRecorder.onstop = async () => {
                 const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm;codecs=opus' });
                 await processRecording(audioBlob);
@@ -152,7 +152,7 @@ const VoiceProcessing = ({ onBack }) => {
                 }
                 setVolume(0);
             };
-            
+
             mediaRecorder.start(100); // Collect data every 100ms
             setIsRecording(true);
             setRecordingTime(0);
@@ -169,20 +169,21 @@ const VoiceProcessing = ({ onBack }) => {
     };
 
     // Stop recording
-    const handleStopRecording = () => {
-        if (mediaRecorderRef.current && isRecording) {
+    const handleStopRecording = async () => {
+        if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
             mediaRecorderRef.current.stop();
-            setIsRecording(false);
-            
-            if (recordingIntervalRef.current) {
-                clearInterval(recordingIntervalRef.current);
-            }
-            
-            if (animationFrameRef.current) {
-                cancelAnimationFrame(animationFrameRef.current);
-            }
+        }
+
+        if (audioChunksRef.current.length > 0) {
+            const audioBlob = new Blob(audioChunksRef.current, { type: "audio/wav" });
+
+            // 🔹 Send audio to backend
+            await sendAudioToBackend(audioBlob);
+
+            audioChunksRef.current = []; // reset
         }
     };
+
 
     const processRecording = async (audioBlob) => {
         setIsProcessing(true);
@@ -297,7 +298,7 @@ const VoiceProcessing = ({ onBack }) => {
                 <div className="flex items-center justify-between mb-8">
                     <div className="flex items-center space-x-4">
                         {onBack && (
-                            <button 
+                            <button
                                 onClick={onBack}
                                 className="p-3 bg-slate-800/50 backdrop-blur rounded-xl hover:bg-slate-700/50 transition-colors border border-slate-700"
                             >
@@ -310,9 +311,8 @@ const VoiceProcessing = ({ onBack }) => {
                         </div>
                     </div>
                     <div className="flex space-x-2">
-                        <div className={`px-3 py-1 text-white text-sm rounded-full ${
-                            isRecording ? 'bg-red-600' : isProcessing ? 'bg-yellow-600' : 'bg-green-600'
-                        }`}>
+                        <div className={`px-3 py-1 text-white text-sm rounded-full ${isRecording ? 'bg-red-600' : isProcessing ? 'bg-yellow-600' : 'bg-green-600'
+                            }`}>
                             {isRecording ? 'Recording' : isProcessing ? 'Processing' : 'Ready'}
                         </div>
                     </div>
@@ -327,11 +327,10 @@ const VoiceProcessing = ({ onBack }) => {
                             Voice Control
                         </h3>
                         <div className="text-center space-y-4">
-                            <div className={`w-20 h-20 rounded-full flex items-center justify-center mx-auto transition-all duration-300 ${
-                                isRecording 
-                                    ? 'bg-red-600 animate-pulse shadow-lg shadow-red-600/30' 
+                            <div className={`w-20 h-20 rounded-full flex items-center justify-center mx-auto transition-all duration-300 ${isRecording
+                                    ? 'bg-red-600 animate-pulse shadow-lg shadow-red-600/30'
                                     : 'bg-slate-900 hover:bg-slate-800'
-                            }`}>
+                                }`}>
                                 {isRecording ? (
                                     <Square size={32} className="text-white" />
                                 ) : (
@@ -339,14 +338,13 @@ const VoiceProcessing = ({ onBack }) => {
                                 )}
                             </div>
                             <button
-                            onClick={isRecording ? handleStopRecording : handleStartRecording}
-                            className={`w-full py-3 px-4 rounded-lg transition-all font-medium ${
-                                isRecording
-                                ? 'bg-red-600 hover:bg-red-700 text-white shadow-lg'
-                                : 'bg-pink-600 hover:bg-pink-700 text-white'
-                            }`}
+                                onClick={isRecording ? handleStopRecording : handleStartRecording}
+                                className={`w-full py-3 px-4 rounded-lg transition-all font-medium ${isRecording
+                                        ? 'bg-red-600 hover:bg-red-700 text-white shadow-lg'
+                                        : 'bg-pink-600 hover:bg-pink-700 text-white'
+                                    }`}
                             >
-                            {isRecording ? 'Stop Recording' : 'Start Recording'}
+                                {isRecording ? 'Stop Recording' : 'Start Recording'}
                             </button>
 
                         </div>
@@ -372,8 +370,8 @@ const VoiceProcessing = ({ onBack }) => {
                                         <span className="text-slate-400">{Math.round(volume)}%</span>
                                     </div>
                                     <div className="w-full bg-slate-700 rounded-full h-2">
-                                        <div 
-                                            className="bg-green-500 h-2 rounded-full transition-all duration-150" 
+                                        <div
+                                            className="bg-green-500 h-2 rounded-full transition-all duration-150"
                                             style={{ width: `${Math.min(volume, 100)}%` }}
                                         ></div>
                                     </div>
@@ -389,9 +387,8 @@ const VoiceProcessing = ({ onBack }) => {
                             AI Processing
                         </h3>
                         <div className="text-center space-y-4">
-                            <div className={`w-20 h-20 rounded-full flex items-center justify-center mx-auto transition-colors ${
-                                isProcessing ? 'bg-yellow-600 animate-pulse' : 'bg-slate-900'
-                            }`}>
+                            <div className={`w-20 h-20 rounded-full flex items-center justify-center mx-auto transition-colors ${isProcessing ? 'bg-yellow-600 animate-pulse' : 'bg-slate-900'
+                                }`}>
                                 <Activity size={32} className="text-white" />
                             </div>
                             <div className="text-sm text-slate-400">
@@ -411,7 +408,7 @@ const VoiceProcessing = ({ onBack }) => {
                                 {sessionHistory.length} interactions
                             </div>
                             {sessionHistory.length > 0 && (
-                                <button 
+                                <button
                                     onClick={clearHistory}
                                     className="w-full bg-slate-700 text-slate-300 py-3 px-4 rounded-lg hover:bg-slate-600 transition-colors font-medium flex items-center justify-center space-x-2"
                                 >

@@ -670,49 +670,49 @@
             </div>
             <ul class="nav-menu">
                 <li class="nav-item">
-                    <a href="#" class="nav-link active" onclick="showFeature('dashboard')">
+                    <a href="#" class="nav-link active" data-feature="dashboard">
                         <i class="fas fa-home nav-icon"></i>
                         <span class="nav-text">Dashboard</span>
                     </a>
                 </li>
                 <li class="nav-item">
-                    <a href="#" class="nav-link" onclick="showFeature('imagerecognition')">
+                    <a href="#" class="nav-link" data-feature="imagerecognition">
                         <i class="fas fa-camera nav-icon"></i>
                         <span class="nav-text">Image Recognition</span>
                     </a>
                 </li>
                 <li class="nav-item">
-                    <a href="#" class="nav-link" onclick="showFeature('handsfree')">
+                    <a href="#" class="nav-link" data-feature="handsfree">
                         <i class="fas fa-bolt nav-icon"></i>
                         <span class="nav-text">Hands Free</span>
                     </a>
                 </li>
                 <li class="nav-item">
-                    <a href="#" class="nav-link" onclick="showFeature('quickresponse')">
+                    <a href="#" class="nav-link" data-feature="quickresponse">
                         <i class="fas fa-tachometer-alt nav-icon"></i>
                         <span class="nav-text">Quick Response</span>
                     </a>
                 </li>
                 <li class="nav-item">
-                    <a href="#" class="nav-link" onclick="showFeature('summarization')">
+                    <a href="#" class="nav-link" data-feature="summarization">
                         <i class="fas fa-file-text nav-icon"></i>
                         <span class="nav-text">Summarization</span>
                     </a>
                 </li>
                 <li class="nav-item">
-                    <a href="#" class="nav-link" onclick="showFeature('keyinsights')">
+                    <a href="#" class="nav-link" data-feature="keyinsights">
                         <i class="fas fa-key nav-icon"></i>
                         <span class="nav-text">Key Insights</span>
                     </a>
                 </li>
                 <li class="nav-item">
-                    <a href="#" class="nav-link" onclick="showFeature('voicerecognition')">
+                    <a href="#" class="nav-link" data-feature="voicerecognition">
                         <i class="fas fa-microphone nav-icon"></i>
                         <span class="nav-text">Voice Recognition</span>
                     </a>
                 </li>
                 <li class="nav-item">
-                    <a href="#" class="nav-link" onclick="showFeature('invisibility')">
+                    <a href="#" class="nav-link" data-feature="invisibility">
                         <i class="fas fa-eye-slash nav-icon"></i>
                         <span class="nav-text">Invisibility</span>
                     </a>
@@ -731,7 +731,7 @@
 
                 <!-- Feature Grid -->
                 <div class="feature-grid">
-                    <div class="feature-card" onclick="showFeature('imagerecognition')">
+                    <div class="feature-card" data-feature="imagerecognition">
                         <div class="feature-icon">
                             <i class="fas fa-camera"></i>
                         </div>
@@ -739,7 +739,7 @@
                         <p class="feature-description">Camera and screen capture with AI analysis</p>
                     </div>
 
-                    <div class="feature-card" onclick="showFeature('handsfree')">
+                    <div class="feature-card" data-feature="handsfree">
                         <div class="feature-icon">
                             <i class="fas fa-bolt"></i>
                         </div>
@@ -747,7 +747,7 @@
                         <p class="feature-description">Voice-controlled interface operation</p>
                     </div>
 
-                    <div class="feature-card" onclick="showFeature('quickresponse')">
+                    <div class="feature-card" data-feature="quickresponse">
                         <div class="feature-icon">
                             <i class="fas fa-tachometer-alt"></i>
                         </div>
@@ -755,7 +755,7 @@
                         <p class="feature-description">Instant AI-powered responses</p>
                     </div>
 
-                    <div class="feature-card" onclick="showFeature('summarization')">
+                    <div class="feature-card" data-feature="summarization">
                         <div class="feature-icon">
                             <i class="fas fa-file-text"></i>
                         </div>
@@ -763,7 +763,7 @@
                         <p class="feature-description">Automatic content summarization</p>
                     </div>
 
-                    <div class="feature-card" onclick="showFeature('keyinsights')">
+                    <div class="feature-card" data-feature="keyinsights">
                         <div class="feature-icon">
                             <i class="fas fa-key"></i>
                         </div>
@@ -771,7 +771,7 @@
                         <p class="feature-description">Extract important points and insights</p>
                     </div>
 
-                    <div class="feature-card" onclick="showFeature('voicerecognition')">
+                    <div class="feature-card" data-feature="voicerecognition">
                         <div class="feature-icon">
                             <i class="fas fa-microphone"></i>
                         </div>
@@ -779,7 +779,7 @@
                         <p class="feature-description">Advanced speech-to-text processing</p>
                     </div>
 
-                    <div class="feature-card" onclick="showFeature('invisibility')">
+                    <div class="feature-card" data-feature="invisibility">
                         <div class="feature-icon">
                             <i class="fas fa-eye-slash"></i>
                         </div>
@@ -995,7 +995,7 @@
                         <div class="voice-indicator" id="prepIndicator">
                             <i class="fas fa-microphone"></i>
                         </div>
-                        <button class="btn" onclick="togglePrepVoice()">Start Prep</button>
+                        <button class="btn" onclick="togglePrepVoice(event)">Start Prep</button>
                     </div>
 
                     <div class="voice-control">
@@ -1003,7 +1003,7 @@
                         <div class="voice-indicator" id="processIndicator">
                             <i class="fas fa-cog"></i>
                         </div>
-                        <button class="btn btn-danger" onclick="toggleProcessing()">Start</button>
+                        <button class="btn btn-danger" onclick="toggleProcessing(event)">Start</button>
                     </div>
 
                     <div class="voice-control">
@@ -1267,6 +1267,8 @@
         let isProcessing = false;
 
         function showFeature(featureId) {
+            console.log('Showing feature:', featureId);
+
             // Hide all panels
             document.querySelectorAll('.feature-panel').forEach(panel => {
                 panel.classList.remove('active');
@@ -1283,19 +1285,19 @@
             });
 
             // Show selected panel
-            document.getElementById(featureId).classList.add('active');
-
-            // Add active class to corresponding nav link
-            const link = event.target.closest('.nav-link');
-            if (link) {
-                link.classList.add('active');
-            } else {
-                console.warn("Clicked element is not inside a .nav-link:", event.target);
+            const targetPanel = document.getElementById(featureId);
+            if (targetPanel) {
+                targetPanel.classList.add('active');
             }
 
+            // ✅ Fixed query selector syntax
+            const navLink = document.querySelector(`.nav-link[data-feature="${featureId}"]`);
+            if (navLink) {
+                navLink.classList.add('active');
+            }
 
-            // Add active class to corresponding feature card if exists
-            const featureCard = document.querySelector(`[onclick="showFeature('${featureId}')"].feature-card`);
+            // ✅ Fixed query selector syntax
+            const featureCard = document.querySelector(`.feature-card[data-feature="${featureId}"]`);
             if (featureCard) {
                 featureCard.classList.add('active');
             }
@@ -1330,7 +1332,7 @@
             }
         }
 
-        function togglePrepVoice() {
+        function togglePrepVoice(event) {
             isPrepVoice = !isPrepVoice;
             const indicator = document.getElementById('prepIndicator');
             const btn = event.target;
@@ -1348,7 +1350,7 @@
             updateVoiceStatus();
         }
 
-        function toggleProcessing() {
+        function toggleProcessing(event) {
             isProcessing = !isProcessing;
             const indicator = document.getElementById('processIndicator');
             const btn = event.target;
@@ -1405,12 +1407,27 @@
             alert('Profile panel would open here');
         }
 
-        // Initialize nav link click handlers
-        document.querySelectorAll('.nav-link').forEach(link => {
-            link.addEventListener('click', function (e) {
-                e.preventDefault();
-                const featureId = this.getAttribute('onclick').match(/'([^']+)'/)[1];
-                showFeature(featureId);
+        // Initialize event handlers when DOM loads
+        document.addEventListener('DOMContentLoaded', function () {
+            // Navigation links
+            document.querySelectorAll('.nav-link').forEach(link => {
+                link.addEventListener('click', function (e) {
+                    e.preventDefault();
+                    const featureId = this.getAttribute('data-feature');
+                    if (featureId) {
+                        showFeature(featureId);
+                    }
+                });
+            });
+
+            // Feature cards
+            document.querySelectorAll('.feature-card').forEach(card => {
+                card.addEventListener('click', function () {
+                    const featureId = this.getAttribute('data-feature');
+                    if (featureId) {
+                        showFeature(featureId);
+                    }
+                });
             });
         });
     </script>

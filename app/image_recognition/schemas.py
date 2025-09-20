@@ -1,13 +1,33 @@
 from pydantic import BaseModel
+<<<<<<< HEAD
+from typing import Optional, Dict, Any
+
+# --- Original Requests ---
+=======
 from typing import Optional, List, Dict, Any
 
 # --- Basic Requests ---
+>>>>>>> c4e4e634ed651b11369f4907425872c4b1129e87
 class UserRequest(BaseModel):
     user_id: str
 
 class ImageBase64Request(BaseModel):
     image_base64: str
 
+<<<<<<< HEAD
+# --- New Screen Capture Requests ---
+class ScreenCaptureRequest(BaseModel):
+    region: Optional[str] = None
+    analysis_type: str = "general"
+    include_text: bool = True
+
+class CameraCaptureRequest(BaseModel):
+    camera_id: int = 0
+    analysis_type: str = "emotion"
+    duration: Optional[int] = None
+
+# --- Original Responses ---
+=======
 # --- Screen Recording Requests ---
 class StartRecordingRequest(BaseModel):
     user_id: str
@@ -24,6 +44,7 @@ class AnalyzeRecordingRequest(BaseModel):
     question: Optional[str] = ""
 
 # --- Basic Responses ---
+>>>>>>> c4e4e634ed651b11369f4907425872c4b1129e87
 class StreamResponse(BaseModel):
     status: str
     user: str
@@ -40,6 +61,18 @@ class AnalyzeCameraResponse(BaseModel):
     emotion: str
     advice: str
 
+<<<<<<< HEAD
+# --- New Screen Capture Responses ---
+class ScreenCaptureResponse(BaseModel):
+    analysis: str
+    timestamp: float
+    region_captured: Optional[str] = None
+
+class CameraCaptureResponse(BaseModel):
+    analysis: str
+    timestamp: float
+    camera_used: int
+=======
 # --- Screen Recording Responses ---
 class RecordingStatusResponse(BaseModel):
     status: str
@@ -93,3 +126,4 @@ class BatchAnalysisResponse(BaseModel):
     results: List[Dict[str, Any]]
     total_analyzed: int
     errors: Optional[List[str]] = []
+>>>>>>> c4e4e634ed651b11369f4907425872c4b1129e87

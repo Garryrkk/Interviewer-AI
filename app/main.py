@@ -276,6 +276,7 @@ allowed_origins = [
     "http://127.0.0.1:3000",
     "http://localhost:8000",   # your current frontend port
     "http://127.0.0.1:8000",
+    "https://5456cb9f09f8.ngrok-free.app",
     "http://localhost:61863",    # your frontend dev URL
     "http://127.0.0.1:61863",
 ]
@@ -680,8 +681,8 @@ async def direct_end_invisibility(request: InvisibilityEndRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 # Direct screen capture endpoint using imported schemas and services
-@app.post("/api/v1/direct/screen-capture", response_model=ScreenCaptureResponse, tags=["Direct Services"])
-async def direct_screen_capture(request: ScreenCaptureRequest):
+@app.post("/api/v1/direct/screen-capture", response_model=AnalyzeScreenResponse, tags=["Direct Services"])
+async def direct_screen_capture(request: ImageBase64Request):
     """Direct screen capture endpoint using imported schemas and services"""
     try:
         analysis_result = await analyze_screen(
