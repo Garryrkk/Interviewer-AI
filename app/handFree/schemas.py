@@ -29,7 +29,7 @@ class ConfidenceLevel(str, Enum):
     LOW = "low"
     MEDIUM = "medium"
     HIGH = "high"
-    EXCELLENT = "excellent"
+    EXCELLENT = "excellent" 
 
 class EmotionState(str, Enum):
     NERVOUS = "nervous"

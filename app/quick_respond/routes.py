@@ -8,12 +8,58 @@ from .schemas import (
     QuickRespondResponse, 
     SimplifyRequest,
     SimplifyResponse,
-    MeetingContext
+    MeetingContext,
+    MeetingStatus,
+    ParticipantInfo,
+    ScreenContent,
+    MeetingMetrics,
+    OllamaConfig,
+    QuickRespondConfig,
+    ModelPrompts,
+    QuickRespondRequest, 
+    UrgencyLevel, 
+    BatchAnalysisRequest, 
+    PaginatedResponse
 )
 from .services import QuickRespondService
 
 router = APIRouter(prefix="/api/quick-respond", tags=["quick-respond"])
 quick_respond_service = QuickRespondService()
+
+
+@router.post("/webhook-event", response_model=WebhookResponse)
+async def create_webhook_event(event: WebhookEvent):
+    # Replace this with your actual logic
+    return WebhookResponse(message=f"Received event: {event.event_name}")
+
+# ---------------- OllamaConfig Routes ----------------
+@router.post("/ollama-config", response_model=OllamaConfig)
+async def create_ollama_config(config: OllamaConfig):
+    # Add save logic
+    return config
+
+@router.get("/ollama-config", response_model=List[OllamaConfig])
+async def get_all_ollama_configs():
+    # Replace with fetch logic
+    return []
+
+# ---------------- QuickRespondConfig Routes ----------------
+@router.post("/quick-respond-config", response_model=QuickRespondConfig)
+async def create_quick_respond_config(config: QuickRespondConfig):
+    return config
+
+@router.get("/quick-respond-config", response_model=List[QuickRespondConfig])
+async def get_all_quick_respond_configs():
+    return []
+
+# ---------------- ModelPrompts Routes ----------------
+@router.post("/model-prompts", response_model=ModelPrompts)
+async def create_model_prompt(prompt: ModelPrompts):
+    return prompt
+
+@router.get("/model-prompts", response_model=List[ModelPrompts])
+async def get_all_model_prompts():
+    return []
 
 @router.post("/analyze-screenshot", response_model=QuickRespondResponse)
 async def analyze_meeting_screenshot(
@@ -160,3 +206,179 @@ async def clear_meeting_context():
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Context clearing failed: {str(e)}")
+    
+@router.post("/meeting_status/", response_model=MeetingStatus)
+async def create_meeting_status(meeting_status: MeetingStatus):
+    # Add your DB logic here
+    return meeting_status
+
+@router.get("/meeting_status/{id}", response_model=MeetingStatus)
+async def get_meeting_status(id: int):
+    # Fetch from DB
+    return {"id": id, "status": "active"}  # Example
+
+@router.get("/meeting_status/", response_model=List[MeetingStatus])
+async def list_meeting_statuses():
+    # Fetch all from DB
+    return []
+
+@router.put("/meeting_status/{id}", response_model=MeetingStatus)
+async def update_meeting_status(id: int, meeting_status: MeetingStatus):
+    # Update DB
+    return meeting_status
+
+@router.delete("/meeting_status/{id}")
+async def delete_meeting_status(id: int):
+    # Delete from DB
+    return {"message": f"MeetingStatus {id} deleted"}
+
+# ============================
+# ParticipantInfo Routes
+# ============================
+
+@router.post("/participant_info/", response_model=ParticipantInfo)
+async def create_participant_info(participant: ParticipantInfo):
+    return participant
+
+@router.get("/participant_info/{id}", response_model=ParticipantInfo)
+async def get_participant_info(id: int):
+    return {"id": id, "name": "John Doe"}  # Example
+
+@router.get("/participant_info/", response_model=List[ParticipantInfo])
+async def list_participants():
+    return []
+
+@router.put("/participant_info/{id}", response_model=ParticipantInfo)
+async def update_participant_info(id: int, participant: ParticipantInfo):
+    return participant
+
+@router.delete("/participant_info/{id}")
+async def delete_participant_info(id: int):
+    return {"message": f"ParticipantInfo {id} deleted"}
+
+# ============================
+# ScreenContent Routes
+# ============================
+
+@router.post("/screen_content/", response_model=ScreenContent)
+async def create_screen_content(screen: ScreenContent):
+    return screen
+
+@router.get("/screen_content/{id}", response_model=ScreenContent)
+async def get_screen_content(id: int):
+    return {"id": id, "content": "Example content"}  # Example
+
+@router.get("/screen_content/", response_model=List[ScreenContent])
+async def list_screen_content():
+    return []
+
+@router.put("/screen_content/{id}", response_model=ScreenContent)
+async def update_screen_content(id: int, screen: ScreenContent):
+    return screen
+
+@router.delete("/screen_content/{id}")
+async def delete_screen_content(id: int):
+    return {"message": f"ScreenContent {id} deleted"}
+
+# ============================
+# MeetingMetrics Routes
+# ============================
+
+@router.post("/meeting_metrics/", response_model=MeetingMetrics)
+async def create_meeting_metrics(metrics: MeetingMetrics):
+    return metrics
+
+@router.get("/meeting_metrics/{id}", response_model=MeetingMetrics)
+async def get_meeting_metrics(id: int):
+    return {"id": id, "metrics": {}}  # Example
+
+@router.get("/meeting_metrics/", response_model=List[MeetingMetrics])
+async def list_meeting_metrics():
+    return []
+
+@router.put("/meeting_metrics/{id}", response_model=MeetingMetrics)
+async def update_meeting_metrics(id: int, metrics: MeetingMetrics):
+    return metrics
+
+@router.delete("/meeting_metrics/{id}")
+async def delete_meeting_metrics(id: int):
+    return {"message": f"MeetingMetrics {id} deleted"}
+
+@router.post("/quick-respond", response_model=QuickRespondResponse)
+async def quick_respond(request: QuickRespondRequest):
+    """
+    Generate quick insights from a screenshot and optional audio transcript.
+    """
+    # TODO: Implement analysis logic
+    return QuickRespondResponse(
+        key_insights=[],
+        full_analysis="Analysis placeholder",
+        timestamp=datetime.utcnow(),
+        confidence_score=0.7,
+        can_simplify=True,
+        session_id="session_123"
+    )
+
+# Simplify analysis endpoint
+@router.post("/simplify", response_model=SimplifyResponse)
+async def simplify_analysis(request: SimplifyRequest):
+    """
+    Simplify a complex analysis text into bullet points and actions.
+    """
+    # TODO: Implement simplification logic
+    return SimplifyResponse(
+        simplified_text="Simplified placeholder",
+        simple_points=["Point 1", "Point 2"],
+        actions_needed=["Action 1"],
+        meeting_status="neutral",
+        timestamp=datetime.utcnow(),
+        original_length=len(request.original_analysis),
+        simplified_length=50
+    )
+
+# Batch analysis endpoint
+@router.post("/batch", response_model=BatchAnalysisResponse)
+async def batch_analysis(request: BatchAnalysisRequest):
+    """
+    Perform batch analysis on multiple screenshots.
+    """
+    # TODO: Implement batch analysis
+    return BatchAnalysisResponse(
+        individual_analyses=[],
+        summary_insights=[],
+        meeting_progression=[],
+        key_moments=[],
+        overall_metrics=None,
+        batch_session_id="batch_123"
+    )
+
+# Advanced analysis endpoint
+@router.post("/advanced", response_model=AdvancedAnalysisResponse)
+async def advanced_analysis(request: AdvancedAnalysisRequest):
+    """
+    Perform detailed analysis with optional custom prompts, metrics, and sentiment.
+    """
+    # TODO: Implement advanced analysis
+    return AdvancedAnalysisResponse(
+        key_insights=[],
+        full_analysis="Advanced analysis placeholder",
+        session_id="adv_session_123",
+        timestamp=datetime.utcnow(),
+        recommendations=[]
+    )
+
+# Health check endpoint
+@router.get("/health", response_model=HealthCheckResponse)
+async def health_check():
+    """
+    Check service and model health.
+    """
+    # TODO: Implement real health check
+    return HealthCheckResponse(
+        status="ok",
+        ollama=True,
+        llava_model=True,
+        llama_model=True,
+        timestamp=datetime.utcnow(),
+        response_time_ms=50
+    )

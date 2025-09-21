@@ -15,6 +15,7 @@ from .schemas import (
     InsightGenerationRequest,
     InsightGenerationResponse,
     SecurityStatusResponse
+
 )
 from .service import InvisibilityService
 
@@ -59,6 +60,85 @@ async def enable_invisibility_mode(
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to enable invisibility mode: {str(e)}")
+    
+@router.post("/recording/start", response_model=RecordingData)
+async def start_recording(config: RecordingConfig):
+    """
+    Start a new recording with the given configuration.
+    """
+    return RecordingData(
+        type=config.type,
+        started=True,
+        message="Recording started successfully",
+    )
+
+
+@router.get("/recording/{recording_type}", response_model=RecordingData)
+async def get_recording(recording_type: RecordingTypeEnum):
+    """
+    Fetch info for a specific recording type.
+    """
+    return RecordingData(type=recording_type, started=False, message="Stub response")
+
+
+# -------------------- UI --------------------
+@router.get("/ui/state", response_model=UIState)
+async def get_ui_state():
+    """
+    Get current UI state/config.
+    """
+    return UIState(active_component=UIComponentEnum.PLAYER, config=UIConfig())
+
+
+@router.put("/ui/config", response_model=UIConfig)
+async def update_ui_config(config: UIConfig):
+    """
+    Update UI configuration.
+    """
+    return config
+
+
+# -------------------- Insights --------------------
+@router.post("/insights", response_model=InsightData)
+async def generate_insight(insight_type: InsightTypeEnum):
+    """
+    Generate insight of a specific type.
+    """
+    return InsightData(type=insight_type, result="Sample insight")
+
+
+# -------------------- Security --------------------
+@router.get("/security/status", response_model=SecurityStatusResponse)
+async def get_security_status():
+    """
+    Get current security status of the system.
+    """
+    return SecurityStatusResponse(status=SecurityStatus.OK)
+
+
+@router.post("/security/config", response_model=SecurityConfig)
+async def update_security_config(config: SecurityConfig):
+    """
+    Update security configuration.
+    """
+    return config
+
+
+# -------------------- System --------------------
+@router.get("/system/config", response_model=SystemConfig)
+async def get_system_config():
+    """
+    Retrieve overall system configuration.
+    """
+    return SystemConfig()
+
+
+@router.get("/session", response_model=SessionData)
+async def get_session_data():
+    """
+    Return session-related information.
+    """
+    return SessionData(session_id="dummy", user="placeholder")
 
 @router.post("/mode/disable", response_model=InvisibilityModeResponse)
 async def disable_invisibility_mode(
