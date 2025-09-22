@@ -1962,6 +1962,66 @@ async def get_analysis_history(recording_id: str):
 # ====================================================================
 # HANDS-FREE ROUTES - ENHANCED INTEGRATION
 # ====================================================================
+@router.post("/audio-stream-data/", response_model=AudioStreamData)
+async def create_audio_stream_data(data: AudioStreamData):
+    """Save or process raw audio stream data"""
+    return data
+
+@router.get("/audio-stream-data/", response_model=List[AudioStreamData])
+async def get_audio_stream_data():
+    """Fetch all audio stream data"""
+    return []
+
+# --- SessionSummary Routes ---
+@router.post("/session-summary/", response_model=SessionSummary)
+async def create_session_summary(summary: SessionSummary):
+    """Save or process session summary"""
+    return summary
+
+@router.get("/session-summary/", response_model=List[SessionSummary])
+async def get_session_summaries():
+    """Fetch all session summaries"""
+    return []
+
+# --- WebSocketMessage Routes ---
+@router.post("/websocket-message/", response_model=WebSocketMessage)
+async def create_websocket_message(message: WebSocketMessage):
+    """Send or save a WebSocket message"""
+    return message
+
+@router.get("/websocket-message/", response_model=List[WebSocketMessage])
+async def get_websocket_messages():
+    return []
+
+# --- AutomatedResponseMessage Routes ---
+@router.post("/automated-response/", response_model=AutomatedResponseMessage)
+async def create_automated_response(response: AutomatedResponseMessage):
+    """Save or process automated responses"""
+    return response
+
+@router.get("/automated-response/", response_model=List[AutomatedResponseMessage])
+async def get_automated_responses():
+    return []
+
+# --- FacialAnalysisMessage Routes ---
+@router.post("/facial-analysis-message/", response_model=FacialAnalysisMessage)
+async def create_facial_analysis_message(message: FacialAnalysisMessage):
+    """Save or process facial analysis messages"""
+    return message
+
+@router.get("/facial-analysis-message/", response_model=List[FacialAnalysisMessage])
+async def get_facial_analysis_messages():
+    return []
+
+# --- SystemStatusMessage Routes ---
+@router.post("/system-status/", response_model=SystemStatusMessage)
+async def create_system_status(status: SystemStatusMessage):
+    """Update or save system status"""
+    return status
+
+@router.get("/system-status/", response_model=List[SystemStatusMessage])
+async def get_system_statuses():
+    return []
 
 @app.post("/api/v1/hands-free/session/start", response_model=HandsFreeSessionResponse, tags=["Hands-Free"])
 async def hands_free_start_session(request: HandsFreeSessionRequest):
@@ -2053,6 +2113,20 @@ async def hands_free_stop(session_id: str):
 # ====================================================================
 # KEY INSIGHTS ROUTES - ENHANCED INTEGRATION
 # ====================================================================
+@router.get("/sample", response_model=KeyInsight)
+async def get_sample_key_insight():
+    """
+    Returns a sample KeyInsight object for testing or UI prototyping.
+    """
+    sample = KeyInsight(
+        id="sample-123",
+        content="This is a sample key point generated for testing.",
+        type=InsightType.KEY_POINT,
+        confidence_score=0.95,
+        timestamp=datetime.utcnow(),
+        source_section="introduction"
+    )
+    return sample
 
 @app.post("/api/v1/key-insights/analyze", response_model=KeyInsightResponse, tags=["Key Insights"])
 async def key_insights_analyze(request: KeyInsightRequest, image_file: Optional[UploadFile] = File(None)):
