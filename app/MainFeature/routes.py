@@ -14,7 +14,23 @@ from .schemas import (
     SessionStatusResponse,
     InsightGenerationRequest,
     InsightGenerationResponse,
-    SecurityStatusResponse
+    SecurityStatusResponse,
+    HideModeEnum,
+    RecordingTypeEnum,
+    RecordingData,
+    RecordingConfig,
+    UIComponentEnum,
+    InsightTypeEnum,
+    InsightData,
+    InvisibilityError,
+    UIConfig,
+    UIState,
+    SecurityConfig,
+    SecurityStatus,
+    SessionData,
+    SystemConfig,
+    PerformanceMetrics,
+    
 
 )
 from .service import InvisibilityService
@@ -411,3 +427,79 @@ async def health_check():
             status_code=503,
             content={"status": "unhealthy", "error": str(e)}
         )
+    
+# ============================
+# HideModeEnum Routes
+# ============================
+
+@router.get("/hide-modes", response_model=List[HideModeEnum])
+async def list_hide_modes():
+    """
+    Return all available HideModeEnum options.
+    """
+    return [mode for mode in HideModeEnum]
+
+@router.get("/hide-modes/{mode}", response_model=HideModeEnum)
+async def get_hide_mode(mode: HideModeEnum):
+    """
+    Validate and return a single HideModeEnum value.
+    """
+    return mode
+
+
+# ============================
+# InvisibilityError Routes
+# ============================
+
+@router.post("/invisibility-error", response_model=InvisibilityError)
+async def create_invisibility_error(error: InvisibilityError):
+    """
+    Store or log an invisibility-related error.
+    For demo, simply echoes the request.
+    """
+    return error
+
+@router.get("/invisibility-error/{error_code}", response_model=InvisibilityError)
+async def get_invisibility_error(error_code: str):
+    """
+    Fetch an example InvisibilityError by code.
+    Replace with DB lookup in production.
+    """
+    return InvisibilityError(
+        error_code=error_code,
+        message="Sample error message",
+        session_id="session_123",
+        details={"info": "Example details"},
+        timestamp=datetime.utcnow()
+    )
+
+
+# ============================
+# PerformanceMetrics Routes
+# ============================
+
+_fake_metrics_store: List[PerformanceMetrics] = []  # In-memory demo storage
+
+@router.post("/performance-metrics", response_model=PerformanceMetrics)
+async def create_performance_metrics(metrics: PerformanceMetrics):
+    """
+    Submit performance metrics for a given session.
+    """
+    _fake_metrics_store.append(metrics)
+    return metrics
+
+@router.get("/performance-metrics/{session_id}", response_model=List[PerformanceMetrics])
+async def get_performance_metrics(session_id: str):
+    """
+    Retrieve all performance metrics for a specific session_id.
+    """
+    return [m for m in _fake_metrics_store if m.session_id == session_id]
+
+@router.get("/performance-metrics", response_model=List[PerformanceMetrics])
+async def list_all_performance_metrics(
+    limit: int = Query(50, ge=1, le=500, description="Max number of records to return")
+):
+    """
+    List all collected performance metrics (demo).
+    """
+    return _fake_metrics_store[:limit]
