@@ -5,7 +5,8 @@ import json
 import asyncio
 from datetime import datetime
 from fastapi import APIRouter  # <-- this imports APIRouter
-router = APIRouter()           # <-- this creates a new router instance
+router = APIRouter(prefix="/camera", tags=["Camera"])
+router = APIRouter(prefix="/expression", tags=["Expression"])
 
 from .schemas import (
     CameraDevice, CameraSessionRequest, CameraSessionResponse,
@@ -85,6 +86,52 @@ class ConnectionManager:
 manager = ConnectionManager()
 
 # CAMERA ROUTES
+
+@router.post("/", response_model=ExpressionMonitoringConfig)
+async def create_monitoring_config(config: ExpressionMonitoringConfig):
+    """
+    Create a new monitoring configuration for a camera session.
+    """
+    if config.session_id in ExpressionMonitoringConfig:
+        raise HTTPException(status_code=400, detail="Config for this session already exists")
+    ExpressionMonitoringConfig[config.session_id] = config
+    return config
+
+
+@router.get("/{session_id}", response_model=ExpressionMonitoringConfig)
+async def get_monitoring_config(session_id: str):
+    """
+    Retrieve the monitoring configuration for a specific session.
+    """
+    config = ExpressionMonitoringConfig.get(session_id)
+    if not config:
+        raise HTTPException(status_code=404, detail="Monitoring config not found")
+    return config
+
+
+@router.put("/{session_id}", response_model=ExpressionMonitoringConfig)
+async def update_monitoring_config(session_id: str, new_config: ExpressionMonitoringConfig):
+    """
+    Update the monitoring configuration for a specific session.
+    """
+    if session_id not in ExpressionMonitoringConfig:
+        raise HTTPException(status_code=404, detail="Monitoring config not found")
+    # Ensure the session_id in path matches the body (or overwrite)
+    updated = new_config.copy(update={"session_id": session_id})
+    ExpressionMonitoringConfig[session_id] = updated
+    return updated
+
+
+@router.delete("/{session_id}")
+async def delete_monitoring_config(session_id: str):
+    """
+    Delete the monitoring configuration for a specific session.
+    """
+    if session_id not in ExpressionMonitoringConfig:
+        raise HTTPException(status_code=404, detail="Monitoring config not found")
+    del ExpressionMonitoringConfig[session_id]
+    return {"message": "Monitoring config deleted", "session_id": session_id}
+
 @camera_router.get("/devices", response_model=List[CameraDevice])
 async def get_available_cameras():
     """Get list of available camera devices"""
@@ -782,3 +829,47 @@ async def ws_recording_status(websocket: WebSocket):
             await asyncio.sleep(1)
     except WebSocketDisconnect:
         pass
+
+# ------------------- CHAT CONFIG CRUD -------------------
+
+# Simple in-memory store (replace with DB/service)
+chat_config_store: Dict[str, ChatConfig] = {}
+
+
+@router.post("/chat-config", response_model=ChatConfig)
+async def create_chat_config(config: ChatConfig):
+    """
+    Create a global chat configuration.
+    Only one config per key; use PUT to update.
+    """
+    if "default" in chat_config_store:
+        raise HTTPException(status_code=400, detail="Chat config already exists. Use PUT to update.")
+    chat_config_store["default"] = config
+    return config
+
+
+@router.get("/chat-config", response_model=ChatConfig)
+async def get_chat_config():
+    """Retrieve the global chat configuration."""
+    config = chat_config_store.get("default")
+    if not config:
+        raise HTTPException(status_code=404, detail="No chat config found.")
+    return config
+
+
+@router.put("/chat-config", response_model=ChatConfig)
+async def update_chat_config(config: ChatConfig):
+    """Update the global chat configuration."""
+    chat_config_store["default"] = config
+    return config
+
+# ------------------- EXPRESSION DETECTED (Demo) -------------------
+
+@router.post("/expression-detected", response_model=ExpressionDetectedMessage)
+async def simulate_expression_detection(message: ExpressionDetectedMessage):
+    """
+    Echo endpoint to simulate sending an ExpressionDetectedMessage
+    over HTTP (handy for testing).
+    """
+    # Here you might broadcast to a websocket, store in DB, etc.
+    return message

@@ -11,7 +11,7 @@ class CameraStatus(str, Enum):
     CONNECTING = "connecting"
 
 class ExpressionType(str, Enum):
-    HAPPY = "happy"
+    HAPPY = "happy"  
     SAD = "sad"
     CONFUSED = "confused"
     ANGRY = "angry"
