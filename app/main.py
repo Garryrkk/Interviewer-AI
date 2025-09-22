@@ -785,6 +785,159 @@ async def batch_summarize_meetings(request: BatchSummarizationRequest):
     except Exception as e:
         logger.error(f"Error in batch summarization: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to batch process summaries: {str(e)}")
+@router.post("/actionitems/", response_model=ActionItem)
+async def create_action_item(item: ActionItem):
+    # logic to save item
+    return item
+
+@router.get("/actionitems/", response_model=List[ActionItem])
+async def get_action_items():
+    # logic to retrieve all action items
+    return []
+
+@router.get("/actionitems/{item_id}", response_model=ActionItem)
+async def get_action_item(item_id: int):
+    # logic to retrieve item by ID
+    return {"id": item_id, "name": "example"}
+
+@router.put("/actionitems/{item_id}", response_model=ActionItem)
+async def update_action_item(item_id: int, item: ActionItem):
+    # logic to update item
+    return item
+
+@router.delete("/actionitems/{item_id}")
+async def delete_action_item(item_id: int):
+    # logic to delete item
+    return {"message": f"ActionItem {item_id} deleted"}
+
+
+# ----- KeyPoint CRUD -----
+@router.post("/keypoints/", response_model=KeyPoint)
+async def create_key_point(point: KeyPoint):
+    return point
+
+@router.get("/keypoints/", response_model=List[KeyPoint])
+async def get_key_points():
+    return []
+
+@router.get("/keypoints/{point_id}", response_model=KeyPoint)
+async def get_key_point(point_id: int):
+    return {"id": point_id, "name": "example"}
+
+@router.put("/keypoints/{point_id}", response_model=KeyPoint)
+async def update_key_point(point_id: int, point: KeyPoint):
+    return point
+
+@router.delete("/keypoints/{point_id}")
+async def delete_key_point(point_id: int):
+    return {"message": f"KeyPoint {point_id} deleted"}
+
+
+# ----- SummaryType CRUD -----
+@router.post("/summarytypes/", response_model=SummaryType)
+async def create_summary_type(summary: SummaryType):
+    return summary
+
+@router.get("/summarytypes/", response_model=List[SummaryType])
+async def get_summary_types():
+    return []
+
+@router.get("/summarytypes/{summary_id}", response_model=SummaryType)
+async def get_summary_type(summary_id: int):
+    return {"id": summary_id, "name": "example"}
+
+@router.put("/summarytypes/{summary_id}", response_model=SummaryType)
+async def update_summary_type(summary_id: int, summary: SummaryType):
+    return summary
+
+@router.delete("/summarytypes/{summary_id}")
+async def delete_summary_type(summary_id: int):
+    return {"message": f"SummaryType {summary_id} deleted"}
+
+@router.post("/summary", response_model=SummaryUpdateRequest)
+async def create_summary(summary: SummaryUpdateRequest):
+    summaries.append(summary)
+    return summary
+
+@router.get("/summary", response_model=List[SummaryUpdateRequest])
+async def get_summaries():
+    return summaries
+
+# ----- AnalysisType CRUD -----
+@router.post("/analysistypes/", response_model=AnalysisType)
+async def create_analysis_type(analysis: AnalysisType):
+    return analysis
+
+@router.get("/analysistypes/", response_model=List[AnalysisType])
+async def get_analysis_types():
+    return []
+
+@router.get("/analysistypes/{analysis_id}", response_model=AnalysisType)
+async def get_analysis_type(analysis_id: int):
+    return {"id": analysis_id, "name": "example"}
+
+@router.put("/analysistypes/{analysis_id}", response_model=AnalysisType)
+async def update_analysis_type(analysis_id: int, analysis: AnalysisType):
+    return analysis
+
+@router.delete("/analysistypes/{analysis_id}")
+async def delete_analysis_type(analysis_id: int):
+    return {"message": f"AnalysisType {analysis_id} deleted"}
+
+# ---------------- MeetingContext Routes ----------------
+@router.post("/meeting", response_model=MeetingContext)
+async def create_meeting(meeting: MeetingContext):
+    meetings.append(meeting)
+    return meeting
+
+@router.get("/meeting", response_model=List[MeetingContext])
+async def get_meetings():
+    return meetings
+
+# ---------------- LLAVAAnalysisConfig Routes ----------------
+@router.post("/llava-config", response_model=LLAVAAnalysisConfig)
+async def create_llava_config(config: LLAVAAnalysisConfig):
+    llava_configs.append(config)
+    return config
+
+@router.get("/llava-config", response_model=List[LLAVAAnalysisConfig])
+async def get_llava_configs():
+    return llava_configs
+
+# ---------------- RealTimeAnalysisUpdate Routes ----------------
+@router.post("/realtime-update", response_model=RealTimeAnalysisUpdate)
+async def create_realtime_update(update: RealTimeAnalysisUpdate):
+    real_time_updates.append(update)
+    return update
+
+@router.get("/realtime-update", response_model=List[RealTimeAnalysisUpdate])
+async def get_realtime_updates():
+    return real_time_update
+
+@router.post("/actionitems/", response_model=ActionItem)
+async def create_action_item(item: ActionItem):
+    # logic to save item
+    return item
+
+@router.get("/actionitems/", response_model=List[ActionItem])
+async def get_action_items():
+    # logic to retrieve all action items
+    return []
+
+@router.get("/actionitems/{item_id}", response_model=ActionItem)
+async def get_action_item(item_id: int):
+    # logic to retrieve item by ID
+    return {"id": item_id, "name": "example"}
+
+@router.put("/actionitems/{item_id}", response_model=ActionItem)
+async def update_action_item(item_id: int, item: ActionItem):
+    # logic to update item
+    return item
+
+@router.delete("/actionitems/{item_id}")
+async def delete_action_item(item_id: int):
+    # logic to delete item
+    return {"message": f"ActionItem {item_id} deleted"}
 
 # ====================================================================
 # QUICK RESPOND ROUTES - PROPERLY INTEGRATED

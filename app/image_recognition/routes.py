@@ -4,6 +4,8 @@ from typing import List, Optional
 import json
 import asyncio
 from datetime import datetime
+from fastapi import APIRouter  # <-- this imports APIRouter
+router = APIRouter()           # <-- this creates a new router instance
 
 from .schemas import (
     CameraDevice, CameraSessionRequest, CameraSessionResponse,
@@ -14,12 +16,28 @@ from .schemas import (
     StartRecordingResponse,
     StopRecordingResponse,
     AnalysisRequest,
-    AnalysisResponse,
+    AnalysisResponse, 
     RecordingInfo,
     HealthCheckResponse,
     PermissionStatusResponse,
     ScreenshotAnalysisRequest,
-    ScreenshotAnalysisResponse
+    ScreenshotAnalysisResponse,
+    CameraStatus,
+    ExpressionConfig,
+    CameraResolution,
+    CameraFrameMessage,
+    CameraTestResult,
+    MonitoringSession,
+    SystemHealthStatus,
+    APIResponse,
+    ExpressionMonitoringConfig,
+    ExpressionDetectedMessage,
+    CameraConfig,
+    ChatConfig,
+    RecordingQuality,
+    RecordingStatus,
+    AnalysisFocus,
+
 )
 from .service import CameraService, ExpressionDetectionService, ChatService, ScreenRecordingService, AIAnalysisService, PermissionService
 
@@ -574,3 +592,193 @@ async def websocket_analysis_progress(websocket, recording_id: str):
     except Exception as e:
         logger.error(f"Analysis WebSocket error: {str(e)}")
         await websocket.close()
+
+@camera_router.get("/config", response_model=CameraConfig)
+async def get_camera_config():
+    """
+    Retrieve the global camera configuration defaults.
+    """
+    try:
+        config = await camera_service.get_config()
+        return config
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get camera config: {str(e)}")
+
+
+@camera_router.put("/config", response_model=APIResponse)
+async def update_camera_config(config: CameraConfig):
+    """
+    Update global camera configuration (resolution, fps, buffer, etc.).
+    """
+    try:
+        success = await camera_service.update_config(config)
+        return APIResponse(success=success, message="Camera configuration updated successfully")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to update camera config: {str(e)}")
+
+
+# ====================== NEW EXPRESSION CONFIG ROUTES ======================
+
+@expression_router.get("/config", response_model=ExpressionConfig)
+async def get_expression_config():
+    """
+    Retrieve the expression-detection engine configuration.
+    """
+    try:
+        config = await expression_service.get_config()
+        return config
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get expression config: {str(e)}")
+
+
+@expression_router.put("/config", response_model=APIResponse)
+async def update_expression_config(config: ExpressionConfig):
+    """
+    Update expression detection configuration.
+    """
+    try:
+        success = await expression_service.update_config(config)
+        return APIResponse(success=success, message="Expression configuration updated successfully")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to update expression config: {str(e)}")
+
+
+# ====================== MONITORING SESSIONS ======================
+
+@expression_router.get("/monitoring", response_model=List[MonitoringSession])
+async def list_monitoring_sessions():
+    """
+    List all active expression monitoring sessions.
+    """
+    try:
+        sessions = await expression_service.list_monitoring_sessions()
+        return sessions
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to list monitoring sessions: {str(e)}")
+
+
+@expression_router.get("/monitoring/{monitoring_id}", response_model=MonitoringSession)
+async def get_monitoring_session(monitoring_id: str):
+    """
+    Retrieve details of a specific monitoring session.
+    """
+    try:
+        session = await expression_service.get_monitoring_session(monitoring_id)
+        if not session:
+            raise HTTPException(status_code=404, detail="Monitoring session not found")
+        return session
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch monitoring session: {str(e)}")
+
+
+# ====================== SYSTEM HEALTH ======================
+
+@router.get("/system-health", response_model=List[SystemHealthStatus])
+async def system_health_status():
+    """
+    Returns health information for all internal services.
+    """
+    try:
+        health = await camera_service.get_system_health()
+        return health
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get system health: {str(e)}")
+
+
+# ====================== CAMERA STATUS ENUM ENDPOINT ======================
+
+@camera_router.get("/status-enum", response_model=List[str])
+async def camera_status_enum():
+    """
+    Expose all possible CameraStatus values for front-end dropdowns.
+    """
+    return [status.value for status in CameraStatus]
+
+@camera_router.get("/resolutions", response_model=List[CameraResolution])
+async def list_supported_resolutions():
+    """
+    Returns all camera resolutions supported by the backend (width x height + fps).
+    Perfect for front-end dropdowns or validation.
+    """
+    try:
+        resolutions = await camera_service.get_supported_resolutions()
+        return resolutions
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to list camera resolutions: {str(e)}")
+
+
+# ====================== CAMERA FRAME MESSAGE ======================
+
+@camera_router.post("/frame", response_model=CameraFrameMessage)
+async def send_camera_frame(frame: CameraFrameMessage):
+    """
+    Accept a single encoded frame (e.g., base64 or byte string) for analysis.
+    Returns metadata such as detection time or confirmation echo.
+    """
+    try:
+        processed = await camera_service.process_frame(frame)
+        return processed
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to process camera frame: {str(e)}")
+
+
+# ====================== CAMERA TEST RESULT ======================
+
+@camera_router.post("/test", response_model=CameraTestResult)
+async def run_camera_test(config: Optional[CameraConfig] = None):
+    """
+    Trigger a quick camera self-test.  
+    Optionally accepts a CameraConfig override (resolution/fps/etc.).
+    Returns diagnostics like latency, dropped frames, and success boolean.
+    """
+    try:
+        result = await camera_service.run_test(config)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Camera test failed: {str(e)}")
+    
+# ====================== RECORDING QUALITY ENUM ======================
+
+@router.get("/recording/qualities", response_model=list[str])
+async def list_recording_qualities():
+    """
+    Return all possible RecordingQuality enum values.
+    Useful for front-end dropdowns (e.g., 'LOW', 'MEDIUM', 'HIGH').
+    """
+    return [q.value for q in RecordingQuality]
+
+
+# ====================== RECORDING STATUS ENUM ======================
+
+@router.get("/recording/statuses", response_model=list[str])
+async def list_recording_statuses():
+    """
+    Return all possible RecordingStatus enum values.
+    E.g., 'IDLE', 'RECORDING', 'STOPPED', 'FAILED'.
+    """
+    return [s.value for s in RecordingStatus]
+
+
+# ====================== ANALYSIS FOCUS ======================
+
+@router.get("/analysis/focus-options", response_model=list[str])
+async def list_analysis_focus():
+    """
+    Return all possible AnalysisFocus enum values.
+    Allows the front-end to know which focus areas are supported.
+    """
+    return [f.value for f in AnalysisFocus]
+
+@router.websocket("/ws/recording-status")
+async def ws_recording_status(websocket: WebSocket):
+    """
+    Pushes live recording status updates to the client.
+    """
+    await websocket.accept()
+    try:
+        while True:
+            status = await recording_service.current_status()  # implement in your service
+            await websocket.send_json({"status": status.value})
+            await asyncio.sleep(1)
+    except WebSocketDisconnect:
+        pass
