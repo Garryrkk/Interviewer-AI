@@ -169,3 +169,49 @@ class BatchSummarizationRequest(BaseModel):
         if len(v) > 50:
             raise ValueError('Maximum 50 meetings can be processed at once')
         return v
+    
+# ----------------- SessionSummary -----------------
+class SessionSummary(BaseModel):
+    session_id: str
+    user_id: str
+    start_time: datetime
+    end_time: Optional[datetime]
+    summary_text: Optional[str]
+
+
+# ----------------- WebSocketMessage -----------------
+class WebSocketMessage(BaseModel):
+    message_id: str
+    sender_id: str
+    receiver_id: str
+    content: str
+    timestamp: datetime
+    is_read: bool = False
+
+
+# ----------------- AutomatedResponseMessage -----------------
+class AutomatedResponseMessage(BaseModel):
+    response_id: str
+    user_id: str
+    query_text: str
+    response_text: str
+    created_at: datetime
+
+
+# ----------------- FacialAnalysisMessage -----------------
+class FacialAnalysisMessage(BaseModel):
+    analysis_id: str
+    user_id: str
+    image_url: Optional[str]
+    emotion_detected: Optional[str]
+    confidence_score: Optional[float]
+    analyzed_at: datetime
+
+
+# ----------------- SystemStatusMessage -----------------
+class SystemStatusMessage(BaseModel):
+    status_id: str
+    system_name: str
+    status: str  # e.g., "online", "offline", "error"
+    message: Optional[str]
+    updated_at: datetime

@@ -9,7 +9,13 @@ from .schemas import (
     HandsFreeSessionRequest, HandsFreeSessionResponse, 
     InterviewResponseRequest, FacialAnalysisRequest,
     ConfidenceTipResponse, SessionStatus, AudioStreamData,
-    RealTimeAnalysisResponse, SessionSettings
+    RealTimeAnalysisResponse, SessionSettings,     AudioStreamData,
+    SessionSummary,
+    WebSocketMessage,
+    AutomatedResponseMessage,
+    FacialAnalysisMessage,
+    SystemStatusMessage,
+    FacialAnalysis, InterviewResponse,AudioStreamResult
 )
 from .service import HandsFreeService
 
@@ -281,3 +287,64 @@ async def resume_hands_free(session_id: str):
         return {"message": "Hands-free mode resumed. System is automated again.", "status": "active"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to resume: {str(e)}")
+    
+@router.post("/audio-stream-data/", response_model=AudioStreamData)
+async def create_audio_stream_data(data: AudioStreamData):
+    """Save or process raw audio stream data"""
+    return data
+
+@router.get("/audio-stream-data/", response_model=List[AudioStreamData])
+async def get_audio_stream_data():
+    """Fetch all audio stream data"""
+    return []
+
+# --- SessionSummary Routes ---
+@router.post("/session-summary/", response_model=SessionSummary)
+async def create_session_summary(summary: SessionSummary):
+    """Save or process session summary"""
+    return summary
+
+@router.get("/session-summary/", response_model=List[SessionSummary])
+async def get_session_summaries():
+    """Fetch all session summaries"""
+    return []
+
+# --- WebSocketMessage Routes ---
+@router.post("/websocket-message/", response_model=WebSocketMessage)
+async def create_websocket_message(message: WebSocketMessage):
+    """Send or save a WebSocket message"""
+    return message
+
+@router.get("/websocket-message/", response_model=List[WebSocketMessage])
+async def get_websocket_messages():
+    return []
+
+# --- AutomatedResponseMessage Routes ---
+@router.post("/automated-response/", response_model=AutomatedResponseMessage)
+async def create_automated_response(response: AutomatedResponseMessage):
+    """Save or process automated responses"""
+    return response
+
+@router.get("/automated-response/", response_model=List[AutomatedResponseMessage])
+async def get_automated_responses():
+    return []
+
+# --- FacialAnalysisMessage Routes ---
+@router.post("/facial-analysis-message/", response_model=FacialAnalysisMessage)
+async def create_facial_analysis_message(message: FacialAnalysisMessage):
+    """Save or process facial analysis messages"""
+    return message
+
+@router.get("/facial-analysis-message/", response_model=List[FacialAnalysisMessage])
+async def get_facial_analysis_messages():
+    return []
+
+# --- SystemStatusMessage Routes ---
+@router.post("/system-status/", response_model=SystemStatusMessage)
+async def create_system_status(status: SystemStatusMessage):
+    """Update or save system status"""
+    return status
+
+@router.get("/system-status/", response_model=List[SystemStatusMessage])
+async def get_system_statuses():
+    return []

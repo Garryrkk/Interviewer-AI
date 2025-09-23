@@ -22,7 +22,7 @@ from .schemas import (
     ExpressionDetectionResponse, FaceExpression, ChatMessage, ExpressionType,
     CameraStatus, CameraResolution, MessageSender, MonitoringSession,
     ExpressionMonitoringConfig,RecordingStatus, RecordingQuality, AnalysisType, AnalysisFocus,
-    RecordingMetadata, ScreenshotData, AnalysisJob
+    RecordingMetadata, ScreenshotData, AnalysisJob, RecordingQuality, RecordingStatus, AnalysisFocus
 )
 
 # Configure logging
@@ -1506,3 +1506,45 @@ def decode_base64_to_image(base64_string: str) -> Image.Image:
     """Decode base64 string to PIL Image"""
     image_data = base64.b64decode(base64_string)
     return Image.open(io.BytesIO(image_data))
+
+async def get_supported_resolutions() -> List[CameraResolution]:
+    # Return static list or query hardware
+    ...
+
+async def process_frame(frame: CameraFrameMessage) -> CameraFrameMessage:
+    # Decode + analyze, then return updated/validated frame info
+    ...
+
+async def run_test(config: Optional[CameraConfig]) -> CameraTestResult:
+    # Execute a health check and return CameraTestResult
+    ...
+class RecordingService:
+    """Service to handle recording-related logic"""
+
+    def __init__(self):
+        # Mock current recording status
+        self._current_status = RecordingStatus.IDLE
+
+    # -------------------- ENUM LISTS --------------------
+
+    async def get_recording_qualities(self) -> List[str]:
+        """Return all possible RecordingQuality values"""
+        return [q.value for q in RecordingQuality]
+
+    async def get_recording_statuses(self) -> List[str]:
+        """Return all possible RecordingStatus values"""
+        return [s.value for s in RecordingStatus]
+
+    async def get_analysis_focus_options(self) -> List[str]:
+        """Return all possible AnalysisFocus values"""
+        return [f.value for f in AnalysisFocus]
+
+    # -------------------- CURRENT RECORDING STATUS --------------------
+
+    async def current_status(self) -> RecordingStatus:
+        """Return the current recording status"""
+        return self._current_status
+
+    async def set_status(self, status: RecordingStatus):
+        """Update current recording status"""
+        self._current_status = status

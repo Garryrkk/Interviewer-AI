@@ -8,7 +8,7 @@ class InsightType(str, Enum):
     ACTION_ITEM = "action_item"
     KEY_POINT = "key_point"
     RISK = "risk"
-    OPPORTUNITY = "opportunity"
+    OPPORTUNITY = "opportunity" 
     QUESTION = "question"
 
 class KeyInsight(BaseModel):

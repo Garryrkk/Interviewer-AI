@@ -3,6 +3,10 @@ from fastapi.responses import StreamingResponse
 import asyncio
 import json
 from typing import Optional
+from typing import List
+from fastapi import Query
+from datetime import datetime
+from .schemas import UrgencyLevel, PaginatedResponse
 from .schemas import (
     QuickRespondRequest, 
     QuickRespondResponse, 
@@ -19,7 +23,11 @@ from .schemas import (
     QuickRespondRequest, 
     UrgencyLevel, 
     BatchAnalysisRequest, 
-    PaginatedResponse
+    PaginatedResponse,
+    HealthCheckResponse,
+    AdvancedAnalysisRequest,
+    AdvancedAnalysisResponse,
+    BatchAnalysisResponse
 )
 from .services import QuickRespondService
 
@@ -302,7 +310,7 @@ async def update_meeting_metrics(id: int, metrics: MeetingMetrics):
 
 @router.delete("/meeting_metrics/{id}")
 async def delete_meeting_metrics(id: int):
-    return {"message": f"MeetingMetrics {id} deleted"}
+    return {"message": f"MeetingMetrics {id} deleted"}  
 
 @router.post("/quick-respond", response_model=QuickRespondResponse)
 async def quick_respond(request: QuickRespondRequest):
@@ -381,4 +389,50 @@ async def health_check():
         llama_model=True,
         timestamp=datetime.utcnow(),
         response_time_ms=50
+    )
+
+@router.get("/urgency-levels", response_model=List[UrgencyLevel])
+async def list_urgency_levels():
+    """
+    Get all possible urgency levels (enum values).
+    """
+    return [level for level in UrgencyLevel]
+
+@router.get("/urgency-levels/{level}", response_model=UrgencyLevel)
+async def get_urgency_level(level: UrgencyLevel):
+    """
+    Validate and return a specific urgency level.
+    If an invalid level is passed, FastAPI will auto-throw 422.
+    """
+    return level
+
+
+# ============================
+# PaginatedResponse Demo Route
+# ============================
+
+@router.get("/items", response_model=PaginatedResponse)
+async def list_items(
+    page: int = Query(1, ge=1, description="Page number (starting from 1)"),
+    page_size: int = Query(10, ge=1, le=100, description="Items per page")
+):
+    """
+    Example endpoint to demonstrate PaginatedResponse usage.
+    Replace with actual DB query in production.
+    """
+    # Fake dataset for demo
+    total_items = 55
+    all_items = [f"Item {i}" for i in range(1, total_items + 1)]
+
+    # Pagination math
+    start = (page - 1) * page_size
+    end = start + page_size
+    paged_items = all_items[start:end]
+
+    return PaginatedResponse(
+        items=paged_items,
+        total=total_items,
+        page=page,
+        page_size=page_size,
+        timestamp=datetime.utcnow()
     )
