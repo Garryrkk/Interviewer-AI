@@ -17,6 +17,44 @@ router = APIRouter(prefix="/hands-free", tags=["hands-free"])
 hands_free_service = HandsFreeService()
 
 # Session Management Routes
+@router.post("/interview-response/", response_model=InterviewResponse)
+async def create_interview_response(response: InterviewResponse):
+    # Add your logic to save or process response
+    return response
+
+@router.get("/interview-response/", response_model=List[InterviewResponse])
+async def get_interview_responses():
+    # Add your logic to fetch all responses
+    return []
+
+# --- FacialAnalysis ---
+@router.post("/facial-analysis/", response_model=FacialAnalysis)
+async def analyze_facial(data: FacialAnalysisRequest):
+    # Add logic to analyze facial data
+    return FacialAnalysis()
+
+@router.get("/facial-analysis/", response_model=List[FacialAnalysis])
+async def get_facial_analyses():
+    return []
+
+# --- ConfidenceTipResponse ---
+@router.post("/confidence-tip/", response_model=ConfidenceTipResponse)
+async def create_confidence_tip(tip: ConfidenceTipResponse):
+    return tip
+
+@router.get("/confidence-tip/", response_model=List[ConfidenceTipResponse])
+async def get_confidence_tips():
+    return []
+
+# --- AudioStreamResult ---
+@router.post("/audio-stream-result/", response_model=AudioStreamResult)
+async def create_audio_stream_result(result: AudioStreamResult):
+    return result
+
+@router.get("/audio-stream-result/", response_model=List[AudioStreamResult])
+async def get_audio_stream_results():
+    return []
+
 @router.post("/session/start", response_model=HandsFreeSessionResponse)
 async def start_hands_free_session(request: HandsFreeSessionRequest):
     """
