@@ -127,7 +127,10 @@ const InvisibilityDashboard = () => {
   const [insights, setInsights] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [healthStatus, setHealthStatus] = useState(null);
+  const [performanceMetrics, setPerformanceMetrics] = useState(null);
+  const [systemConfig, setSystemConfig] = useState(null);
+  const [hideModes, setHideModes] = useState([]);
+  const [errors, setErrors] = useState([]);
 
   // Configuration states
   const [recordingConfig, setRecordingConfig] = useState({
@@ -218,7 +221,26 @@ const InvisibilityDashboard = () => {
     };
   }, [invisibilityService]);
 
-  // Session monitoring
+  // Initialize available hide modes and system config
+  useEffect(() => {
+    const initializeData = async () => {
+      try {
+        // Get available hide modes
+        const modes = await invisibilityService.getHideModes();
+        setHideModes(modes);
+        
+        // Get system configuration
+        const sysConfig = await invisibilityService.getSystemConfig();
+        setSystemConfig(sysConfig);
+      } catch (err) {
+        console.error('Failed to initialize data:', err);
+      }
+    };
+
+    initializeData();
+  }, [invisibilityService]);
+
+  // Session monitoring with additional data
   useEffect(() => {
     if (currentSessionId) {
       const interval = setInterval(async () => {
@@ -228,6 +250,14 @@ const InvisibilityDashboard = () => {
           
           const healthCheck = await invisibilityService.healthCheck();
           setHealthStatus(healthCheck);
+          
+          // Get performance metrics
+          const perfMetrics = await invisibilityService.getPerformanceMetrics(currentSessionId);
+          setPerformanceMetrics(perfMetrics);
+          
+          // Get UI state
+          const uiState = await invisibilityService.getUIState();
+          setUiHidden(uiState.is_hidden || false);
         } catch (err) {
           console.error('Failed to fetch session status:', err);
         }
@@ -370,6 +400,99 @@ const InvisibilityDashboard = () => {
     }
   };
 
+  const updateUIConfiguration = async (newConfig) => {
+    setLoading(true);
+    try {
+      const response = await invisibilityService.updateUIConfig(newConfig);
+      setUiConfig(newConfig);
+      setError(null);
+      return response;
+    } catch (err) {
+      setError(`Failed to update UI config: ${err.message}`);
+      setTimeout(() => setError(null), 5000);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const updateSecurityConfiguration = async (newConfig) => {
+    setLoading(true);
+    try {
+      const response = await invisibilityService.updateSecurityConfig(newConfig);
+      setSecurityConfig(newConfig);
+      setError(null);
+      return response;
+    } catch (err) {
+      setError(`Failed to update security config: ${err.message}`);
+      setTimeout(() => setError(null), 5000);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const generateSpecificInsight = async (insightType) => {
+    setLoading(true);
+    try {
+      const response = await invisibilityService.generateSingleInsight(insightType);
+      setInsights(prev => ({
+        ...prev,
+        [insightType]: response
+      }));
+    } catch (err) {
+      setError(`Failed to generate ${insightType}: ${err.message}`);
+      setTimeout(() => setError(null), 5000);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const getRecordingInfo = async (recordingType) => {
+    try {
+      const response = await invisibilityService.getRecording(recordingType);
+      return response;
+    } catch (err) {
+      setError(`Failed to get recording info: ${err.message}`);
+      setTimeout(() => setError(null), 5000);
+      return null;
+    }
+  };
+
+  const logError = async (errorData) => {
+    try {
+      await invisibilityService.createInvisibilityError({
+        error_code: errorData.code || 'UNKNOWN',
+        message: errorData.message,
+        session_id: currentSessionId,
+        details: errorData.details || {},
+        timestamp: new Date().toISOString()
+      });
+    } catch (err) {
+      console.error('Failed to log error:', err);
+    }
+  };
+
+  const reportPerformanceMetrics = async () => {
+    if (!currentSessionId) return;
+
+    try {
+      const metrics = {
+        session_id: currentSessionId,
+        cpu_usage: performanceMetrics?.cpu_usage || 0,
+        memory_usage: performanceMetrics?.memory_usage || 0,
+        disk_usage: performanceMetrics?.disk_usage || 0,
+        network_activity: {},
+        recording_quality_score: 0.85,
+        processing_latency: 150,
+        timestamp: new Date().toISOString()
+      };
+
+      await invisibilityService.createPerformanceMetrics(metrics);
+    } catch (err) {
+      setError(`Failed to report metrics: ${err.message}`);
+      setTimeout(() => setError(null), 5000);
+    }
+  };
+
   const cleanupSession = async () => {
     if (!currentSessionId) return;
 
@@ -501,7 +624,115 @@ const InvisibilityDashboard = () => {
           </div>
         </div>
 
-        {/* Configuration Panels */}
+        {/* Advanced Operations Panel */}
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 mb-8">
+          <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
+            <h2 className="text-xl font-semibold mb-4">Recording Operations</h2>
+            <div className="space-y-3">
+              <Button onClick={() => getRecordingInfo('screen')} variant="secondary" disabled={loading}>
+                Get Screen Recording
+              </Button>
+              <Button onClick={() => getRecordingInfo('voice')} variant="secondary" disabled={loading}>
+                Get Voice Recording
+              </Button>
+              <Button onClick={() => getRecordingInfo('combined')} variant="secondary" disabled={loading}>
+                Get Combined Recording
+              </Button>
+            </div>
+          </div>
+
+          <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
+            <h2 className="text-xl font-semibold mb-4">Insight Types</h2>
+            <div className="space-y-3">
+              <Button onClick={() => generateSpecificInsight('conversation_analysis')} variant="secondary" disabled={!currentSessionId || loading}>
+                Conversation Analysis
+              </Button>
+              <Button onClick={() => generateSpecificInsight('sentiment_tracking')} variant="secondary" disabled={!currentSessionId || loading}>
+                Sentiment Tracking
+              </Button>
+              <Button onClick={() => generateSpecificInsight('key_moments')} variant="secondary" disabled={!currentSessionId || loading}>
+                Key Moments
+              </Button>
+            </div>
+          </div>
+
+          <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
+            <h2 className="text-xl font-semibold mb-4">Configuration Updates</h2>
+            <div className="space-y-3">
+              <Button onClick={() => updateUIConfiguration(uiConfig)} variant="secondary" disabled={loading}>
+                Update UI Config
+              </Button>
+              <Button onClick={() => updateSecurityConfiguration(securityConfig)} variant="secondary" disabled={loading}>
+                Update Security Config
+              </Button>
+              <Button onClick={reportPerformanceMetrics} variant="secondary" disabled={!currentSessionId || loading}>
+                Report Metrics
+              </Button>
+            </div>
+          </div>
+
+          <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
+            <h2 className="text-xl font-semibold mb-4">Error Management</h2>
+            <div className="space-y-3">
+              <Button onClick={() => logError({code: 'TEST_ERROR', message: 'Test error message', details: {test: true}})} variant="secondary" disabled={!currentSessionId || loading}>
+                Log Test Error
+              </Button>
+              <Button onClick={() => invisibilityService.getInvisibilityError('TEST_ERROR').then(console.log)} variant="secondary" disabled={loading}>
+                Get Error Info
+              </Button>
+            </div>
+          </div>
+        </div>
+
+        {/* System Information Display */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+          {systemConfig && (
+            <StatusCard title="System Configuration" icon={Settings}>
+              <div className="space-y-2">
+                <p>Max Sessions: <span className="text-[#8F74D4]">{systemConfig.max_concurrent_sessions}</span></p>
+                <p>Max Duration: <span className="text-blue-400">{systemConfig.max_recording_duration}m</span></p>
+                <p>Storage Path: <span className="text-green-400">{systemConfig.default_storage_path}</span></p>
+                <p>Cleanup Interval: <span className="text-yellow-400">{systemConfig.cleanup_interval}h</span></p>
+              </div>
+            </StatusCard>
+          )}
+
+          {hideModes.length > 0 && (
+            <StatusCard title="Available Hide Modes" icon={EyeOff}>
+              <div className="space-y-2">
+                {hideModes.map((mode, index) => (
+                  <div key={index} className="flex items-center justify-between">
+                    <span className="capitalize">{mode.replace(/_/g, ' ')}</span>
+                    <span className={`text-xs px-2 py-1 rounded ${
+                      uiConfig.hide_mode === mode ? 'bg-[#8F74D4] text-white' : 'bg-gray-600 text-gray-300'
+                    }`}>
+                      {uiConfig.hide_mode === mode ? 'Active' : 'Available'}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </StatusCard>
+          )}
+
+          {performanceMetrics && (
+            <StatusCard title="Performance Metrics" icon={Activity}>
+              <div className="space-y-2">
+                {Array.isArray(performanceMetrics) && performanceMetrics.length > 0 ? (
+                  performanceMetrics.slice(-1).map((metric, index) => (
+                    <div key={index}>
+                      <p>CPU: <span className="text-blue-400">{metric.cpu_usage?.toFixed(1)}%</span></p>
+                      <p>Memory: <span className="text-green-400">{metric.memory_usage?.toFixed(1)}%</span></p>
+                      <p>Disk: <span className="text-yellow-400">{metric.disk_usage?.toFixed(1)}%</span></p>
+                      <p>Quality Score: <span className="text-[#8F74D4]">{(metric.recording_quality_score * 100)?.toFixed(0)}%</span></p>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-gray-400">No metrics available</p>
+                )}
+              </div>
+            </StatusCard>
+          )}
+        </div>
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
           <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
             <h3 className="text-lg font-semibold mb-4">Recording Config</h3>
