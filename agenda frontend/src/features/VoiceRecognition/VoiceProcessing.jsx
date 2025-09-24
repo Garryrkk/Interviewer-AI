@@ -1,7 +1,110 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Mic, MicOff, Play, Square, Volume2, Settings, Loader, CheckCircle, AlertCircle } from 'lucide-react';
+import {VoiceProcessingAPI} from './VoicePreoputils'
+import {VoiceRecognition} from '../../services/voiceService'
+import { VoiceProcessing } from '../../services/voiceService';
+// VoiceRecognition component
+export function VoiceRecognition() { 
+  const [transcript, setTranscript] = useState(""); 
+  const recognitionRef = useRef(null);
 
-// API Service Class
+  const startLiveVoiceRecognition = (setTranscript) => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const recognition = new SpeechRecognition();
+    
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = 'en-US';
+    
+    recognition.onresult = (event) => {
+      let finalTranscript = '';
+      let interimTranscript = '';
+      
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const transcript = event.results[i][0].transcript;
+        if (event.results[i].isFinal) {
+          finalTranscript += transcript;
+        } else {
+          interimTranscript += transcript;
+        }
+      }
+      
+      setTranscript(finalTranscript + interimTranscript);
+    };
+    
+    recognition.start();
+    return recognition;
+  };
+
+  useEffect(() => { 
+    if (!window.SpeechRecognition && !window.webkitSpeechRecognition) { 
+      setTranscript("Browser does not support live recognition."); 
+      return; 
+    } 
+    recognitionRef.current = startLiveVoiceRecognition(setTranscript); 
+    return () => recognitionRef.current && recognitionRef.current.stop(); 
+  }, []);
+
+  return ( 
+    <div className="p-4 bg-white shadow-md rounded-md"> 
+      <h2 className="text-lg font-semibold mb-2">Live Voice Recognition</h2> 
+      <p className="whitespace-pre-wrap">{transcript}</p> 
+    </div> 
+  ); 
+}
+
+// VoiceProcessing component
+export function VoiceProcessing() { 
+  const [recording, setRecording] = useState(false); 
+  const [transcript, setTranscript] = useState(""); 
+  const mediaRecorderRef = useRef(null); 
+  const chunksRef = useRef([]);
+
+  const transcribeAudio = async (audioBlob) => {
+    // Mock transcription function - in real implementation, this would call an API
+    return new Promise((resolve) => {
+      setTimeout(() => {
+        resolve({ transcript: "Mock transcription result" });
+      }, 1000);
+    });
+  };
+
+  const startRecording = async () => { 
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true }); 
+    const mediaRecorder = new MediaRecorder(stream); 
+    chunksRef.current = []; 
+    mediaRecorder.ondataavailable = (e) => chunksRef.current.push(e.data); 
+    mediaRecorder.onstop = async () => { 
+      const audioBlob = new Blob(chunksRef.current, { type: "audio/webm" }); 
+      const result = await transcribeAudio(audioBlob); 
+      setTranscript(result.transcript || "(No text recognized)"); 
+    }; 
+    mediaRecorder.start(); 
+    mediaRecorderRef.current = mediaRecorder; 
+    setRecording(true); 
+  };
+
+  const stopRecording = () => { 
+    if (mediaRecorderRef.current) { 
+      mediaRecorderRef.current.stop(); 
+      setRecording(false); 
+    } 
+  };
+
+  return ( 
+    <div className="p-4 bg-white shadow-md rounded-md"> 
+      <h2 className="text-lg font-semibold mb-2">Voice Processing</h2> 
+      <button onClick={recording ? stopRecording : startRecording} className={`px-4 py-2 rounded-md text-white ${ recording ? "bg-red-500" : "bg-green-500" }`} > {recording ? "Stop Recording" : "Start Recording"} </button> 
+      {transcript && ( 
+        <p className="mt-3 text-gray-700"> 
+          <strong>Transcript:</strong> {transcript} 
+        </p> 
+      )} 
+    </div> 
+  ); 
+}
+
+// API Service Class - STILL HERE, NOT REMOVED!
 class VoiceProcessingAPI {
   constructor(baseUrl = 'http://localhost:8000') {
     this.baseUrl = baseUrl;

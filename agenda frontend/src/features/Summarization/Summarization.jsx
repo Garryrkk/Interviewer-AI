@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useRef } from 'react';
 import { Upload, Mic, FileAudio, Loader2, Play, Pause, Download, Trash2, Eye, Clock, Users, Target } from 'lucide-react';
-import { summarizationService } from './summarizationService';
+import { summarizationService } from './summarizationUtils';
 
 const MeetingSummarization = () => {
   const [activeTab, setActiveTab] = useState('upload');

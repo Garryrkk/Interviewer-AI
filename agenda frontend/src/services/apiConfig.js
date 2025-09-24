@@ -2,7 +2,7 @@
 import axios from "axios";
 
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || "https://5456cb9f09f8.ngrok-free.app/api",
+  baseURL: "http://127.0.0.1:8000",
   timeout: 10000,
   headers: {
     "Content-Type": "application/json",

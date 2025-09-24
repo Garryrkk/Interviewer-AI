@@ -1,630 +1,663 @@
-/**
- * Invisibility Service Handler
- * Manages all backend communication and state for the invisibility feature
- */
+import React, { useState, useEffect } from 'react';
+import { Play, Square, Eye, EyeOff, Settings, Shield, Activity, Download, Trash2, RefreshCw } from 'lucide-react';
+import { InvisibilityService, SessionManager, ConfigurationValidator, UIStateManager } from './invisibilityService.js';
 
-class InvisibilityService {
+// Legacy API wrapper for backward compatibility
+class InvisibilityAPI {
   constructor() {
-    this.baseUrl = process.env.REACT_APP_API_BASE_URL || 'http://localhost:8000/api/v1/invisibility';
-    this.sessions = new Map();
-    this.eventListeners = new Map();
-    this.wsConnection = null;
-    this.reconnectAttempts = 0;
-    this.maxReconnectAttempts = 5;
-    
-    // Initialize WebSocket connection for real-time updates
-    this.initializeWebSocket();
+    this.baseURL = 'http://localhost:8000/api/v1/invisibility';
   }
 
-  // WebSocket Management
-  initializeWebSocket() {
-    try {
-      const wsUrl = this.baseUrl.replace('http', 'ws').replace('/api/v1/invisibility', '/ws');
-      this.wsConnection = new WebSocket(wsUrl);
-      
-      this.wsConnection.onopen = () => {
-        console.log('WebSocket connected');
-        this.reconnectAttempts = 0;
-      };
-      
-      this.wsConnection.onmessage = (event) => {
-        const data = JSON.parse(event.data);
-        this.handleWebSocketMessage(data);
-      };
-      
-      this.wsConnection.onclose = () => {
-        console.log('WebSocket disconnected');
-        this.handleReconnection();
-      };
-      
-      this.wsConnection.onerror = (error) => {
-        console.error('WebSocket error:', error);
-      };
-    } catch (error) {
-      console.error('Failed to initialize WebSocket:', error);
-    }
+  async enableMode(config) {
+    const response = await fetch(`${this.baseURL}/mode/enable`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(config)
+    });
+    return response.json();
   }
 
-  handleReconnection() {
-    if (this.reconnectAttempts < this.maxReconnectAttempts) {
-      this.reconnectAttempts++;
-      setTimeout(() => {
-        console.log(`Reconnecting... Attempt ${this.reconnectAttempts}`);
-        this.initializeWebSocket();
-      }, 1000 * this.reconnectAttempts);
-    }
+  async disableMode(sessionId) {
+    const response = await fetch(`${this.baseURL}/mode/disable`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ session_id: sessionId })
+    });
+    return response.json();
   }
 
-  handleWebSocketMessage(data) {
-    const { type, session_id, payload } = data;
-    
-    switch (type) {
-      case 'session_update':
-        this.updateSessionData(session_id, payload);
-        break;
-      case 'recording_status':
-        this.handleRecordingStatusUpdate(session_id, payload);
-        break;
-      case 'ui_visibility':
-        this.handleUIVisibilityUpdate(session_id, payload);
-        break;
-      case 'insights_ready':
-        this.handleInsightsReady(session_id, payload);
-        break;
-      case 'security_alert':
-        this.handleSecurityAlert(session_id, payload);
-        break;
-      default:
-        console.log('Unknown WebSocket message type:', type);
-    }
-  }
-
-  // Event Management
-  addEventListener(eventType, callback) {
-    if (!this.eventListeners.has(eventType)) {
-      this.eventListeners.set(eventType, []);
-    }
-    this.eventListeners.get(eventType).push(callback);
-  }
-
-  removeEventListener(eventType, callback) {
-    if (this.eventListeners.has(eventType)) {
-      const listeners = this.eventListeners.get(eventType);
-      const index = listeners.indexOf(callback);
-      if (index > -1) {
-        listeners.splice(index, 1);
-      }
-    }
-  }
-
-  emit(eventType, data) {
-    if (this.eventListeners.has(eventType)) {
-      this.eventListeners.get(eventType).forEach(callback => {
-        try {
-          callback(data);
-        } catch (error) {
-          console.error('Event listener error:', error);
-        }
-      });
-    }
-  }
-
-  // HTTP Request Helper
-  async makeRequest(endpoint, options = {}) {
-    const url = `${this.baseUrl}${endpoint}`;
-    const defaultOptions = {
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json'
-      },
-      credentials: 'include'
-    };
-
-    const requestOptions = { ...defaultOptions, ...options };
-    
-    try {
-      const response = await fetch(url, requestOptions);
-      
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ message: 'Request failed' }));
-        throw new Error(errorData.message || `HTTP ${response.status}: ${response.statusText}`);
-      }
-      
-      return await response.json();
-    } catch (error) {
-      console.error(`Request failed for ${endpoint}:`, error);
-      this.emit('error', { endpoint, error: error.message });
-      throw error;
-    }
-  }
-
-  // Session Management
-  async enableInvisibilityMode(config) {
-    try {
-      const response = await this.makeRequest('/mode/enable', {
-        method: 'POST',
-        body: JSON.stringify(config)
-      });
-      
-      if (response.success) {
-        this.sessions.set(response.session_id, {
-          id: response.session_id,
-          status: 'active',
-          config,
-          startTime: new Date(),
-          ...response
-        });
-        
-        this.emit('session_created', response);
-        return response;
-      }
-      
-      throw new Error(response.message || 'Failed to enable invisibility mode');
-    } catch (error) {
-      this.emit('session_error', { action: 'enable', error: error.message });
-      throw error;
-    }
-  }
-
-  async disableInvisibilityMode(sessionId) {
-    try {
-      const response = await this.makeRequest('/mode/disable', {
-        method: 'POST',
-        body: JSON.stringify({ session_id: sessionId })
-      });
-      
-      if (response.success) {
-        const session = this.sessions.get(sessionId);
-        if (session) {
-          session.status = 'stopped';
-          session.endTime = new Date();
-        }
-        
-        this.emit('session_stopped', response);
-        return response;
-      }
-      
-      throw new Error(response.message || 'Failed to disable invisibility mode');
-    } catch (error) {
-      this.emit('session_error', { action: 'disable', error: error.message });
-      throw error;
-    }
-  }
-
-  async getSessionStatus(sessionId) {
-    try {
-      const response = await this.makeRequest(`/session/${sessionId}/status`);
-      
-      // Update local session data
-      const session = this.sessions.get(sessionId);
-      if (session) {
-        Object.assign(session, response);
-      }
-      
-      this.emit('session_status_updated', { sessionId, status: response });
-      return response;
-    } catch (error) {
-      this.emit('session_error', { action: 'status', sessionId, error: error.message });
-      throw error;
-    }
-  }
-
-  // Recording Management
   async startRecording(config) {
-    try {
-      const response = await this.makeRequest('/recording/start', {
-        method: 'POST',
-        body: JSON.stringify(config)
-      });
-      
-      if (response.success) {
-        this.emit('recording_started', response);
-        return response;
-      }
-      
-      throw new Error(response.message || 'Failed to start recording');
-    } catch (error) {
-      this.emit('recording_error', { action: 'start', error: error.message });
-      throw error;
-    }
+    const response = await fetch(`${this.baseURL}/recording/start`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(config)
+    });
+    return response.json();
   }
 
   async stopRecording(sessionId) {
-    try {
-      const response = await this.makeRequest('/recording/stop', {
-        method: 'POST',
-        body: JSON.stringify({ session_id: sessionId })
-      });
-      
-      if (response.success) {
-        this.emit('recording_stopped', response);
-        return response;
-      }
-      
-      throw new Error(response.message || 'Failed to stop recording');
-    } catch (error) {
-      this.emit('recording_error', { action: 'stop', error: error.message });
-      throw error;
-    }
+    const response = await fetch(`${this.baseURL}/recording/stop`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ session_id: sessionId })
+    });
+    return response.json();
   }
 
-  // UI Management
-  async hideUIComponents(sessionId, components, hideMode) {
-    try {
-      const response = await this.makeRequest('/ui/hide', {
-        method: 'POST',
-        body: JSON.stringify({
-          session_id: sessionId,
-          components_to_hide: components,
-          hide_mode: hideMode
-        })
-      });
-      
-      if (response.success) {
-        this.emit('ui_hidden', response);
-        return response;
-      }
-      
-      throw new Error(response.message || 'Failed to hide UI components');
-    } catch (error) {
-      this.emit('ui_error', { action: 'hide', error: error.message });
-      throw error;
-    }
+  async hideUI(sessionId, components, hideMode) {
+    const response = await fetch(`${this.baseURL}/ui/hide`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        session_id: sessionId,
+        components_to_hide: components,
+        hide_mode: hideMode
+      })
+    });
+    return response.json();
   }
 
-  async showUIComponents(sessionId, components) {
-    try {
-      const response = await this.makeRequest('/ui/show', {
-        method: 'POST',
-        body: JSON.stringify({
-          session_id: sessionId,
-          components_to_show: components
-        })
-      });
-      
-      if (response.success) {
-        this.emit('ui_shown', response);
-        return response;
-      }
-      
-      throw new Error(response.message || 'Failed to show UI components');
-    } catch (error) {
-      this.emit('ui_error', { action: 'show', error: error.message });
-      throw error;
-    }
+  async showUI(sessionId, components) {
+    const response = await fetch(`${this.baseURL}/ui/show`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        session_id: sessionId,
+        components_to_show: components
+      })
+    });
+    return response.json();
   }
 
-  // Insights Management
-  async generateInsights(sessionId, insightTypes, options = {}) {
-    try {
-      const response = await this.makeRequest('/insights/generate', {
-        method: 'POST',
-        body: JSON.stringify({
-          session_id: sessionId,
-          insight_types: insightTypes,
-          processing_options: options
-        })
-      });
-      
-      if (response.success) {
-        this.emit('insights_generation_started', response);
-        return response;
-      }
-      
-      throw new Error(response.message || 'Failed to generate insights');
-    } catch (error) {
-      this.emit('insights_error', { action: 'generate', error: error.message });
-      throw error;
-    }
+  async getSessionStatus(sessionId) {
+    const response = await fetch(`${this.baseURL}/session/${sessionId}/status`);
+    return response.json();
+  }
+
+  async generateInsights(sessionId, insightTypes) {
+    const response = await fetch(`${this.baseURL}/insights/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        session_id: sessionId,
+        insight_types: insightTypes,
+        processing_options: {}
+      })
+    });
+    return response.json();
   }
 
   async getInsights(sessionId) {
-    try {
-      const response = await this.makeRequest(`/insights/${sessionId}`);
-      
-      this.emit('insights_received', { sessionId, insights: response.insights });
-      return response;
-    } catch (error) {
-      if (error.message.includes('404')) {
-        return { insights: null, message: 'No insights available' };
-      }
-      this.emit('insights_error', { action: 'get', error: error.message });
-      throw error;
-    }
+    const response = await fetch(`${this.baseURL}/insights/${sessionId}`);
+    return response.json();
   }
 
-  // Security Management
   async getSecurityStatus(sessionId) {
-    try {
-      const response = await this.makeRequest(`/security/status/${sessionId}`);
-      
-      this.emit('security_status_updated', { sessionId, status: response });
-      return response;
-    } catch (error) {
-      this.emit('security_error', { action: 'status', error: error.message });
-      throw error;
-    }
+    const response = await fetch(`${this.baseURL}/security/status/${sessionId}`);
+    return response.json();
   }
 
-  // Session Cleanup
   async cleanupSession(sessionId) {
-    try {
-      const response = await this.makeRequest(`/session/${sessionId}`, {
-        method: 'DELETE'
-      });
-      
-      // Remove from local storage
-      this.sessions.delete(sessionId);
-      
-      this.emit('session_cleaned', { sessionId, response });
-      return response;
-    } catch (error) {
-      this.emit('session_error', { action: 'cleanup', error: error.message });
-      throw error;
-    }
-  }
-
-  // Health Check
-  async healthCheck() {
-    try {
-      const response = await this.makeRequest('/health');
-      this.emit('health_check_complete', response);
-      return response;
-    } catch (error) {
-      this.emit('health_check_failed', { error: error.message });
-      throw error;
-    }
-  }
-
-  // Utility Methods
-  getSession(sessionId) {
-    return this.sessions.get(sessionId);
-  }
-
-  getAllSessions() {
-    return Array.from(this.sessions.values());
-  }
-
-  getActiveSessions() {
-    return this.getAllSessions().filter(session => session.status === 'active');
-  }
-
-  // Local Storage Management
-  saveSessionToStorage(sessionId) {
-    const session = this.sessions.get(sessionId);
-    if (session) {
-      try {
-        const sessionData = {
-          ...session,
-          savedAt: new Date().toISOString()
-        };
-        localStorage.setItem(`invisibility_session_${sessionId}`, JSON.stringify(sessionData));
-      } catch (error) {
-        console.error('Failed to save session to storage:', error);
-      }
-    }
-  }
-
-  loadSessionFromStorage(sessionId) {
-    try {
-      const stored = localStorage.getItem(`invisibility_session_${sessionId}`);
-      if (stored) {
-        const sessionData = JSON.parse(stored);
-        this.sessions.set(sessionId, sessionData);
-        return sessionData;
-      }
-    } catch (error) {
-      console.error('Failed to load session from storage:', error);
-    }
-    return null;
-  }
-
-  clearSessionStorage(sessionId) {
-    try {
-      localStorage.removeItem(`invisibility_session_${sessionId}`);
-    } catch (error) {
-      console.error('Failed to clear session storage:', error);
-    }
-  }
-
-  // Event Handlers for WebSocket Updates
-  updateSessionData(sessionId, data) {
-    const session = this.sessions.get(sessionId);
-    if (session) {
-      Object.assign(session, data);
-      this.emit('session_updated', { sessionId, data });
-    }
-  }
-
-  handleRecordingStatusUpdate(sessionId, payload) {
-    this.emit('recording_status_changed', { sessionId, ...payload });
-  }
-
-  handleUIVisibilityUpdate(sessionId, payload) {
-    this.emit('ui_visibility_changed', { sessionId, ...payload });
-  }
-
-  handleInsightsReady(sessionId, payload) {
-    this.emit('insights_ready', { sessionId, ...payload });
-  }
-
-  handleSecurityAlert(sessionId, payload) {
-    this.emit('security_alert', { sessionId, ...payload });
-  }
-
-  // Configuration Management
-  getDefaultConfig() {
-    return {
-      recording_config: {
-        screen_recording: true,
-        voice_recording: true,
-        auto_notes: true,
-        real_time_insights: false,
-        recording_quality: 'medium',
-        audio_format: 'mp3',
-        video_format: 'mp4',
-        max_duration: null
-      },
-      ui_config: {
-        hide_mode: 'minimize',
-        components_to_hide: ['main_window', 'controls_bar'],
-        keep_separate_window: false,
-        minimize_to_tray: true,
-        show_discrete_indicator: false
-      },
-      security_config: {
-        local_processing_only: true,
-        encrypt_data: true,
-        auto_delete_after: 24,
-        no_cloud_upload: true,
-        secure_storage_path: null
-      }
-    };
-  }
-
-  validateConfig(config) {
-    const errors = [];
-    
-    // Validate recording config
-    if (config.recording_config) {
-      const rc = config.recording_config;
-      if (rc.recording_quality && !['low', 'medium', 'high'].includes(rc.recording_quality)) {
-        errors.push('Invalid recording quality');
-      }
-      if (rc.max_duration && (rc.max_duration < 1 || rc.max_duration > 300)) {
-        errors.push('Max duration must be between 1 and 300 minutes');
-      }
-    }
-    
-    // Validate UI config
-    if (config.ui_config) {
-      const uc = config.ui_config;
-      const validHideModes = ['minimize', 'hide_window', 'background_tab', 'separate_display'];
-      if (uc.hide_mode && !validHideModes.includes(uc.hide_mode)) {
-        errors.push('Invalid hide mode');
-      }
-    }
-    
-    return errors;
-  }
-
-  // Performance Monitoring
-  startPerformanceMonitoring(sessionId) {
-    const interval = setInterval(async () => {
-      try {
-        const performance = {
-          memory: this.getMemoryUsage(),
-          timestamp: new Date().toISOString(),
-          sessionId
-        };
-        
-        this.emit('performance_update', performance);
-      } catch (error) {
-        console.error('Performance monitoring error:', error);
-      }
-    }, 30000); // Every 30 seconds
-    
-    // Store interval ID for cleanup
-    const session = this.sessions.get(sessionId);
-    if (session) {
-      session.performanceInterval = interval;
-    }
-    
-    return interval;
-  }
-
-  stopPerformanceMonitoring(sessionId) {
-    const session = this.sessions.get(sessionId);
-    if (session && session.performanceInterval) {
-      clearInterval(session.performanceInterval);
-      delete session.performanceInterval;
-    }
-  }
-
-  getMemoryUsage() {
-    if (performance.memory) {
-      return {
-        used: Math.round(performance.memory.usedJSHeapSize / 1024 / 1024),
-        total: Math.round(performance.memory.totalJSHeapSize / 1024 / 1024),
-        limit: Math.round(performance.memory.jsHeapSizeLimit / 1024 / 1024)
-      };
-    }
-    return null;
-  }
-
-  // Cleanup
-  destroy() {
-    // Close WebSocket connection
-    if (this.wsConnection) {
-      this.wsConnection.close();
-    }
-    
-    // Stop all performance monitoring
-    this.sessions.forEach((session, sessionId) => {
-      this.stopPerformanceMonitoring(sessionId);
+    const response = await fetch(`${this.baseURL}/session/${sessionId}`, {
+      method: 'DELETE'
     });
-    
-    // Clear all sessions
-    this.sessions.clear();
-    
-    // Clear event listeners
-    this.eventListeners.clear();
+    return response.json();
+  }
+
+  async healthCheck() {
+    const response = await fetch(`${this.baseURL}/health`);
+    return response.json();
   }
 }
 
-// Export singleton instance
-const invisibilityService = new InvisibilityService();
-export default invisibilityService;
+const InvisibilityDashboard = () => {
+  // Initialize services
+  const [invisibilityService] = useState(() => new InvisibilityService());
+  const [sessionManager] = useState(() => new SessionManager());
+  const [configValidator] = useState(() => new ConfigurationValidator());
+  const [uiStateManager] = useState(() => new UIStateManager());
+  
+  // State management
+  const [currentSessionId, setCurrentSessionId] = useState(null);
+  const [invisibilityEnabled, setInvisibilityEnabled] = useState(false);
+  const [recording, setRecording] = useState(false);
+  const [uiHidden, setUiHidden] = useState(false);
+  const [sessionStatus, setSessionStatus] = useState(null);
+  const [securityStatus, setSecurityStatus] = useState(null);
+  const [insights, setInsights] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [healthStatus, setHealthStatus] = useState(null);
 
-// Also export the class for testing
-export { InvisibilityService };
+  // Configuration states
+  const [recordingConfig, setRecordingConfig] = useState({
+    screen_recording: true,
+    voice_recording: true,
+    auto_notes: true,
+    real_time_insights: false,
+    recording_quality: 'medium',
+    audio_format: 'mp3',
+    video_format: 'mp4'
+  });
 
-// Utility functions for frontend components
-export const InvisibilityUtils = {
-  formatDuration: (seconds) => {
-    const hours = Math.floor(seconds / 3600);
-    const minutes = Math.floor((seconds % 3600) / 60);
-    const secs = seconds % 60;
-    
-    if (hours > 0) {
-      return `${hours}h ${minutes}m ${secs}s`;
-    } else if (minutes > 0) {
-      return `${minutes}m ${secs}s`;
-    } else {
-      return `${secs}s`;
-    }
-  },
+  const [uiConfig, setUiConfig] = useState({
+    hide_mode: 'minimize',
+    components_to_hide: ['recording_indicator', 'ai_insights_panel'],
+    keep_separate_window: false,
+    minimize_to_tray: true,
+    show_discrete_indicator: false
+  });
 
-  formatFileSize: (bytes) => {
-    const sizes = ['B', 'KB', 'MB', 'GB'];
-    if (bytes === 0) return '0 B';
-    
-    const i = Math.floor(Math.log(bytes) / Math.log(1024));
-    return `${Math.round(bytes / Math.pow(1024, i) * 100) / 100} ${sizes[i]}`;
-  },
+  const [securityConfig, setSecurityConfig] = useState({
+    local_processing_only: true,
+    encrypt_data: true,
+    auto_delete_after: 24,
+    no_cloud_upload: true,
+    secure_storage_path: null
+  });
 
-  generateSessionId: () => {
-    return 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-  },
-
-  isValidSessionId: (sessionId) => {
-    return /^session_\d+_[a-z0-9]{9}$/.test(sessionId);
-  },
-
-  getSecurityScoreColor: (score) => {
-    if (score >= 90) return '#10B981'; // green
-    if (score >= 70) return '#F59E0B'; // yellow
-    if (score >= 50) return '#F97316'; // orange
-    return '#EF4444'; // red
-  },
-
-  getStatusColor: (status) => {
-    const colors = {
-      active: '#10B981',
-      inactive: '#6B7280',
-      error: '#EF4444',
-      warning: '#F59E0B'
+  // Event listeners setup
+  useEffect(() => {
+    // Set up service event listeners
+    const handleSessionCreated = (data) => {
+      setCurrentSessionId(data.sessionId);
+      setInvisibilityEnabled(true);
     };
-    return colors[status] || '#6B7280';
-  }
+
+    const handleSessionEnded = () => {
+      setCurrentSessionId(null);
+      setInvisibilityEnabled(false);
+      setRecording(false);
+      setUiHidden(false);
+      setSessionStatus(null);
+    };
+
+    const handleRecordingStarted = () => {
+      setRecording(true);
+    };
+
+    const handleRecordingstopped = (data) => {
+      setRecording(false);
+      setSessionStatus(prev => ({
+        ...prev,
+        recording_duration: data.duration,
+        data_size: data.dataSize
+      }));
+    };
+
+    const handleUIHidden = () => {
+      setUiHidden(true);
+    };
+
+    const handleUIShown = () => {
+      setUiHidden(false);
+    };
+
+    const handleError = (data) => {
+      setError(`${data.action}: ${data.error}`);
+      setTimeout(() => setError(null), 5000);
+    };
+
+    const handleInsightsGenerated = (data) => {
+      setInsights(data.insights);
+    };
+
+    // Register event listeners
+    invisibilityService.on('session:created', handleSessionCreated);
+    invisibilityService.on('session:ended', handleSessionEnded);
+    invisibilityService.on('recording:started', handleRecordingStarted);
+    invisibilityService.on('recording:stopped', handleRecordingStopped);
+    invisibilityService.on('ui:hidden', handleUIHidden);
+    invisibilityService.on('ui:shown', handleUIShown);
+    invisibilityService.on('error', handleError);
+    invisibilityService.on('insights:generated', handleInsightsGenerated);
+
+    // Cleanup listeners on unmount
+    return () => {
+      invisibilityService.removeAllListeners();
+    };
+  }, [invisibilityService]);
+
+  // Session monitoring
+  useEffect(() => {
+    if (currentSessionId) {
+      const interval = setInterval(async () => {
+        try {
+          const status = await invisibilityService.getSessionStatus();
+          setSessionStatus(status);
+          
+          const healthCheck = await invisibilityService.healthCheck();
+          setHealthStatus(healthCheck);
+        } catch (err) {
+          console.error('Failed to fetch session status:', err);
+        }
+      }, 5000);
+
+      return () => clearInterval(interval);
+    }
+  }, [currentSessionId, invisibilityService]);
+
+  const enableInvisibilityMode = async () => {
+    setLoading(true);
+    try {
+      // Validate configuration first
+      const isValid = await configValidator.validateConfiguration({
+        recording: recordingConfig,
+        ui: uiConfig,
+        security: securityConfig
+      });
+
+      if (!isValid.valid) {
+        throw new Error(`Configuration error: ${isValid.errors.join(', ')}`);
+      }
+
+      // Enable invisibility mode using the service
+      const response = await invisibilityService.enableInvisibilityMode({
+        recording: recordingConfig,
+        ui: uiConfig,
+        security: securityConfig
+      });
+
+      if (response.success) {
+        // Session state will be updated via event listeners
+        setError(null);
+      } else {
+        throw new Error(response.message);
+      }
+    } catch (err) {
+      setError(`Failed to enable invisibility mode: ${err.message}`);
+      setTimeout(() => setError(null), 5000);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const disableInvisibilityMode = async () => {
+    setLoading(true);
+    try {
+      const response = await invisibilityService.disableInvisibilityMode();
+      
+      if (response.success) {
+        // Session state will be updated via event listeners
+        setError(null);
+      } else {
+        throw new Error(response.message);
+      }
+    } catch (err) {
+      setError(`Failed to disable invisibility mode: ${err.message}`);
+      setTimeout(() => setError(null), 5000);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const toggleRecording = async () => {
+    if (!currentSessionId) return;
+
+    setLoading(true);
+    try {
+      if (recording) {
+        await invisibilityService.stopRecording();
+      } else {
+        await invisibilityService.startRecording({
+          screenRecording: recordingConfig.screen_recording,
+          voiceRecording: recordingConfig.voice_recording,
+          autoNotes: recordingConfig.auto_notes,
+          realTimeInsights: recordingConfig.real_time_insights,
+          estimatedDuration: 60
+        });
+      }
+      // Recording state will be updated via event listeners
+    } catch (err) {
+      setError(`Failed to ${recording ? 'stop' : 'start'} recording: ${err.message}`);
+      setTimeout(() => setError(null), 5000);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const toggleUIVisibility = async () => {
+    if (!currentSessionId) return;
+
+    setLoading(true);
+    try {
+      if (uiHidden) {
+        await invisibilityService.showUIComponents(uiConfig.components_to_hide);
+      } else {
+        await invisibilityService.hideUIComponents(
+          uiConfig.components_to_hide,
+          uiConfig.hide_mode
+        );
+      }
+      // UI state will be updated via event listeners
+    } catch (err) {
+      setError(`Failed to ${uiHidden ? 'show' : 'hide'} UI: ${err.message}`);
+      setTimeout(() => setError(null), 5000);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const generateInsights = async () => {
+    if (!currentSessionId) return;
+
+    setLoading(true);
+    try {
+      await invisibilityService.generateInsights([
+        'conversation_analysis',
+        'sentiment_tracking',
+        'key_moments',
+        'auto_summary'
+      ]);
+      // Insights will be updated via event listeners
+    } catch (err) {
+      setError(`Failed to generate insights: ${err.message}`);
+      setTimeout(() => setError(null), 5000);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const checkSecurity = async () => {
+    if (!currentSessionId) return;
+
+    try {
+      const status = await invisibilityService.getSecurityStatus();
+      setSecurityStatus(status);
+    } catch (err) {
+      setError(`Failed to check security: ${err.message}`);
+      setTimeout(() => setError(null), 5000);
+    }
+  };
+
+  const cleanupSession = async () => {
+    if (!currentSessionId) return;
+
+    setLoading(true);
+    try {
+      await invisibilityService.cleanupSession();
+      // Session state will be updated via event listeners
+    } catch (err) {
+      setError(`Failed to cleanup session: ${err.message}`);
+      setTimeout(() => setError(null), 5000);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const Button = ({ onClick, disabled, children, variant = 'primary', className = '' }) => {
+    const baseClasses = 'px-6 py-3 rounded-lg font-medium font-roboto transition-all duration-200 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed';
+    const variants = {
+      primary: 'bg-[#8F74D4] hover:bg-[#7A63C3] text-white',
+      secondary: 'bg-gray-600 hover:bg-gray-700 text-white',
+      danger: 'bg-red-600 hover:bg-red-700 text-white'
+    };
+
+    return (
+      <button
+        onClick={onClick}
+        disabled={disabled || loading}
+        className={`${baseClasses} ${variants[variant]} ${className}`}
+      >
+        {children}
+      </button>
+    );
+  };
+
+  const StatusCard = ({ title, children, icon: Icon }) => (
+    <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
+      <div className="flex items-center gap-3 mb-4">
+        <Icon className="w-5 h-5 text-[#8F74D4]" />
+        <h3 className="text-lg font-medium text-[#F8FAFC]">{title}</h3>
+      </div>
+      <div className="text-gray-300">
+        {children}
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="min-h-screen bg-[#1E1E2F] text-[#F8FAFC] font-roboto">
+      <div className="container mx-auto p-6">
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold mb-2">Invisibility Mode Control Panel</h1>
+          <p className="text-gray-400">Stealth recording and AI insights for interview sessions</p>
+        </div>
+
+        {error && (
+          <div className="bg-red-900/50 border border-red-600 rounded-lg p-4 mb-6">
+            <p className="text-red-200">{error}</p>
+          </div>
+        )}
+
+        {/* Main Controls */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+          <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
+            <h2 className="text-xl font-semibold mb-4">Session Control</h2>
+            <div className="space-y-3">
+              {!invisibilityEnabled ? (
+                <Button onClick={enableInvisibilityMode} disabled={loading}>
+                  <Eye className="w-4 h-4" />
+                  Enable Invisibility Mode
+                </Button>
+              ) : (
+                <Button onClick={disableInvisibilityMode} variant="danger" disabled={loading}>
+                  <EyeOff className="w-4 h-4" />
+                  Disable Invisibility Mode
+                </Button>
+              )}
+              
+              {invisibilityEnabled && (
+                <>
+                  <Button onClick={toggleRecording} disabled={loading}>
+                    {recording ? <Square className="w-4 h-4" /> : <Play className="w-4 h-4" />}
+                    {recording ? 'Stop Recording' : 'Start Recording'}
+                  </Button>
+                  
+                  <Button onClick={toggleUIVisibility} variant="secondary" disabled={loading}>
+                    {uiHidden ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+                    {uiHidden ? 'Show UI' : 'Hide UI'}
+                  </Button>
+                </>
+              )}
+            </div>
+          </div>
+
+          <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
+            <h2 className="text-xl font-semibold mb-4">AI Operations</h2>
+            <div className="space-y-3">
+              <Button onClick={generateInsights} disabled={!currentSessionId || loading}>
+                <Activity className="w-4 h-4" />
+                Generate Insights
+              </Button>
+              
+              <Button onClick={checkSecurity} variant="secondary" disabled={!currentSessionId || loading}>
+                <Shield className="w-4 h-4" />
+                Security Check
+              </Button>
+              
+              {insights && (
+                <Button onClick={() => setInsights(null)} variant="secondary">
+                  <Download className="w-4 h-4" />
+                  Download Results
+                </Button>
+              )}
+            </div>
+          </div>
+
+          <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
+            <h2 className="text-xl font-semibold mb-4">Session Management</h2>
+            <div className="space-y-3">
+              <Button onClick={() => window.location.reload()} variant="secondary">
+                <RefreshCw className="w-4 h-4" />
+                Refresh Status
+              </Button>
+              
+              <Button onClick={cleanupSession} variant="danger" disabled={!currentSessionId || loading}>
+                <Trash2 className="w-4 h-4" />
+                Cleanup Session
+              </Button>
+            </div>
+          </div>
+        </div>
+
+        {/* Configuration Panels */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+          <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
+            <h3 className="text-lg font-semibold mb-4">Recording Config</h3>
+            <div className="space-y-3">
+              {Object.entries(recordingConfig).map(([key, value]) => (
+                <label key={key} className="flex items-center gap-2">
+                  {typeof value === 'boolean' ? (
+                    <input
+                      type="checkbox"
+                      checked={value}
+                      onChange={(e) => setRecordingConfig(prev => ({
+                        ...prev,
+                        [key]: e.target.checked
+                      }))}
+                      className="rounded"
+                    />
+                  ) : (
+                    <select
+                      value={value}
+                      onChange={(e) => setRecordingConfig(prev => ({
+                        ...prev,
+                        [key]: e.target.value
+                      }))}
+                      className="bg-gray-700 rounded px-2 py-1"
+                    >
+                      <option value={value}>{value}</option>
+                    </select>
+                  )}
+                  <span className="text-sm capitalize">{key.replace(/_/g, ' ')}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
+            <h3 className="text-lg font-semibold mb-4">UI Config</h3>
+            <div className="space-y-3">
+              <select
+                value={uiConfig.hide_mode}
+                onChange={(e) => setUiConfig(prev => ({ ...prev, hide_mode: e.target.value }))}
+                className="w-full bg-gray-700 rounded px-3 py-2"
+              >
+                <option value="minimize">Minimize</option>
+                <option value="hide_window">Hide Window</option>
+                <option value="background_tab">Background Tab</option>
+                <option value="separate_display">Separate Display</option>
+              </select>
+              
+              {Object.entries(uiConfig).filter(([key]) => typeof uiConfig[key] === 'boolean').map(([key, value]) => (
+                <label key={key} className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={value}
+                    onChange={(e) => setUiConfig(prev => ({
+                      ...prev,
+                      [key]: e.target.checked
+                    }))}
+                    className="rounded"
+                  />
+                  <span className="text-sm capitalize">{key.replace(/_/g, ' ')}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
+            <h3 className="text-lg font-semibold mb-4">Security Config</h3>
+            <div className="space-y-3">
+              {Object.entries(securityConfig).map(([key, value]) => (
+                <label key={key} className="flex items-center gap-2">
+                  {typeof value === 'boolean' ? (
+                    <input
+                      type="checkbox"
+                      checked={value}
+                      onChange={(e) => setSecurityConfig(prev => ({
+                        ...prev,
+                        [key]: e.target.checked
+                      }))}
+                      className="rounded"
+                    />
+                  ) : typeof value === 'number' ? (
+                    <input
+                      type="number"
+                      value={value}
+                      onChange={(e) => setSecurityConfig(prev => ({
+                        ...prev,
+                        [key]: parseInt(e.target.value)
+                      }))}
+                      className="bg-gray-700 rounded px-2 py-1 w-20"
+                    />
+                  ) : null}
+                  <span className="text-sm capitalize">{key.replace(/_/g, ' ')}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Status Information */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {sessionStatus && (
+            <StatusCard title="Session Status" icon={Activity}>
+              <div className="space-y-2">
+                <p>Session ID: <span className="text-[#8F74D4]">{currentSessionId}</span></p>
+                <p>Active: <span className={sessionStatus.is_active ? 'text-green-400' : 'text-red-400'}>
+                  {sessionStatus.is_active ? 'Yes' : 'No'}
+                </span></p>
+                <p>Recording: <span className={sessionStatus.recording_status ? 'text-green-400' : 'text-gray-400'}>
+                  {sessionStatus.recording_status ? 'Active' : 'Inactive'}
+                </span></p>
+                <p>UI State: <span className="text-blue-400">{sessionStatus.ui_state}</span></p>
+                {sessionStatus.duration && <p>Duration: {Math.floor(sessionStatus.duration / 60)}m {sessionStatus.duration % 60}s</p>}
+              </div>
+            </StatusCard>
+          )}
+
+          {securityStatus && (
+            <StatusCard title="Security Status" icon={Shield}>
+              <div className="space-y-2">
+                <p>Encryption: <span className={securityStatus.data_encrypted ? 'text-green-400' : 'text-red-400'}>
+                  {securityStatus.data_encrypted ? 'Enabled' : 'Disabled'}
+                </span></p>
+                <p>Local Processing: <span className={securityStatus.local_processing ? 'text-green-400' : 'text-red-400'}>
+                  {securityStatus.local_processing ? 'Yes' : 'No'}
+                </span></p>
+                <p>External Leaks: <span className={!securityStatus.no_external_leaks ? 'text-green-400' : 'text-red-400'}>
+                  {!securityStatus.no_external_leaks ? 'None' : 'Detected'}
+                </span></p>
+                <p>Security Score: <span className="text-[#8F74D4] font-bold">{securityStatus.security_score}/100</span></p>
+              </div>
+            </StatusCard>
+          )}
+
+          {insights && (
+            <div className="lg:col-span-2">
+              <StatusCard title="Generated Insights" icon={Activity}>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {Object.entries(insights.insights || {}).map(([type, data]) => (
+                    <div key={type} className="bg-gray-700 rounded p-4">
+                      <h4 className="font-medium capitalize mb-2">{type.replace(/_/g, ' ')}</h4>
+                      {Array.isArray(data) && data.map((insight, idx) => (
+                        <div key={idx} className="text-sm">
+                          <p>Confidence: {(insight.confidence * 100).toFixed(1)}%</p>
+                          <p className="text-gray-400 mt-1">{insight.content?.summary || 'No summary available'}</p>
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              </StatusCard>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
 };
+
+export default InvisibilityDashboard;
