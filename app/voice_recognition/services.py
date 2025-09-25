@@ -22,7 +22,8 @@ try:
     import sounddevice as sd
     import soundfile as sf
     import librosa
-    import whisper
+    import whisper  # this version works cross-platform
+    model = whisper.load_model("base")    
     from scipy import signal
     from scipy.io import wavfile
 except ImportError as e:

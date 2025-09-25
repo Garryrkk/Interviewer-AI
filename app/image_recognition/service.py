@@ -16,13 +16,15 @@ from PIL import Image, ImageGrab
 import threading
 from pathlib import Path
 import cv2
+from typing import Any, Dict
 
 from .schemas import (
     CameraDevice, CameraSessionResponse, CameraStatusResponse, CameraTestResult,
     ExpressionDetectionResponse, FaceExpression, ChatMessage, ExpressionType,
     CameraStatus, CameraResolution, MessageSender, MonitoringSession,
     ExpressionMonitoringConfig,RecordingStatus, RecordingQuality, AnalysisType, AnalysisFocus,
-    RecordingMetadata, ScreenshotData, AnalysisJob, RecordingQuality, RecordingStatus, AnalysisFocus
+    RecordingMetadata, ScreenshotData, AnalysisJob, RecordingQuality, RecordingStatus, AnalysisFocus, CameraFrameMessage,
+    CameraTestResult, CameraConfig, 
 )
 
 # Configure logging

@@ -14,7 +14,7 @@ import openai
 from transformers import pipeline
 import torch
 
-from ..database import get_db_connection
+from ..database import get_db
 from ..config import settings
 from .schemas import (
     ActionItem, 
@@ -77,7 +77,7 @@ class SummarizationService:
             duration = len(audio) / 1000.0  # Convert to seconds
             
             # Store metadata in database
-            async with get_db_connection() as conn:
+            async with get_db() as conn:
                 await conn.execute("""
                     INSERT INTO audio_files (id, user_id, meeting_id, file_path, duration, file_size, created_at)
                     VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -652,7 +652,7 @@ class SummarizationService:
     async def _store_analysis_results(self, results: Dict[str, Any], user_id: str):
         """Store analysis results in database"""
         try:
-            async with get_db_connection() as conn:
+            async with get_db() as conn:
                 await conn.execute("""
                     INSERT INTO meeting_analysis (
                         analysis_id, user_id, summary, key_points, action_items,
@@ -678,7 +678,7 @@ class SummarizationService:
     async def _store_summary(self, summary: Dict[str, Any], user_id: str):
         """Store summary in database"""
         try:
-            async with get_db_connection() as conn:
+            async with get_db() as conn:
                 await conn.execute("""
                     INSERT INTO meeting_summaries (
                         summary_id, meeting_id, user_id, summary_type, summary_text,
@@ -707,7 +707,7 @@ class SummarizationService:
     async def get_meeting_summary(self, meeting_id: str, user_id: str) -> Optional[Dict[str, Any]]:
         """Get existing summary for a meeting"""
         try:
-            async with get_db_connection() as conn:
+            async with get_db() as conn:
                 cursor = await conn.execute("""
                     SELECT * FROM meeting_summaries 
                     WHERE meeting_id = ? AND user_id = ?
@@ -725,7 +725,7 @@ class SummarizationService:
     async def get_user_summaries(self, user_id: str, limit: int = 10, offset: int = 0) -> List[Dict[str, Any]]:
         """Get all summaries for a user"""
         try:
-            async with get_db_connection() as conn:
+            async with get_db() as conn:
                 cursor = await conn.execute("""
                     SELECT * FROM meeting_summaries 
                     WHERE user_id = ?
@@ -742,7 +742,7 @@ class SummarizationService:
     async def delete_meeting_summary(self, meeting_id: str, user_id: str) -> bool:
         """Delete summary for a meeting"""
         try:
-            async with get_db_connection() as conn:
+            async with get_db() as conn:
                 cursor = await conn.execute("""
                     DELETE FROM meeting_summaries 
                     WHERE meeting_id = ? AND user_id = ?
