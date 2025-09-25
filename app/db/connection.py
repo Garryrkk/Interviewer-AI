@@ -1,21 +1,20 @@
 import os
 from typing import Any
 import asyncio
-
+from redis import asyncio as redis  # ✅ new import
+from redis.asyncio.client import Redis  # for type-hinting if you want it
 # PostgreSQL
 import asyncpg
 
 # MySQL
 import aiomysql
 
-# Redis
-import aioredis
-
 # MongoDB GridFS
 from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorGridFSBucket
 
 # Vector DB example (Chroma)
-from chromadb import AsyncClient
+from chromadb.config import Settings
+import chromadb
 
 
 # ---------------------------
@@ -57,16 +56,17 @@ UPSTASH_REDIS_URL = os.getenv(
     "REDIS_URL",
     "redis://default:ASb1AAImcDIxYjZmNGFjNTkyNTQ0ZmJhYmE0NTdhMTQzMDE3OGY1MHAyOTk3Mw@divine-pelican-9973.upstash.io:6379"
 )
+UPSTASH_REDIS_URL = "your-upstash-url"  # e.g. "redis://default:pass@host:port"
 
-async def create_redis_connection() -> aioredis.Redis:
-    redis = aioredis.from_url(
+async def create_redis_connection() -> Redis:
+    r = redis.from_url(
         UPSTASH_REDIS_URL,
         encoding="utf-8",
         decode_responses=True
     )
-    await redis.ping()
+    await r.ping()
     print("✅ Connected to Redis!")
-    return redis
+    return r
 
 
 # ---------------------------
@@ -79,7 +79,7 @@ MONGO_URL = os.getenv(
 
 async def create_file_storage_connection() -> AsyncIOMotorGridFSBucket:
     client = AsyncIOMotorClient(MONGO_URL)
-    db = client.get_database()  # uses the DB in URL
+    db = client.get_database()
     fs_bucket = AsyncIOMotorGridFSBucket(db, bucket_name="files")
     print("✅ Connected to MongoDB GridFS!")
     return fs_bucket
@@ -89,9 +89,21 @@ async def create_file_storage_connection() -> AsyncIOMotorGridFSBucket:
 # 4️⃣ Vector Database (ChromaDB example)
 # ---------------------------
 async def create_vector_database_connection() -> Any:
-    client = AsyncClient()
-    await client.start()
-    print("✅ Connected to Vector Database!")
+    def _make_client():
+        return chromadb.Client(Settings(
+            chroma_db_impl="duckdb+parquet",
+            persist_directory="chroma_data"
+        ))
+
+    client = await asyncio.to_thread(_make_client)
+
+    def _test():
+        col = client.get_or_create_collection("test_collection")
+        col.add(documents=["hello chroma"], ids=["1"])
+        return col.count()
+
+    count = await asyncio.to_thread(_test)
+    print(f"✅ Connected to Vector Database! Docs in test_collection: {count}")
     return client
 
 
@@ -100,22 +112,20 @@ async def create_vector_database_connection() -> Any:
 # ---------------------------
 async def main():
     db_pool = await create_database_connection()
-    redis = await create_redis_connection()
+    redis_conn = await create_redis_connection()
     fs_bucket = await create_file_storage_connection()
     vector_db = await create_vector_database_connection()
 
     # Test Redis
-    await redis.set("foo", "bar")
-    val = await redis.get("foo")
+    await redis_conn.set("foo", "bar")
+    val = await redis_conn.get("foo")
     print("Redis value:", val)
 
-    await redis.close()
-    if db_pool:  # close MySQL pool
+    await redis_conn.close()
+    if db_pool:
         db_pool.close()
         await db_pool.wait_closed()
-    if vector_db:
-        await vector_db.stop()
+    # vector_db is a sync client; no .stop() needed
 
-# Run the example
 if __name__ == "__main__":
     asyncio.run(main())

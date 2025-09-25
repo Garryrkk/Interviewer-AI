@@ -3,7 +3,21 @@ import os
 from pathlib import Path
 from dotenv import load_dotenv
 from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
+
+class Settings(BaseSettings):
+    ENVIRONMENT: str
+    SECRET_KEY: str
+    API_KEY: str
+    REDIS_URL: str
+    ALLOWED_HOSTS: str
+    CORS_ORIGINS: str
+    PROMETHEUS_ENABLED: bool
+    RATE_LIMIT: str
+
+    # Pydantic v2 config
+    model_config = SettingsConfigDict(extra="allow")
 # Load .env file from project root
 BASE_DIR = Path(__file__).resolve().parent
 load_dotenv(BASE_DIR / ".env")

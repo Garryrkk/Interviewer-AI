@@ -2,6 +2,8 @@ from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 from enum import Enum
+from pydantic import BaseModel, Field, field_validator
+from typing import Literal
 
 # ENUMS
 class CameraStatus(str, Enum):
@@ -211,6 +213,8 @@ class AnalysisType(str, Enum):
     PRESENTATION_ANALYSIS = "presentation_analysis"
     MEETING_HIGHLIGHTS = "meeting_highlights"
     ACTION_ITEMS = "action_items"
+    
+
 
 
 class RecordingStatus(str, Enum):
@@ -227,6 +231,7 @@ class ConnectionStatus(str, Enum):
     DISCONNECTED = "disconnected"
 
 
+# Enums
 class AnalysisFocus(str, Enum):
     GENERAL = "general"
     TEXT_EXTRACTION = "text_extraction"
@@ -236,7 +241,14 @@ class AnalysisFocus(str, Enum):
     CODE_ANALYSIS = "code_analysis"
 
 
-# Request Models
+class RecordingQuality(str, Enum):
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+
+# ---------------------------
+# Start Recording Request
+# ---------------------------
 class StartRecordingRequest(BaseModel):
     quality: RecordingQuality = RecordingQuality.MEDIUM
     include_audio: bool = True
@@ -244,14 +256,16 @@ class StartRecordingRequest(BaseModel):
     frame_rate: int = Field(default=30, ge=15, le=60)
     enable_screenshot_analysis: bool = True
     screenshot_interval: int = Field(default=5, ge=1, le=30)  # seconds
-    
-    @validator('frame_rate')
+
+    @field_validator('frame_rate')
     def validate_frame_rate(cls, v):
         if v not in [15, 24, 30, 60]:
             raise ValueError('Frame rate must be 15, 24, 30, or 60')
         return v
 
-
+# ---------------------------
+# Analysis Request
+# ---------------------------
 class AnalysisRequest(BaseModel):
     recording_id: str
     question: str = Field(..., min_length=1, max_length=500)
@@ -259,8 +273,8 @@ class AnalysisRequest(BaseModel):
     time_range: Optional[Dict[str, float]] = None  # {"start": 0, "end": 300}
     include_screenshots: bool = True
     language: str = "en"
-    
-    @validator('time_range')
+
+    @field_validator('time_range')
     def validate_time_range(cls, v):
         if v is not None:
             if 'start' not in v or 'end' not in v:
