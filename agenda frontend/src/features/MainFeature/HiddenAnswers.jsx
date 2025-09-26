@@ -209,6 +209,58 @@ class InvisibilityService {
     }
   }
 
+    // ===== New methods added =====
+
+  // UI Config methods
+  async getUIState() {
+    return await this.makeRequest('/ui/state');
+  }
+
+  async updateUIConfig(config) {
+    return await this.makeRequest('/ui/config', {
+      method: 'PUT',
+      body: JSON.stringify(config)
+    });
+  }
+
+  // Hide Modes
+  async listHideModes() {
+    return await this.makeRequest('/hide-modes');
+  }
+
+  async getHideMode(mode) {
+    return await this.makeRequest(`/hide-modes/${encodeURIComponent(mode)}`);
+  }
+
+  // Invisibility errors (store / retrieve)
+  async createInvisibilityError(errorObj) {
+    return await this.makeRequest('/invisibility-error', {
+      method: 'POST',
+      body: JSON.stringify(errorObj)
+    });
+  }
+
+  async getInvisibilityError(errorCode) {
+    return await this.makeRequest(`/invisibility-error/${encodeURIComponent(errorCode)}`);
+  }
+
+  // Performance Metrics
+  async createPerformanceMetrics(metrics) {
+    return await this.makeRequest('/performance-metrics', {
+      method: 'POST',
+      body: JSON.stringify(metrics)
+    });
+  }
+
+  async getPerformanceMetrics(sessionId) {
+    return await this.makeRequest(`/performance-metrics/${encodeURIComponent(sessionId)}`);
+  }
+
+  async listAllPerformanceMetrics(limit = 50) {
+    return await this.makeRequest(`/performance-metrics?limit=${encodeURIComponent(limit)}`);
+  }
+
+
   // Recording Management
   async startRecording(config) {
     try {

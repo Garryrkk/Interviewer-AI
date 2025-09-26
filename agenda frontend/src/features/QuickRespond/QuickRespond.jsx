@@ -3,6 +3,9 @@ import { sendQuickReply } from "./quickRespondUtils";
 import { Activity, Send, MessageCircle, Sparkles } from 'lucide-react';
 import { QuickRespond } from "../../services/aiService";
 
+
+const BASE_URL = "http://localhost:8000/api/quick-respond";
+
 export default function QuickRespond() {
   const [input, setInput] = useState("");
   const [response, setResponse] = useState("");
@@ -16,12 +19,129 @@ export default function QuickRespond() {
     setLoading(false);
   }
 
+
   const handleKeyPress = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSend();
     }
   };
+
+  // Simplify a response
+  async function handleSimplify() {
+    if (!response) return;
+    setLoading(true);
+    try {
+      const res = await fetch(`${BASE_URL}/simplify`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ original_analysis: response })
+      });
+      const data = await res.json();
+      setResponse(data.simplified_text);
+    } catch (err) {
+      console.error("Simplify failed:", err);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // Run advanced analysis
+  async function handleAdvancedAnalysis() {
+    setLoading(true);
+    try {
+      const res = await fetch(`${BASE_URL}/advanced`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: input })
+      });
+      const data = await res.json();
+      setResponse(data.full_analysis);
+    } catch (err) {
+      console.error("Advanced analysis failed:", err);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // Health check
+  async function checkHealth() {
+    try {
+      const res = await fetch(`${BASE_URL}/health`);
+      const data = await res.json();
+      alert(`Service status: ${data.status}, response time: ${data.response_time_ms}ms`);
+    } catch (err) {
+      console.error("Health check failed:", err);
+    }
+  }
+
+  // ================= Extra Routes =================
+
+  // Batch analysis
+  async function handleBatchAnalysis(files) {
+    setLoading(true);
+    try {
+      const formData = new FormData();
+      files.forEach((file) => formData.append("screenshots", file));
+      const res = await fetch(`${BASE_URL}/batch-analyze`, {
+        method: "POST",
+        body: formData,
+      });
+      const data = await res.json();
+      setResponse(JSON.stringify(data.batch_results, null, 2));
+    } catch (err) {
+      console.error("Batch analysis failed:", err);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // Analyze screenshot
+  async function handleAnalyzeScreenshot(file) {
+    setLoading(true);
+    try {
+      const formData = new FormData();
+      formData.append("screenshot", file);
+      const res = await fetch(`${BASE_URL}/analyze-screenshot`, {
+        method: "POST",
+        body: formData,
+      });
+      const data = await res.json();
+      setResponse(data.full_analysis || JSON.stringify(data));
+    } catch (err) {
+      console.error("Screenshot analysis failed:", err);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // Update meeting context
+  async function handleUpdateContext(contextText) {
+    try {
+      const res = await fetch(`${BASE_URL}/context/update`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ context: contextText }),
+      });
+      const data = await res.json();
+      alert(data.message);
+    } catch (err) {
+      console.error("Update context failed:", err);
+    }
+  }
+
+  // Clear meeting context
+  async function handleClearContext() {
+    try {
+      const res = await fetch(`${BASE_URL}/context/clear`, { method: "DELETE" });
+      const data = await res.json();
+      alert(data.message);
+    } catch (err) {
+      console.error("Clear context failed:", err);
+    }
+  }
+
+
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-slate-100 p-8">
@@ -53,7 +173,7 @@ export default function QuickRespond() {
                 <MessageCircle className="mr-3" size={20} />
                 Compose Response
               </h3>
-              
+
               <div className="space-y-4">
                 <div>
                   <label className="text-slate-300 text-sm mb-2 block">Your Message</label>
@@ -72,8 +192,8 @@ export default function QuickRespond() {
                 </div>
 
                 <div className="flex space-x-3">
-                  <button 
-                    onClick={handleSend} 
+                  <button
+                    onClick={handleSend}
                     disabled={loading || !input.trim()}
                     className="flex-1 bg-gradient-to-r from-green-600 to-green-700 text-white py-3 px-6 rounded-lg hover:from-green-700 hover:to-green-800 transition-all flex items-center justify-center space-x-2 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                   >
@@ -89,9 +209,9 @@ export default function QuickRespond() {
                       </>
                     )}
                   </button>
-                  
-                  <button 
-                    onClick={() => {setInput(""); setResponse("");}}
+
+                  <button
+                    onClick={() => { setInput(""); setResponse(""); }}
                     className="bg-slate-700 text-slate-300 py-3 px-6 rounded-lg hover:bg-slate-600 transition-colors font-medium"
                   >
                     Clear
@@ -129,7 +249,7 @@ export default function QuickRespond() {
                 <Sparkles className="mr-2" size={20} />
                 AI Response
               </h3>
-              
+
               <div className="bg-slate-900/80 p-4 rounded-lg min-h-64 max-h-96 overflow-y-auto border border-slate-700">
                 {loading ? (
                   <div className="flex flex-col items-center justify-center py-8">
@@ -152,21 +272,70 @@ export default function QuickRespond() {
                   </div>
                 )}
               </div>
-              
+
               {response && (
                 <div className="mt-4 flex space-x-2">
-                  <button 
+                  <button
                     onClick={() => navigator.clipboard.writeText(response)}
                     className="bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
                   >
                     Copy Response
                   </button>
-                  <button 
+
+                  <button
+                    onClick={handleSimplify}
+                    className="bg-purple-600 text-white py-2 px-4 rounded-lg hover:bg-purple-700 transition-colors text-sm font-medium"
+                  >
+                    Simplify Response
+                  </button>
+
+                  <button
+                    onClick={handleAdvancedAnalysis}
+                    className="bg-indigo-600 text-white py-2 px-4 rounded-lg hover:bg-indigo-700 transition-colors text-sm font-medium"
+                  >
+                    Advanced Analysis
+                  </button>
+
+                  <button
+                    onClick={checkHealth}
+                    className="bg-slate-600 text-white py-2 px-4 rounded-lg hover:bg-slate-700 transition-colors text-sm font-medium"
+                  >
+                    Check Health
+                  </button>
+
+                  <button
                     onClick={() => setResponse("")}
                     className="bg-slate-700 text-slate-300 py-2 px-4 rounded-lg hover:bg-slate-600 transition-colors text-sm font-medium"
                   >
                     Clear Response
                   </button>
+                  <input
+                    type="file"
+                    onChange={(e) => handleAnalyzeScreenshot(e.target.files[0])}
+                    className="text-sm text-slate-300"
+                  />
+
+                  <input
+                    type="file"
+                    multiple
+                    onChange={(e) => handleBatchAnalysis([...e.target.files])}
+                    className="text-sm text-slate-300"
+                  />
+
+                  <button
+                    onClick={() => handleUpdateContext("Team meeting about Q4 targets")}
+                    className="bg-orange-600 text-white py-2 px-4 rounded-lg hover:bg-orange-700 transition-colors text-sm font-medium"
+                  >
+                    Update Context
+                  </button>
+
+                  <button
+                    onClick={handleClearContext}
+                    className="bg-red-600 text-white py-2 px-4 rounded-lg hover:bg-red-700 transition-colors text-sm font-medium"
+                  >
+                    Clear Context
+                  </button>
+
                 </div>
               )}
             </div>

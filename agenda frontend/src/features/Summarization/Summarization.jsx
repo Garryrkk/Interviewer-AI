@@ -2,6 +2,7 @@ import React, { useState, useCallback, useRef } from 'react';
 import { Upload, Mic, FileAudio, Loader2, Play, Pause, Download, Trash2, Eye, Clock, Users, Target } from 'lucide-react';
 import { summarizationService } from './summarizationService';
 
+const BASE_URL = "http://localhost:8000/api/v1/summarization";
 const MeetingSummarization = () => {
   const [activeTab, setActiveTab] = useState('upload');
   const [uploadedFile, setUploadedFile] = useState(null);
@@ -16,7 +17,7 @@ const MeetingSummarization = () => {
   const [summaryType, setSummaryType] = useState('brief');
   const [includeActionItems, setIncludeActionItems] = useState(true);
   const [error, setError] = useState(null);
-  
+
   const fileInputRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const recordingIntervalRef = useRef(null);
@@ -35,7 +36,16 @@ const MeetingSummarization = () => {
     setError(null);
 
     try {
-      const uploadResult = await summarizationService.uploadAudio(file);
+      const formData = new FormData();
+      formData.append("audio_file", file);
+
+      const res = await fetch(`${BASE_URL}/upload-audio`, {
+        method: "POST",
+        body: formData,
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const uploadResult = await res.json();
+
       setUploadedFile({
         ...uploadResult,
         name: file.name,
@@ -62,7 +72,7 @@ const MeetingSummarization = () => {
       mediaRecorder.onstop = async () => {
         const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
         const audioFile = new File([audioBlob], `recording-${Date.now()}.wav`, { type: 'audio/wav' });
-        
+
         setIsUploading(true);
         try {
           const uploadResult = await summarizationService.uploadAudio(audioFile);
@@ -114,13 +124,20 @@ const MeetingSummarization = () => {
     setError(null);
 
     try {
-      const analysisResult = await summarizationService.analyzeMeeting({
-        audio_file_path: uploadedFile.file_path,
-        meeting_context: meetingContext,
-        analysis_type: 'post_meeting',
-        include_sentiment: true,
-        include_speakers: true
+      const res = await fetch(`${BASE_URL}/analyze-meeting`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          audio_file_path: uploadedFile.file_path,
+          meeting_context: meetingContext,
+          analysis_type: "post_meeting",
+          include_sentiment: true,
+          include_speakers: true,
+        }),
       });
+      if (!res.ok) throw new Error(await res.text());
+      const analysisResult = await res.json();
+
 
       setAnalysisResult(analysisResult);
       setActiveTab('results');
@@ -134,12 +151,19 @@ const MeetingSummarization = () => {
   // Generate summary
   const generateSummary = useCallback(async (content) => {
     try {
-      const summaryResult = await summarizationService.generateSummary({
-        content: content,
-        summary_type: summaryType,
-        include_action_items: includeActionItems,
-        meeting_id: uploadedFile?.meeting_id
+      const res = await fetch(`${BASE_URL}/summarize`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          content: content,
+          summary_type: summaryType,
+          include_action_items: includeActionItems,
+          meeting_id: uploadedFile?.meeting_id,
+        }),
       });
+      if (!res.ok) throw new Error(await res.text());
+      const summaryResult = await res.json();
+
 
       setSummaries(prev => [summaryResult, ...prev]);
       return summaryResult;
@@ -151,7 +175,11 @@ const MeetingSummarization = () => {
   // Load user summaries
   const loadUserSummaries = useCallback(async () => {
     try {
-      const userSummaries = await summarizationService.getUserSummaries();
+      const res = await fetch(`${BASE_URL}/user/summaries`, {
+        method: "GET",
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const userSummaries = await res.json();
       setSummaries(userSummaries);
     } catch (err) {
       setError('Failed to load summaries: ' + err.message);
@@ -161,7 +189,10 @@ const MeetingSummarization = () => {
   // Delete summary
   const deleteSummary = useCallback(async (meetingId) => {
     try {
-      await summarizationService.deleteSummary(meetingId);
+      const res = await fetch(`${BASE_URL}/meeting/${meetingId}/summary`, {
+        method: "DELETE",
+      });
+      if (!res.ok) throw new Error(await res.text());
       setSummaries(prev => prev.filter(s => s.meeting_id !== meetingId));
     } catch (err) {
       setError('Failed to delete summary: ' + err.message);
@@ -200,7 +231,7 @@ const MeetingSummarization = () => {
         {error && (
           <div className="mb-6 p-4 bg-red-900/50 border border-red-700 rounded-lg">
             <p className="text-red-200">{error}</p>
-            <button 
+            <button
               onClick={() => setError(null)}
               className="mt-2 text-red-300 hover:text-red-100 text-sm underline"
             >
@@ -223,12 +254,11 @@ const MeetingSummarization = () => {
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
-                  className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-all ${
-                    activeTab === tab.id 
-                      ? 'text-white shadow-md' 
-                      : 'text-gray-400 hover:text-gray-200 hover:bg-gray-700'
-                  }`}
-                  style={{ 
+                  className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-all ${activeTab === tab.id
+                    ? 'text-white shadow-md'
+                    : 'text-gray-400 hover:text-gray-200 hover:bg-gray-700'
+                    }`}
+                  style={{
                     backgroundColor: activeTab === tab.id ? '#8F74D4' : 'transparent'
                   }}
                 >
@@ -247,7 +277,7 @@ const MeetingSummarization = () => {
             <div className="space-y-6">
               <div className="bg-gray-800 p-6 rounded-lg border border-gray-700" style={{ backgroundColor: '#2A2A3E' }}>
                 <h3 className="text-lg font-semibold mb-4" style={{ color: '#F8FAFC' }}>Upload Meeting Audio</h3>
-                
+
                 <div className="space-y-4">
                   <div
                     onClick={() => fileInputRef.current?.click()}
@@ -335,7 +365,7 @@ const MeetingSummarization = () => {
                       onClick={analyzeMeeting}
                       disabled={isAnalyzing}
                       className="px-6 py-2 rounded-lg font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                      style={{ 
+                      style={{
                         backgroundColor: '#8F74D4',
                         color: '#F8FAFC'
                       }}
@@ -359,7 +389,7 @@ const MeetingSummarization = () => {
           {activeTab === 'record' && (
             <div className="bg-gray-800 p-6 rounded-lg border border-gray-700" style={{ backgroundColor: '#2A2A3E' }}>
               <h3 className="text-lg font-semibold mb-4" style={{ color: '#F8FAFC' }}>Record Meeting</h3>
-              
+
               <div className="text-center space-y-6">
                 <div className="flex items-center justify-center">
                   <div className={`w-32 h-32 rounded-full flex items-center justify-center ${isRecording ? 'bg-red-600' : 'bg-gray-700'} transition-colors`}>
@@ -381,7 +411,7 @@ const MeetingSummarization = () => {
                     <button
                       onClick={startRecording}
                       className="px-8 py-3 rounded-lg font-medium transition-all"
-                      style={{ 
+                      style={{
                         backgroundColor: '#8F74D4',
                         color: '#F8FAFC'
                       }}
@@ -447,11 +477,10 @@ const MeetingSummarization = () => {
                             )}
                           </div>
                         </div>
-                        <span className={`px-2 py-1 rounded text-xs font-medium ${
-                          item.priority === 'high' ? 'bg-red-900 text-red-200' :
+                        <span className={`px-2 py-1 rounded text-xs font-medium ${item.priority === 'high' ? 'bg-red-900 text-red-200' :
                           item.priority === 'medium' ? 'bg-yellow-900 text-yellow-200' :
-                          'bg-green-900 text-green-200'
-                        }`}>
+                            'bg-green-900 text-green-200'
+                          }`}>
                           {item.priority}
                         </span>
                       </div>
@@ -482,7 +511,7 @@ const MeetingSummarization = () => {
                 <button
                   onClick={loadUserSummaries}
                   className="px-4 py-2 rounded-lg font-medium transition-all"
-                  style={{ 
+                  style={{
                     backgroundColor: '#8F74D4',
                     color: '#F8FAFC'
                   }}

@@ -26,12 +26,23 @@ export default function CameraCapture() {
   async function startStream() {
     try {
       // First, send request to backend
-      const backendResponse = await fetch('/start_stream', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: 'someId' })
+      const backendResponse = await fetch("http://localhost:8000/camera/session/start", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          device_id: "default",
+          resolution: { width: 640, height: 480 },
+          fps: 30
+        }),
       });
-      
+
+      const data = await backendResponse.json();
+      if (!backendResponse.ok) throw new Error(data.detail || "Camera start failed");
+
+      // save session_id for later stop
+      localStorage.setItem("cameraSessionId", data.session_id);
+
+
       if (!backendResponse.ok) {
         throw new Error('Backend denied camera access');
       }
@@ -43,7 +54,7 @@ export default function CameraCapture() {
       setStream(mediaStream);
       if (videoRef.current) {
         videoRef.current.srcObject = mediaStream;
-        videoRef.current.play().catch(() => {});
+        videoRef.current.play().catch(() => { });
       }
       setRunning(true);
 
@@ -60,11 +71,13 @@ export default function CameraCapture() {
   async function stopStream() {
     try {
       // Send request to backend to stop camera
-      await fetch('/stopStream', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: 'someId' })
-      });
+      const sessionId = localStorage.getItem("cameraSessionId");
+      if (sessionId) {
+        await fetch(`http://localhost:8000/camera/session/stop/${sessionId}`, {
+          method: "POST",
+        });
+      }
+
     } catch (err) {
       console.error("Backend stop request failed:", err);
     }
@@ -87,8 +100,26 @@ export default function CameraCapture() {
       const b64 = await blobToBase64(frameBlob);
 
       // Expression detection (mock for now)
-      const expr = await detectExpression(b64);
+      // Expression detection using backend
+      const sessionId = localStorage.getItem("cameraSessionId");
+
+      const response = await fetch("http://localhost:8000/expression/detect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          session_id: sessionId,
+          frame_data: b64,
+          confidence_threshold: 0.6,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Expression detection failed");
+      }
+
+      const expr = await response.json();
       setExpression(expr);
+
 
       // Add to chat log
       setMessages((m) => [
@@ -131,15 +162,14 @@ export default function CameraCapture() {
               <p className="text-slate-400">Real-time facial expression analysis and AI response system</p>
             </div>
           </div>
-          
+
           <div className="flex items-center space-x-4">
-            <div className={`flex items-center space-x-2 px-4 py-2 rounded-full ${
-              running ? 'bg-green-600/20 text-green-400 border border-green-600/30' : 'bg-slate-700/50 text-slate-400 border border-slate-600'
-            }`}>
+            <div className={`flex items-center space-x-2 px-4 py-2 rounded-full ${running ? 'bg-green-600/20 text-green-400 border border-green-600/30' : 'bg-slate-700/50 text-slate-400 border border-slate-600'
+              }`}>
               <div className={`w-2 h-2 rounded-full ${running ? 'bg-green-500 animate-pulse' : 'bg-slate-500'}`}></div>
               <span className="text-sm font-medium">{running ? 'Camera Active' : 'Camera Inactive'}</span>
             </div>
-            
+
             {processing && (
               <div className="flex items-center space-x-2 px-4 py-2 bg-blue-600/20 text-blue-400 border border-blue-600/30 rounded-full">
                 <Activity size={16} className="animate-spin" />
@@ -151,10 +181,10 @@ export default function CameraCapture() {
 
         {/* Main Content Grid */}
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
-          
+
           {/* Camera Feed Section */}
           <div className="xl:col-span-2 grid grid-cols-1 lg:grid-cols-2 gap-6">
-            
+
             {/* Camera Controls & Feed */}
             <div className="bg-slate-800/50 backdrop-blur p-6 rounded-xl border border-slate-700">
               <div className="flex items-center justify-between mb-6">
@@ -162,21 +192,20 @@ export default function CameraCapture() {
                   <Camera className="mr-3" size={20} />
                   Camera Feed
                 </h3>
-                <div className={`px-3 py-1 text-xs font-medium rounded-full ${
-                  running ? 'bg-green-600 text-white' : 'bg-slate-600 text-slate-300'
-                }`}>
+                <div className={`px-3 py-1 text-xs font-medium rounded-full ${running ? 'bg-green-600 text-white' : 'bg-slate-600 text-slate-300'
+                  }`}>
                   {running ? 'LIVE' : 'OFFLINE'}
                 </div>
               </div>
-              
+
               {/* Video Container */}
               <div className="bg-slate-900/80 p-4 rounded-lg mb-6 relative overflow-hidden">
-                <video 
-                  ref={videoRef} 
+                <video
+                  ref={videoRef}
                   className="w-full h-48 bg-slate-800 rounded-lg object-cover"
-                  muted 
-                  playsInline 
-                  style={{ 
+                  muted
+                  playsInline
+                  style={{
                     display: running ? 'block' : 'none',
                   }}
                 />
@@ -188,7 +217,7 @@ export default function CameraCapture() {
                     </div>
                   </div>
                 )}
-                
+
                 {/* Processing Overlay */}
                 {processing && (
                   <div className="absolute inset-0 bg-blue-600/10 rounded-lg flex items-center justify-center">
@@ -202,13 +231,12 @@ export default function CameraCapture() {
 
               {/* Camera Controls */}
               <div className="grid grid-cols-1 gap-3">
-                <button 
+                <button
                   onClick={running ? stopStream : startStream}
-                  className={`flex items-center justify-center space-x-2 py-3 px-4 rounded-lg font-medium transition-all ${
-                    running 
-                      ? 'bg-red-600 hover:bg-red-700 text-white' 
-                      : 'bg-blue-600 hover:bg-blue-700 text-white'
-                  }`}
+                  className={`flex items-center justify-center space-x-2 py-3 px-4 rounded-lg font-medium transition-all ${running
+                    ? 'bg-red-600 hover:bg-red-700 text-white'
+                    : 'bg-blue-600 hover:bg-blue-700 text-white'
+                    }`}
                 >
                   {running ? (
                     <>
@@ -231,7 +259,7 @@ export default function CameraCapture() {
                 <Brain className="mr-3" size={20} />
                 Expression Analysis
               </h3>
-              
+
               <div className="bg-slate-900/80 p-6 rounded-lg">
                 {expression ? (
                   <div className="space-y-4">
@@ -247,7 +275,7 @@ export default function CameraCapture() {
                         <span className="text-slate-200 font-semibold">{expression.confidence}</span>
                       </div>
                     </div>
-                    
+
                     {/* Confidence Bar */}
                     <div className="space-y-2">
                       <div className="flex justify-between text-sm">
@@ -255,7 +283,7 @@ export default function CameraCapture() {
                         <span className="text-slate-300">{(parseFloat(expression.confidence) * 100).toFixed(0)}%</span>
                       </div>
                       <div className="w-full bg-slate-700 rounded-full h-2">
-                        <div 
+                        <div
                           className="bg-gradient-to-r from-purple-500 to-blue-500 h-2 rounded-full transition-all duration-500"
                           style={{ width: `${parseFloat(expression.confidence) * 100}%` }}
                         ></div>
@@ -286,7 +314,7 @@ export default function CameraCapture() {
                 {messages.length} messages
               </div>
             </h3>
-            
+
             <div className="bg-slate-900/80 rounded-lg min-h-96 max-h-96 overflow-y-auto p-4 space-y-3">
               {messages.length === 0 ? (
                 <div className="text-center py-12">
@@ -298,22 +326,19 @@ export default function CameraCapture() {
                 messages.map((message) => (
                   <div key={message.id} className="space-y-2">
                     <div className="flex items-center space-x-2">
-                      <div className={`w-2 h-2 rounded-full ${
-                        message.from === 'ai' ? 'bg-blue-500' : 
+                      <div className={`w-2 h-2 rounded-full ${message.from === 'ai' ? 'bg-blue-500' :
                         message.from === 'system' ? 'bg-purple-500' : 'bg-slate-500'
-                      }`}></div>
-                      <span className={`text-xs font-medium uppercase tracking-wider ${
-                        message.from === 'ai' ? 'text-blue-400' :
+                        }`}></div>
+                      <span className={`text-xs font-medium uppercase tracking-wider ${message.from === 'ai' ? 'text-blue-400' :
                         message.from === 'system' ? 'text-purple-400' : 'text-slate-400'
-                      }`}>
+                        }`}>
                         {message.from}
                       </span>
                     </div>
-                    <div className={`p-4 rounded-lg ${
-                      message.from === 'ai' ? 'bg-blue-600/10 border border-blue-600/20' :
+                    <div className={`p-4 rounded-lg ${message.from === 'ai' ? 'bg-blue-600/10 border border-blue-600/20' :
                       message.from === 'system' ? 'bg-purple-600/10 border border-purple-600/20' :
-                      'bg-slate-700/50 border border-slate-600/50'
-                    }`}>
+                        'bg-slate-700/50 border border-slate-600/50'
+                      }`}>
                       <p className="text-slate-200 text-sm leading-relaxed">{message.text}</p>
                     </div>
                   </div>

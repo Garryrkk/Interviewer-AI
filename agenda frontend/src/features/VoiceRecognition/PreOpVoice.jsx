@@ -1,11 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { AudioService } from './VoicePreoputils';
+const api = useRef(new VoiceProcessingAPI("http://localhost:8000"));
+const [supportedFormats, setSupportedFormats] = useState([]);
+const [calibrationStatus, setCalibrationStatus] = useState(null);
 
 // For demo purposes, we'll include the AudioService inline
 class AudioService {
   constructor() {
     this.baseURL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
-    this.apiPrefix = '/api/v1/audio';
+    this.apiPrefix = '/api/v1/direct/voice';
     this.defaultTimeout = 10000;
     this.transcriptionTimeout = 30000;
   }
@@ -13,7 +16,7 @@ class AudioService {
   async makeRequest(endpoint, options = {}) {
     const url = `${this.baseURL}${this.apiPrefix}${endpoint}`;
     const timeout = options.timeout || this.defaultTimeout;
-    
+
     const defaultOptions = {
       headers: {
         'Accept': 'application/json',
@@ -24,7 +27,7 @@ class AudioService {
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeout);
-    
+
     try {
       const response = await fetch(url, {
         ...defaultOptions,
@@ -42,19 +45,19 @@ class AudioService {
       if (contentType && contentType.includes('application/json')) {
         return await response.json();
       }
-      
+
       return await response.text();
     } catch (error) {
       clearTimeout(timeoutId);
-      
+
       if (error.name === 'AbortError') {
         throw new Error('Request timed out');
       }
-      
+
       if (error.message.includes('Failed to fetch')) {
         throw new Error('Unable to connect to audio service. Please check if the server is running.');
       }
-      
+
       throw error;
     }
   }
@@ -100,7 +103,7 @@ class AudioService {
 
     const formData = new FormData();
     formData.append('audio_file', audioFile);
-    
+
     const queryParams = new URLSearchParams({
       language,
       model_size: modelSize
@@ -146,6 +149,7 @@ const AudioTranscriptionApp = () => {
   const [transcriptionResult, setTranscriptionResult] = useState(null);
   const [testRecordingResult, setTestRecordingResult] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [supportedFormats, setSupportedFormats] = useState([]);
   const [error, setError] = useState(null);
   const [audioFile, setAudioFile] = useState(null);
   const [recordingTimer, setRecordingTimer] = useState(0);
@@ -170,13 +174,35 @@ const AudioTranscriptionApp = () => {
   const audioService = new AudioService();
 
   useEffect(() => {
-    checkCalibrationStatus();
+    const fetchData = async () => {
+      try {
+        // Fetch supported formats from backend
+        const formats = await api.current.getSupportedFormats();
+        if (formats && formats.supported_formats) {
+          setSupportedFormats(formats.supported_formats);
+        }
+
+        // Fetch calibration status from backend
+        const status = await api.current.getCalibrationStatus();
+        if (status) {
+          setCalibrationStatus(status);
+        }
+      } catch (err) {
+        console.error("Failed to fetch initial data:", err);
+        setError("Failed to connect to backend for supported formats or calibration status");
+      }
+    };
+
+    fetchData();
+
+    // Cleanup timer on unmount
     return () => {
       if (recordingTimerRef.current) {
         clearInterval(recordingTimerRef.current);
       }
     };
   }, []);
+
 
   const checkCalibrationStatus = async () => {
     try {
@@ -206,10 +232,10 @@ const AudioTranscriptionApp = () => {
     setLoading(true);
     setError(null);
     setIsRecording(true);
-    
+
     try {
       startRecordingTimer(calibrationSettings.duration);
-      const result = await audioService.calibrateAudio(calibrationSettings);
+      const result = await api.current.calibrateAudio(calibrationSettings);
       setCalibrationStatus(result);
       setIsCalibrated(true);
     } catch (err) {
@@ -227,7 +253,7 @@ const AudioTranscriptionApp = () => {
     setLoading(true);
     setError(null);
     setIsRecording(true);
-    
+
     try {
       startRecordingTimer(testSettings.duration);
       const result = await audioService.testRecording(testSettings);
@@ -262,8 +288,8 @@ const AudioTranscriptionApp = () => {
 
     try {
       const result = await audioService.transcribeAudio(
-        audioFile, 
-        transcriptionSettings.language, 
+        audioFile,
+        transcriptionSettings.language,
         transcriptionSettings.modelSize
       );
       setTranscriptionResult(result);
@@ -348,8 +374,8 @@ const AudioTranscriptionApp = () => {
                   {isRecording ? 'Recording in progress...' : 'Processing...'}
                 </div>
                 <div className="w-full bg-gray-700 rounded-full h-2 mt-2">
-                  <div 
-                    className="bg-purple-500 h-2 rounded-full transition-all duration-300 animate-pulse" 
+                  <div
+                    className="bg-purple-500 h-2 rounded-full transition-all duration-300 animate-pulse"
                     style={{ width: '45%' }}
                   ></div>
                 </div>
@@ -373,11 +399,10 @@ const AudioTranscriptionApp = () => {
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`px-6 py-3 rounded-lg font-medium transition-all duration-200 ${
-                activeTab === tab.id
-                  ? 'text-white shadow-lg'
-                  : 'text-gray-300 hover:text-white hover:bg-gray-700'
-              }`}
+              className={`px-6 py-3 rounded-lg font-medium transition-all duration-200 ${activeTab === tab.id
+                ? 'text-white shadow-lg'
+                : 'text-gray-300 hover:text-white hover:bg-gray-700'
+                }`}
               style={{
                 backgroundColor: activeTab === tab.id ? '#8F74D4' : 'transparent'
               }}
@@ -394,7 +419,7 @@ const AudioTranscriptionApp = () => {
             {activeTab === 'transcribe' && (
               <div className="bg-gray-800 p-6 rounded-lg">
                 <h2 className="text-xl font-semibold mb-4">Audio Transcription</h2>
-                
+
                 <div className="space-y-4">
                   {/* File Upload */}
                   <div>
@@ -498,7 +523,7 @@ const AudioTranscriptionApp = () => {
                           <button
                             onClick={() => {
                               const element = document.createElement('a');
-                              const file = new Blob([transcriptionResult.text], {type: 'text/plain'});
+                              const file = new Blob([transcriptionResult.text], { type: 'text/plain' });
                               element.href = URL.createObjectURL(file);
                               element.download = 'transcription.txt';
                               document.body.appendChild(element);
@@ -520,10 +545,10 @@ const AudioTranscriptionApp = () => {
             {activeTab === 'calibrate' && (
               <div className="bg-gray-800 p-6 rounded-lg">
                 <h2 className="text-xl font-semibold mb-4">Audio Calibration</h2>
-                
+
                 <div className="space-y-4">
                   <p className="text-gray-300 text-sm">
-                    Calibration measures background noise to optimize voice detection. 
+                    Calibration measures background noise to optimize voice detection.
                     Stay quiet during calibration for best results.
                   </p>
 
@@ -593,7 +618,7 @@ const AudioTranscriptionApp = () => {
             {activeTab === 'test' && (
               <div className="bg-gray-800 p-6 rounded-lg">
                 <h2 className="text-xl font-semibold mb-4">Test Recording</h2>
-                
+
                 <div className="space-y-4">
                   <p className="text-gray-300 text-sm">
                     Record a test clip to verify audio quality before transcription.
@@ -717,7 +742,7 @@ const AudioTranscriptionApp = () => {
                     <p className="font-medium text-green-400 mb-2">Transcribed Text:</p>
                     <p className="text-gray-200">{transcriptionResult.text}</p>
                   </div>
-                  
+
                   <div className="grid grid-cols-2 gap-4 text-xs">
                     <div className="space-y-1">
                       <div className="flex justify-between">

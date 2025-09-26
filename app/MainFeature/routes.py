@@ -3,6 +3,10 @@ from fastapi.responses import JSONResponse
 from typing import Optional, Dict, Any
 from datetime import datetime
 import uuid
+from fastapi import WebSocket, WebSocketDisconnect
+from datetime import datetime
+import asyncio
+
 
 from .schemas import (
     InvisibilityModeRequest,
@@ -503,3 +507,26 @@ async def list_all_performance_metrics(
     List all collected performance metrics (demo).
     """
     return _fake_metrics_store[:limit]
+
+@router.websocket("/ws")
+async def invisibility_ws(websocket: WebSocket):
+    """WebSocket endpoint for real-time invisibility updates"""
+    await websocket.accept()
+    try:
+        while True:
+            # (Optional) receive data
+            try:
+                await websocket.receive_text()
+            except Exception:
+                pass
+
+            # send a sample heartbeat / status
+            await websocket.send_json({
+                "type": "heartbeat",
+                "message": "Connection alive",
+                "timestamp": datetime.utcnow().isoformat()
+            })
+            await asyncio.sleep(2)
+
+    except WebSocketDisconnect:
+        return

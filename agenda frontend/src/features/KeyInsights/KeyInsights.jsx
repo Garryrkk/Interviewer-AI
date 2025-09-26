@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Upload, FileText, Brain, TrendingUp, Clock, Trash2, RefreshCw, Users, AlertCircle, CheckCircle } from 'lucide-react';
 
+const BASE_URL = "http://localhost:8000/api/v1/key-insights";
+
+
 const KeyInsightsDashboard = () => {
   const [meetingContext, setMeetingContext] = useState('');
   const [meetingId, setMeetingId] = useState('');
@@ -18,6 +21,8 @@ const KeyInsightsDashboard = () => {
   const [batchMode, setBatchMode] = useState(false);
   const [batchContexts, setBatchContexts] = useState(['']);
   const [batchIds, setBatchIds] = useState(['']);
+  const [insightTypes, setInsightTypes] = useState([]);
+  const [sampleInsight, setSampleInsight] = useState(null);
 
   // Clear error handler
   const clearError = () => {
@@ -44,11 +49,11 @@ const KeyInsightsDashboard = () => {
 
     try {
       let response;
-      
+
       if (selectedFile) {
         // Use FormData for file upload
         const formData = new FormData();
-        
+
         const requestData = {
           meeting_context: meetingContext || null,
           meeting_id: meetingId || null,
@@ -95,7 +100,7 @@ const KeyInsightsDashboard = () => {
       const data = await response.json();
       setInsights(data);
       setSuccessMessage('Insights generated successfully!');
-      
+
       // Start status polling
       if (data.insight_id) {
         pollAnalysisStatus(data.insight_id);
@@ -154,7 +159,7 @@ const KeyInsightsDashboard = () => {
   // Poll Analysis Status
   const pollAnalysisStatus = async (insightId) => {
     setStatusPolling(true);
-    
+
     const pollInterval = setInterval(async () => {
       try {
         const response = await fetch(`${BASE_URL}/status/${insightId}`);
@@ -211,7 +216,7 @@ const KeyInsightsDashboard = () => {
       const response = await fetch(`${BASE_URL}/insights/${insightId}`, {
         method: 'DELETE',
       });
-      
+
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
@@ -227,7 +232,7 @@ const KeyInsightsDashboard = () => {
   const batchAnalyzeInsights = async () => {
     const validContexts = batchContexts.filter(c => c.trim());
     const validIds = batchIds.filter(id => id.trim());
-    
+
     if (validContexts.length !== validIds.length || validContexts.length === 0) {
       setError('Please provide valid contexts and IDs for batch analysis. Each meeting must have both a context and an ID.');
       return;
@@ -274,6 +279,31 @@ const KeyInsightsDashboard = () => {
     setBatchIds(batchIds.filter((_, i) => i !== index));
   };
 
+  // Fetch available insight types
+  const fetchInsightTypes = async () => {
+    try {
+      const response = await fetch(`${BASE_URL}/types`);
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      const data = await response.json();
+      setInsightTypes(data);
+    } catch (err) {
+      setError(`Failed to fetch insight types: ${err.message}`);
+    }
+  };
+
+  // Fetch sample insight
+  const fetchSampleInsight = async () => {
+    try {
+      const response = await fetch(`${BASE_URL}/sample`);
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      const data = await response.json();
+      setSampleInsight(data);
+    } catch (err) {
+      setError(`Failed to fetch sample insight: ${err.message}`);
+    }
+  };
+
+
   // File upload handler
   const handleFileUpload = (event) => {
     const file = event.target.files[0];
@@ -284,11 +314,18 @@ const KeyInsightsDashboard = () => {
     }
   };
 
+  // On component mount, fetch available types + sample
+  useEffect(() => {
+    fetchInsightTypes();
+    fetchSampleInsight();
+  }, []);
+
+
   return (
-    <div style={{ 
-      minHeight: '100vh', 
-      backgroundColor: '#1E1E2F', 
-      color: '#F8FAFC', 
+    <div style={{
+      minHeight: '100vh',
+      backgroundColor: '#1E1E2F',
+      color: '#F8FAFC',
       fontFamily: 'Roboto, sans-serif',
       padding: '20px'
     }}>
@@ -300,11 +337,11 @@ const KeyInsightsDashboard = () => {
 
         {/* Success Message */}
         {successMessage && (
-          <div style={{ 
-            backgroundColor: '#d1fae5', 
-            color: '#065f46', 
-            padding: '12px', 
-            borderRadius: '8px', 
+          <div style={{
+            backgroundColor: '#d1fae5',
+            color: '#065f46',
+            padding: '12px',
+            borderRadius: '8px',
             marginBottom: '20px',
             display: 'flex',
             alignItems: 'center',
@@ -332,11 +369,11 @@ const KeyInsightsDashboard = () => {
 
         {/* Error Display */}
         {error && (
-          <div style={{ 
-            backgroundColor: '#fee2e2', 
-            color: '#dc2626', 
-            padding: '12px', 
-            borderRadius: '8px', 
+          <div style={{
+            backgroundColor: '#fee2e2',
+            color: '#dc2626',
+            padding: '12px',
+            borderRadius: '8px',
             marginBottom: '20px',
             display: 'flex',
             alignItems: 'center',
@@ -364,10 +401,10 @@ const KeyInsightsDashboard = () => {
 
         {/* Analysis Status */}
         {analysisStatus && (
-          <div style={{ 
-            backgroundColor: '#374151', 
-            padding: '16px', 
-            borderRadius: '12px', 
+          <div style={{
+            backgroundColor: '#374151',
+            padding: '16px',
+            borderRadius: '12px',
             marginBottom: '20px',
             border: '1px solid #4B5563'
           }}>
@@ -376,15 +413,15 @@ const KeyInsightsDashboard = () => {
               <span style={{ fontWeight: '600' }}>Analysis Status: {analysisStatus.status}</span>
               {statusPolling && <RefreshCw style={{ marginLeft: '10px', animation: 'spin 1s linear infinite' }} size={16} />}
             </div>
-            <div style={{ 
-              backgroundColor: '#1F2937', 
-              borderRadius: '8px', 
-              height: '8px', 
-              overflow: 'hidden' 
+            <div style={{
+              backgroundColor: '#1F2937',
+              borderRadius: '8px',
+              height: '8px',
+              overflow: 'hidden'
             }}>
-              <div style={{ 
-                backgroundColor: '#8F74D4', 
-                height: '100%', 
+              <div style={{
+                backgroundColor: '#8F74D4',
+                height: '100%',
                 width: `${analysisStatus.progress}%`,
                 transition: 'width 0.3s ease'
               }} />
@@ -416,10 +453,10 @@ const KeyInsightsDashboard = () => {
 
         {!batchMode ? (
           // Single Analysis Mode
-          <div style={{ 
-            backgroundColor: '#374151', 
-            padding: '24px', 
-            borderRadius: '16px', 
+          <div style={{
+            backgroundColor: '#374151',
+            padding: '24px',
+            borderRadius: '16px',
             marginBottom: '24px',
             border: '1px solid #4B5563'
           }}>
@@ -609,10 +646,10 @@ const KeyInsightsDashboard = () => {
           </div>
         ) : (
           // Batch Analysis Mode
-          <div style={{ 
-            backgroundColor: '#374151', 
-            padding: '24px', 
-            borderRadius: '16px', 
+          <div style={{
+            backgroundColor: '#374151',
+            padding: '24px',
+            borderRadius: '16px',
             marginBottom: '24px',
             border: '1px solid #4B5563'
           }}>
@@ -642,7 +679,7 @@ const KeyInsightsDashboard = () => {
                     </button>
                   )}
                 </div>
-                
+
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '12px' }}>
                   <input
                     type="text"
@@ -663,7 +700,7 @@ const KeyInsightsDashboard = () => {
                       fontSize: '14px'
                     }}
                   />
-                  
+
                   <textarea
                     value={context}
                     onChange={(e) => {
@@ -734,10 +771,10 @@ const KeyInsightsDashboard = () => {
 
         {/* Insights Display */}
         {insights && (
-          <div style={{ 
-            backgroundColor: '#374151', 
-            padding: '24px', 
-            borderRadius: '16px', 
+          <div style={{
+            backgroundColor: '#374151',
+            padding: '24px',
+            borderRadius: '16px',
             marginBottom: '24px',
             border: '1px solid #4B5563'
           }}>
@@ -746,7 +783,7 @@ const KeyInsightsDashboard = () => {
                 <CheckCircle style={{ marginRight: '8px', color: '#10B981' }} />
                 Generated Insights
               </h2>
-              
+
               <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
                 <select
                   value={simplificationLevel}
@@ -764,7 +801,7 @@ const KeyInsightsDashboard = () => {
                   <option value="moderate">Moderate Simplification</option>
                   <option value="heavy">Heavy Simplification</option>
                 </select>
-                
+
                 <button
                   onClick={simplifyInsights}
                   style={{
@@ -780,7 +817,7 @@ const KeyInsightsDashboard = () => {
                 >
                   Simplify
                 </button>
-                
+
                 <button
                   onClick={() => deleteInsights(insights.insight_id)}
                   style={{
@@ -798,11 +835,11 @@ const KeyInsightsDashboard = () => {
             </div>
 
             {/* Insights Meta Info */}
-            <div style={{ 
-              display: 'grid', 
-              gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', 
-              gap: '16px', 
-              marginBottom: '20px' 
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+              gap: '16px',
+              marginBottom: '20px'
             }}>
               <div style={{ backgroundColor: '#1F2937', padding: '12px', borderRadius: '8px' }}>
                 <div style={{ fontSize: '12px', color: '#9CA3AF', marginBottom: '4px' }}>Insight ID</div>
@@ -834,9 +871,9 @@ const KeyInsightsDashboard = () => {
               </h3>
               <div style={{ display: 'grid', gap: '12px' }}>
                 {(insights.simplified_insights || insights.key_insights)?.map((insight, index) => (
-                  <div key={index} style={{ 
-                    backgroundColor: '#1F2937', 
-                    padding: '16px', 
+                  <div key={index} style={{
+                    backgroundColor: '#1F2937',
+                    padding: '16px',
                     borderRadius: '8px',
                     borderLeft: '4px solid #8F74D4'
                   }}>
@@ -859,9 +896,9 @@ const KeyInsightsDashboard = () => {
               </h3>
               <div style={{ display: 'grid', gap: '12px' }}>
                 {(insights.simplified_tips || insights.situation_tips)?.map((tip, index) => (
-                  <div key={index} style={{ 
-                    backgroundColor: '#1F2937', 
-                    padding: '16px', 
+                  <div key={index} style={{
+                    backgroundColor: '#1F2937',
+                    padding: '16px',
                     borderRadius: '8px',
                     borderLeft: '4px solid #10B981'
                   }}>
@@ -879,9 +916,9 @@ const KeyInsightsDashboard = () => {
 
         {/* History Display */}
         {insightsHistory.length > 0 && (
-          <div style={{ 
-            backgroundColor: '#374151', 
-            padding: '24px', 
+          <div style={{
+            backgroundColor: '#374151',
+            padding: '24px',
             borderRadius: '16px',
             border: '1px solid #4B5563'
           }}>
@@ -889,12 +926,12 @@ const KeyInsightsDashboard = () => {
               <Clock style={{ marginRight: '8px' }} />
               Insights History
             </h2>
-            
+
             <div style={{ display: 'grid', gap: '16px' }}>
               {insightsHistory.map((item, index) => (
-                <div key={index} style={{ 
-                  backgroundColor: '#1F2937', 
-                  padding: '16px', 
+                <div key={index} style={{
+                  backgroundColor: '#1F2937',
+                  padding: '16px',
                   borderRadius: '8px',
                   display: 'flex',
                   justifyContent: 'space-between',
@@ -908,7 +945,7 @@ const KeyInsightsDashboard = () => {
                       Insights: {item.insights_count} | Tips: {item.tips_count}
                     </div>
                   </div>
-                  
+
                   <button
                     onClick={() => deleteInsights(item.insight_id)}
                     style={{
@@ -930,9 +967,9 @@ const KeyInsightsDashboard = () => {
 
         {/* Batch Results Display */}
         {insights?.batch_results && (
-          <div style={{ 
-            backgroundColor: '#374151', 
-            padding: '24px', 
+          <div style={{
+            backgroundColor: '#374151',
+            padding: '24px',
             borderRadius: '16px',
             marginTop: '24px',
             border: '1px solid #4B5563'
@@ -941,20 +978,20 @@ const KeyInsightsDashboard = () => {
               <TrendingUp style={{ marginRight: '8px' }} />
               Batch Analysis Results
             </h2>
-            
+
             <div style={{ display: 'grid', gap: '16px' }}>
               {insights.batch_results.map((result, index) => (
-                <div key={index} style={{ 
-                  backgroundColor: result.status === 'success' ? '#1F2937' : '#7F1D1D', 
-                  padding: '16px', 
+                <div key={index} style={{
+                  backgroundColor: result.status === 'success' ? '#1F2937' : '#7F1D1D',
+                  padding: '16px',
                   borderRadius: '8px',
                   borderLeft: `4px solid ${result.status === 'success' ? '#10B981' : '#EF4444'}`
                 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                     <span style={{ fontWeight: '600' }}>Meeting ID: {result.meeting_id}</span>
-                    <span style={{ 
-                      fontSize: '12px', 
-                      padding: '4px 8px', 
+                    <span style={{
+                      fontSize: '12px',
+                      padding: '4px 8px',
                       borderRadius: '12px',
                       backgroundColor: result.status === 'success' ? '#10B981' : '#EF4444',
                       color: '#F8FAFC'
@@ -962,17 +999,17 @@ const KeyInsightsDashboard = () => {
                       {result.status.toUpperCase()}
                     </span>
                   </div>
-                  
+
                   {result.status === 'success' && result.insights && (
                     <div>
                       <div style={{ fontSize: '14px', color: '#9CA3AF', marginBottom: '8px' }}>
-                        Insights: {result.insights.key_insights?.length || 0} | 
+                        Insights: {result.insights.key_insights?.length || 0} |
                         Tips: {result.insights.situation_tips?.length || 0} |
                         Confidence: {((result.insights.confidence_score || 0) * 100).toFixed(1)}%
                       </div>
                     </div>
                   )}
-                  
+
                   {result.status === 'error' && (
                     <div style={{ fontSize: '14px', color: '#FCA5A5' }}>
                       Error: {result.error}
@@ -985,9 +1022,9 @@ const KeyInsightsDashboard = () => {
         )}
 
         {/* API Configuration */}
-        <div style={{ 
-          backgroundColor: '#374151', 
-          padding: '20px', 
+        <div style={{
+          backgroundColor: '#374151',
+          padding: '20px',
           borderRadius: '12px',
           marginTop: '24px',
           border: '1px solid #4B5563'
@@ -1007,6 +1044,32 @@ const KeyInsightsDashboard = () => {
               <li>POST /batch-analyze - Batch analysis</li>
             </ul>
           </div>
+          {/* Insight Types */}
+          {insightTypes.length > 0 && (
+            <div style={{ marginTop: '16px' }}>
+              <h4 style={{ fontWeight: '600', marginBottom: '8px' }}>Available Insight Types</h4>
+              <ul style={{ marginLeft: '20px' }}>
+                {insightTypes.map((t, idx) => (
+                  <li key={idx}>{t}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {/* Sample Insight */}
+          {sampleInsight && (
+            <div style={{ marginTop: '16px' }}>
+              <h4 style={{ fontWeight: '600', marginBottom: '8px' }}>Sample Insight</h4>
+              <pre style={{
+                backgroundColor: '#1F2937',
+                padding: '12px',
+                borderRadius: '8px',
+                overflowX: 'auto'
+              }}>
+                {JSON.stringify(sampleInsight, null, 2)}
+              </pre>
+            </div>
+          )}
         </div>
 
         {/* Footer */}
@@ -1043,5 +1106,4 @@ const KeyInsightsDashboard = () => {
   );
 };
 
-export default KeyInsightsDashboard;Generated: {new Date(item.generated_at).toLocaleString()}
-                    
+export default KeyInsightsDashboard; Generated: { new Date(item.generated_at).toLocaleString() }

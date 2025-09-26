@@ -82,14 +82,61 @@ const HandsFreeInterviewSystem = () => {
     }
   };
 
+  // Get session status
+  const getSessionStatus = async () => {
+    if (!sessionId) return;
+    try {
+      const response = await fetch(`${API_BASE}/session/${sessionId}/status`);
+      if (response.ok) {
+        const status = await response.json();
+        setSessionStatus(status.status); // or set other details if needed
+      }
+    } catch (error) {
+      console.error("Failed to fetch session status:", error);
+    }
+  };
+
+  // Update settings
+  const updateSettings = async (newSettings) => {
+    if (!sessionId) return;
+    try {
+      const response = await fetch(`${API_BASE}/session/${sessionId}/settings`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newSettings),
+      });
+      if (response.ok) {
+        const result = await response.json();
+        setSettings(result.settings);
+      }
+    } catch (error) {
+      console.error("Failed to update settings:", error);
+    }
+  };
+
+  // Get insights manually (without stopping session)
+  const fetchInsights = async () => {
+    if (!sessionId) return;
+    try {
+      const response = await fetch(`${API_BASE}/session/${sessionId}/insights`);
+      if (response.ok) {
+        const insights = await response.json();
+        setSessionInsights(insights);
+      }
+    } catch (error) {
+      console.error("Failed to fetch insights:", error);
+    }
+  };
+
+
   // Initialize WebSocket connections
   const initializeWebSockets = async () => {
     // Audio WebSocket
     audioWsRef.current = new WebSocket(`ws://localhost:8000/hands-free/session/${sessionId}/audio-stream`);
-    
+
     audioWsRef.current.onmessage = (event) => {
       const data = JSON.parse(event.data);
-      
+
       if (data.type === 'automated_response') {
         setCurrentQuestion(data.question);
         setCurrentResponse(data.response);
@@ -104,7 +151,7 @@ const HandsFreeInterviewSystem = () => {
 
     // Video WebSocket
     videoWsRef.current = new WebSocket(`ws://localhost:8000/hands-free/session/${sessionId}/video-analysis`);
-    
+
     videoWsRef.current.onmessage = (event) => {
       const data = JSON.parse(event.data);
       setFacialAnalysis(data.facial_analysis);
@@ -115,7 +162,7 @@ const HandsFreeInterviewSystem = () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const mediaRecorder = new MediaRecorder(stream);
-      
+
       mediaRecorder.ondataavailable = (event) => {
         if (audioWsRef.current?.readyState === WebSocket.OPEN) {
           audioWsRef.current.send(event.data);
@@ -140,13 +187,13 @@ const HandsFreeInterviewSystem = () => {
       // Send video frames for analysis
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d');
-      
+
       const sendFrame = () => {
         if (videoRef.current && videoWsRef.current?.readyState === WebSocket.OPEN) {
           canvas.width = videoRef.current.videoWidth;
           canvas.height = videoRef.current.videoHeight;
           ctx.drawImage(videoRef.current, 0, 0);
-          
+
           canvas.toBlob((blob) => {
             if (blob && videoWsRef.current?.readyState === WebSocket.OPEN) {
               videoWsRef.current.send(blob);
@@ -209,7 +256,7 @@ const HandsFreeInterviewSystem = () => {
       audioWsRef.current?.close();
       videoWsRef.current?.close();
       streamRef.current?.getTracks().forEach(track => track.stop());
-      
+
       setSessionId(null);
       setHandsFreeActive(false);
       setSessionStatus('inactive');
@@ -265,9 +312,8 @@ const HandsFreeInterviewSystem = () => {
               <span className="font-medium">{sessionStatus.replace('_', ' ').toUpperCase()}</span>
             </div>
             {systemHealth && (
-              <div className={`flex items-center space-x-2 ${
-                systemHealth.overall_status === 'healthy' ? 'text-green-400' : 'text-yellow-400'
-              }`}>
+              <div className={`flex items-center space-x-2 ${systemHealth.overall_status === 'healthy' ? 'text-green-400' : 'text-yellow-400'
+                }`}>
                 <Heart className="w-5 h-5" />
                 <span>System {systemHealth.overall_status}</span>
               </div>
@@ -373,7 +419,7 @@ const HandsFreeInterviewSystem = () => {
               <div className="bg-gray-800 rounded-2xl p-6 border border-gray-700">
                 <h2 className="text-xl font-semibold mb-4 text-white">Audio Level</h2>
                 <div className="w-full bg-gray-700 rounded-full h-4">
-                  <div 
+                  <div
                     className="bg-purple-600 h-4 rounded-full transition-all duration-200"
                     style={{ width: `${audioLevel * 100}%` }}
                   ></div>
@@ -417,7 +463,7 @@ const HandsFreeInterviewSystem = () => {
             {handsFreeActive && (
               <div className="bg-gray-800 rounded-2xl p-6 border border-gray-700">
                 <h2 className="text-xl font-semibold mb-4 text-white">Current Interview</h2>
-                
+
                 {currentQuestion && (
                   <div className="mb-6">
                     <h3 className="text-lg font-medium text-purple-400 mb-2">Question:</h3>
@@ -434,7 +480,7 @@ const HandsFreeInterviewSystem = () => {
                       </div>
                     </div>
                     <p className="text-gray-200 bg-gray-700 rounded-lg p-4 mb-4">{currentResponse}</p>
-                    
+
                     {keyInsights.length > 0 && (
                       <div>
                         <h4 className="text-md font-medium text-blue-400 mb-2">Key Insights:</h4>
@@ -466,13 +512,12 @@ const HandsFreeInterviewSystem = () => {
                 <h2 className="text-xl font-semibold mb-4 text-white">Confidence Tips</h2>
                 <div className="space-y-3">
                   {confidenceTips.map((tip, index) => (
-                    <div 
+                    <div
                       key={index}
-                      className={`p-4 rounded-lg border-l-4 ${
-                        tip.priority === 'high' ? 'bg-red-900 border-red-500' :
-                        tip.priority === 'medium' ? 'bg-yellow-900 border-yellow-500' :
-                        'bg-green-900 border-green-500'
-                      }`}
+                      className={`p-4 rounded-lg border-l-4 ${tip.priority === 'high' ? 'bg-red-900 border-red-500' :
+                          tip.priority === 'medium' ? 'bg-yellow-900 border-yellow-500' :
+                            'bg-green-900 border-green-500'
+                        }`}
                     >
                       <div className="font-medium text-white mb-1">{tip.tip_type.replace('_', ' ').toUpperCase()}</div>
                       <p className="text-gray-200">{tip.message}</p>
