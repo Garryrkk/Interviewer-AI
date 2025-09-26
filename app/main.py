@@ -9,6 +9,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.exception_handlers import http_exception_handler
 from fastapi.exceptions import RequestValidationError, ResponseValidationError
 import uvicorn
+from fastapi import Query
 from typing import Dict, Any, List, Optional
 import time
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -19,9 +20,11 @@ import uuid
 from datetime import datetime
 import requests
 import os
-import aioredis
+import redis
 import asyncpg
-from .db.connection import (
+from redis import asyncio as redis  # ✅ new import
+from redis.asyncio.client import Redis  # for type-hinting if you want it
+from app.db.connection import (
     create_database_connection,
     create_redis_connection,
     create_file_storage_connection,
@@ -29,7 +32,9 @@ from .db.connection import (
 )
 from typing import Any
 from motor.motor_asyncio import AsyncIOMotorClient   # if you use Mongo/GridFS for file storage
-from chromadb import AsyncClient  
+from chromadb import Client
+import functools
+  
 
 from fastapi import APIRouter  # <-- this imports APIRouter
 router = APIRouter(prefix="/camera", tags=["Camera"],)
@@ -222,21 +227,16 @@ from app.voice_recognition.services import (
     AudioService
 )
 
-from app.key_insights.services import (
-    KeyInsightsService,
-    extract_key_insights
-)
+from app.key_insights.services import KeyInsightsService
+
 
 from app.handFree.service import (
-    HandsFreeService,
-    generate_handsfree_response_async
-)
+    HandsFreeService)  
 
 from app.image_recognition.service import(
     CameraService,
     ExpressionDetectionService,
     ChatService,
-    PermissionService,
     ScreenRecordingService,
     AIAnalysisService
 )
@@ -249,7 +249,7 @@ from app.MainFeature.service import(
     InvisibilityService,
 )
 
-# Configure logging
+# Configure logging  
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
@@ -269,14 +269,19 @@ async def create_database_connection():
         logger.warning(f"Database connection failed: {e}. Using in-memory storage.")
         return None
 
-async def create_redis_connection():
-    """Create Redis connection for caching"""
-    try:
-        redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
-        return await aioredis.from_url(redis_url)
-    except Exception as e:
-        logger.warning(f"Redis connection failed: {e}. Caching disabled.")
-        return None
+
+UPSTASH_REDIS_URL = "your-upstash-url"  # e.g. "redis://default:pass@host:port"
+
+async def create_redis_connection() -> Redis:
+    r = redis.from_url(
+        UPSTASH_REDIS_URL,
+        encoding="utf-8",
+        decode_responses=True
+    )
+    # Simple connectivity check
+    await r.ping()
+    print("✅ Connected to Redis!")
+    return r
 
 async def create_file_storage_connection():
     """Create file storage connection"""
@@ -2899,11 +2904,11 @@ async def get_confidence_tips():
     return []
 
 # --- AudioStreamresult ---
-@router.post("/audio-stream-result/", response_model=AudioStreamresult)
-async def create_audio_stream_result(result: AudioStreamresult):
+@router.post("/audio-stream-result/", response_model=AudioStreamResult)
+async def create_audio_stream_result(result: AudioStreamResult):
     return result
 
-@router.get("/audio-stream-result/", response_model=List[AudioStreamresult])
+@router.get("/audio-stream-result/", response_model=List[AudioStreamResult])
 async def get_audio_stream_results():
     return []
 
