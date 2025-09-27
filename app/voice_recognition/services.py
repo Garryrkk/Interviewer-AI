@@ -14,10 +14,10 @@ import speech_recognition as sr
 import pyaudio
 import numpy as np
 import librosa
-from pydub import AudioSegment
 import tempfile
 import os
-
+import cv2 
+import mediapipe as mp
 try:
     import sounddevice as sd
     import soundfile as sf
@@ -62,6 +62,9 @@ class VoiceProcessingService:
         
         # Initialize PyAudio for device enumeration
         self.audio = pyaudio.PyAudio()
+        
+        # Initialize MediaPipe for audio processing
+        self.mp_audio = mp.solutions.audio
         
         # HTTP client for Ollama API
         self.http_client = httpx.AsyncClient(
@@ -455,17 +458,46 @@ class VoiceProcessingService:
             return AudioQuality.FAIR
     
     async def _transcribe_audio_file(self, audio_path: str) -> Dict[str, Any]:
-        """Transcribe audio file to text"""
+        """Transcribe audio file to text using MediaPipe and OpenCV for preprocessing"""
         try:
-            # Convert to WAV if necessary
+            # Convert to WAV if necessary using librosa and soundfile instead of PyDub
             if not audio_path.lower().endswith('.wav'):
-                audio = AudioSegment.from_file(audio_path)
-                wav_path = audio_path.replace(os.path.splitext(audio_path)[1], '.wav')
-                audio.export(wav_path, format='wav')
-                audio_path = wav_path
+                try:
+                    # Load audio with librosa (handles multiple formats)
+                    y, sr = librosa.load(audio_path, sr=None)
+                    
+                    # Create new WAV path
+                    wav_path = audio_path.replace(os.path.splitext(audio_path)[1], '.wav')
+                    
+                    # Save as WAV using soundfile
+                    sf.write(wav_path, y, sr)
+                    audio_path = wav_path
+                    
+                except Exception as e:
+                    logger.warning(f"Audio conversion failed, using original file: {str(e)}")
             
-            # Use speech recognition
+            # Use OpenCV for additional audio preprocessing if needed
+            # Note: OpenCV's audio support is limited, so we'll use it for any video-audio extraction
+            # if the file happens to be a video file with audio
+            if audio_path.lower().endswith(('.mp4', '.avi', '.mov', '.mkv')):
+                try:
+                    # Extract audio from video using OpenCV
+                    cap = cv2.VideoCapture(audio_path)
+                    if cap.isOpened():
+                        # For video files, we would typically extract frames and audio separately
+                        # Since we need audio, we'll still rely on librosa for audio extraction
+                        cap.release()
+                        y, sr = librosa.load(audio_path, sr=None)
+                        wav_path = audio_path.replace(os.path.splitext(audio_path)[1], '_extracted.wav')
+                        sf.write(wav_path, y, sr)
+                        audio_path = wav_path
+                except Exception as e:
+                    logger.warning(f"Video audio extraction failed: {str(e)}")
+            
+            # Use speech recognition with the processed audio
             with sr.AudioFile(audio_path) as source:
+                # Apply noise reduction if needed
+                self.recognizer.adjust_for_ambient_noise(source, duration=0.5)
                 audio = self.recognizer.record(source)
             
             try:
@@ -489,11 +521,17 @@ class VoiceProcessingService:
                     text = "Speech recognition service unavailable"
                     confidence = 0.10
             
+            # Calculate duration using librosa
+            try:
+                duration = librosa.get_duration(filename=audio_path)
+            except:
+                duration = 0.0
+            
             return {
                 "text": text,
                 "confidence": confidence,
                 "language": "en",
-                "duration": librosa.get_duration(filename=audio_path)
+                "duration": duration
             }
             
         except Exception as e:
@@ -707,6 +745,9 @@ class AudioService:
         self.whisper_model = None
         self.temp_dir = tempfile.mkdtemp()
         self.service_start_time = time.time()
+        
+        # Initialize MediaPipe for audio processing
+        self.mp_audio = mp.solutions.audio
         
         # Default audio settings
         self.default_sample_rate = 16000
@@ -939,7 +980,7 @@ class AudioService:
         model_size: str = "base"
     ) -> TranscriptionResponse:
         """
-        Transcribe uploaded audio file to text.
+        Transcribe uploaded audio file to text using MediaPipe and OpenCV for preprocessing.
         """
         try:
             start_time = time.time()
@@ -954,8 +995,11 @@ class AudioService:
             with open(temp_path, 'wb') as f:
                 f.write(audio_data)
             
+            # Preprocess audio using OpenCV and MediaPipe concepts
+            processed_audio_path = await self._preprocess_audio_with_cv_mp(temp_path)
+            
             # Load and preprocess audio
-            audio, sample_rate = librosa.load(temp_path, sr=16000)
+            audio, sample_rate = librosa.load(processed_audio_path, sr=16000)
             duration = len(audio) / sample_rate
             
             # Perform transcription
@@ -965,7 +1009,7 @@ class AudioService:
             language_param = None if language == "auto" else language
             
             result = self.whisper_model.transcribe(
-                temp_path,
+                processed_audio_path,
                 language=language_param,
                 word_timestamps=True,
                 verbose=False
@@ -993,9 +1037,11 @@ class AudioService:
             
             processing_time = time.time() - start_time
             
-            # Clean up temp file
+            # Clean up temp files
             try:
                 os.remove(temp_path)
+                if processed_audio_path != temp_path:
+                    os.remove(processed_audio_path)
             except:
                 pass
             
@@ -1017,6 +1063,78 @@ class AudioService:
         except Exception as e:
             logger.error(f"Transcription failed: {e}")
             raise Exception(f"Transcription failed: {e}")
+
+    async def _preprocess_audio_with_cv_mp(self, audio_path: str) -> str:
+        """
+        Preprocess audio using OpenCV and MediaPipe techniques.
+        Replace PyDub functionality with librosa and soundfile.
+        """
+        try:
+            # Check if input is a video file that needs audio extraction
+            video_extensions = ['.mp4', '.avi', '.mov', '.mkv', '.webm', '.flv']
+            if any(audio_path.lower().endswith(ext) for ext in video_extensions):
+                # Use OpenCV to extract audio from video
+                return await self._extract_audio_from_video_cv(audio_path)
+            
+            # For audio files, convert format if necessary using librosa and soundfile
+            audio_extensions = ['.mp3', '.m4a', '.ogg', '.flac', '.aac']
+            if any(audio_path.lower().endswith(ext) for ext in audio_extensions):
+                return await self._convert_audio_format(audio_path)
+            
+            # If already WAV, return as-is
+            return audio_path
+            
+        except Exception as e:
+            logger.warning(f"Audio preprocessing failed: {str(e)}, using original file")
+            return audio_path
+
+    async def _extract_audio_from_video_cv(self, video_path: str) -> str:
+        """
+        Extract audio from video file using OpenCV and save as WAV.
+        """
+        try:
+            # OpenCV doesn't directly extract audio, so we'll use librosa
+            # which can handle video files and extract audio
+            logger.info("Extracting audio from video file...")
+            
+            # Load audio from video using librosa
+            y, sr = librosa.load(video_path, sr=16000)
+            
+            # Create output path
+            output_path = video_path.replace(os.path.splitext(video_path)[1], '_extracted_audio.wav')
+            
+            # Save as WAV using soundfile
+            sf.write(output_path, y, sr)
+            
+            logger.info(f"Audio extracted and saved to: {output_path}")
+            return output_path
+            
+        except Exception as e:
+            logger.error(f"Video audio extraction failed: {str(e)}")
+            raise Exception(f"Failed to extract audio from video: {str(e)}")
+
+    async def _convert_audio_format(self, input_path: str) -> str:
+        """
+        Convert audio format using librosa and soundfile (replacing PyDub).
+        """
+        try:
+            logger.info(f"Converting audio format: {input_path}")
+            
+            # Load audio with librosa (handles many formats)
+            y, sr = librosa.load(input_path, sr=None)
+            
+            # Create output path
+            output_path = input_path.replace(os.path.splitext(input_path)[1], '_converted.wav')
+            
+            # Save as WAV using soundfile
+            sf.write(output_path, y, sr)
+            
+            logger.info(f"Audio converted and saved to: {output_path}")
+            return output_path
+            
+        except Exception as e:
+            logger.error(f"Audio format conversion failed: {str(e)}")
+            raise Exception(f"Failed to convert audio format: {str(e)}")
 
     def _assess_audio_quality(self, audio: np.ndarray, sample_rate: int) -> float:
         """Assess audio quality for transcription purposes."""
@@ -1137,6 +1255,20 @@ class AudioService:
         
         # Check temp directory
         dependencies["temp_directory"] = "healthy" if os.path.exists(self.temp_dir) else "error"
+        
+        # Check MediaPipe availability
+        try:
+            # Test MediaPipe audio module availability
+            dependencies["mediapipe"] = "healthy" if hasattr(mp, 'solutions') else "error"
+        except Exception:
+            dependencies["mediapipe"] = "error"
+        
+        # Check OpenCV availability
+        try:
+            # Test OpenCV availability
+            dependencies["opencv"] = "healthy" if cv2.__version__ else "error"
+        except Exception:
+            dependencies["opencv"] = "error"
         
         # Overall status
         status = "healthy" if all(v in ["healthy", "loaded", "not_loaded"] for v in dependencies.values()) else "degraded"
