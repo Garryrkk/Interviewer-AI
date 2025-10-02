@@ -298,6 +298,79 @@ class SummarizationService:
             logger.error(f"Error in real-time analysis: {str(e)}")
             raise
 
+    async def create_summarization_response(
+        self,
+        summary_id: str,
+        meeting_id: Optional[str],
+        summary_type: SummaryType,
+        summary_text: str,
+        key_points: List[str] = None,
+        action_items: List[ActionItem] = None,
+        next_steps: List[str] = None,
+        participants: Optional[List[str]] = None,
+        topics_discussed: List[str] = None,
+        decisions_made: List[str] = None,
+        questions_raised: List[str] = None,
+        meeting_effectiveness_score: Optional[float] = None,
+        word_count: int = 0,
+        summary_ratio: Optional[float] = None
+    ) -> SummarizationResponse:
+        """Create a SummarizationResponse object"""
+        try:
+            return SummarizationResponse(
+                summary_id=summary_id,
+                meeting_id=meeting_id,
+                summary_type=summary_type,
+                summary_text=summary_text,
+                key_points=key_points or [],
+                action_items=action_items or [],
+                next_steps=next_steps or [],
+                participants=participants,
+                topics_discussed=topics_discussed or [],
+                decisions_made=decisions_made or [],
+                questions_raised=questions_raised or [],
+                meeting_effectiveness_score=meeting_effectiveness_score,
+                created_at=datetime.utcnow(),
+                updated_at=None,
+                word_count=word_count,
+                summary_ratio=summary_ratio
+            )
+        except Exception as e:
+            logger.error(f"Error creating SummarizationResponse: {str(e)}")
+            raise
+
+    async def create_meeting_analysis_response(
+        self,
+        analysis_id: str,
+        meeting_id: Optional[str],
+        summary: str,
+        key_points: List[KeyPoint] = None,
+        action_items: List[ActionItem] = None,
+        sentiment_analysis: Optional[Dict[str, Any]] = None,
+        speaker_insights: Optional[Dict[str, Any]] = None,
+        recommendations: List[str] = None,
+        confidence_score: float = 0.0,
+        processing_time: Optional[float] = None
+    ) -> MeetingAnalysisResponse:
+        """Create a MeetingAnalysisResponse object"""
+        try:
+            return MeetingAnalysisResponse(
+                analysis_id=analysis_id,
+                meeting_id=meeting_id,
+                summary=summary,
+                key_points=key_points or [],
+                action_items=action_items or [],
+                sentiment_analysis=sentiment_analysis,
+                speaker_insights=speaker_insights,
+                recommendations=recommendations or [],
+                confidence_score=confidence_score,
+                analysis_timestamp=datetime.utcnow(),
+                processing_time=processing_time
+            )
+        except Exception as e:
+            logger.error(f"Error creating MeetingAnalysisResponse: {str(e)}")
+            raise
+
     async def _transcribe_audio(self, audio_file_path: str) -> str:
         """Transcribe audio file to text"""
         try:
