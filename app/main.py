@@ -39,9 +39,6 @@ import functools
   
 
 from fastapi import APIRouter  # <-- this imports APIRouter
-router = APIRouter(prefix="/camera", tags=["Camera"],)
-router = APIRouter(prefix="/expression", tags=["Expression"])
-
 
 import os
 
@@ -912,22 +909,12 @@ app = FastAPI(
 # FIXED: Frontend Integration with Fallback
 # ==============================================
 
-frontend_dist = Path(__file__).parent.parent / "agenda frontend" / "dist"
+# Move this BEFORE app definition, after all routers are included
+# Move this BEFORE app definition, after all routers are included
+frontend_dist = Path(__file__).parent / "frontend" / "dist"
 
-# Mount the static frontend if it exists with fallback
 if frontend_dist.exists() and frontend_dist.is_dir():
-    try:
-        app.mount(
-            "/",
-            StaticFiles(directory=frontend_dist, html=True),
-            name="frontend"
-        )
-        logger.info("Frontend static files mounted successfully")
-    except Exception as e:
-        logger.warning(f"Failed to mount frontend: {e}")
-else:
-    logger.info("Frontend directory not found, serving API only")
-
+    app.mount("/", StaticFiles(directory=frontend_dist, html=True), name="frontend")
 # Define allowed origins and trusted hosts
 allowed_origins = [
     "http://localhost:5173",    # Vite dev
@@ -1004,6 +991,2013 @@ app.include_router(main_feature_router)
 # HEALTH CHECK ENDPOINTS
 # ============================================================================
 
+
+################ INVISIBLITY############
+
+invisibility_service = InvisibilityService()
+
+
+# Health Check Endpoint
+@app.get("/health")
+async def health_check():
+    """Check service health status."""
+    return await invisibility_service.health_check()
+
+
+# Session Management Endpoints
+@app.post("/api/v1/invisibility/sessions/enable")
+async def enable_invisibility_mode(
+    recording_config: RecordingConfig,
+    ui_config: UIConfig,
+    security_config: SecurityConfig
+):
+    """Enable invisibility mode for a new session."""
+    try:
+        session_id = str(uuid.uuid4())
+        result = await invisibility_service.enable_invisibility_mode(
+            session_id=session_id,
+            recording_config=recording_config,
+            ui_config=ui_config,
+            security_config=security_config
+        )
+        return JSONResponse(
+            status_code=201,
+            content={
+                "success": True,
+                "session_id": session_id,
+                "data": result
+            }
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/v1/invisibility/sessions/{session_id}/disable")
+async def disable_invisibility_mode(session_id: str):
+    """Disable invisibility mode for a session."""
+    try:
+        result = await invisibility_service.disable_invisibility_mode(session_id)
+        return JSONResponse(
+            status_code=200,
+            content={
+                "success": True,
+                "session_id": session_id,
+                "data": result
+            }
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/v1/invisibility/sessions/{session_id}/status")
+async def get_session_status(session_id: str):
+    """Get current status of an invisibility session."""
+    try:
+        status = await invisibility_service.get_session_status(session_id)
+        if status is None:
+            raise HTTPException(status_code=404, detail="Session not found")
+        
+        return JSONResponse(
+            status_code=200,
+            content={
+                "success": True,
+                "session_id": session_id,
+                "status": status
+            }
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# Recording Endpoints
+@app.post("/api/v1/invisibility/sessions/{session_id}/recording/start")
+async def start_invisible_recording(
+    session_id: str,
+    screen_recording: bool = True,
+    voice_recording: bool = True,
+    auto_notes: bool = True,
+    real_time_insights: bool = True,
+    background_tasks: BackgroundTasks = None
+):
+    """Start invisible recording without UI indication."""
+    try:
+        result = await invisibility_service.start_invisible_recording(
+            session_id=session_id,
+            screen_recording=screen_recording,
+            voice_recording=voice_recording,
+            auto_notes=auto_notes,
+            real_time_insights=real_time_insights
+        )
+        
+        return JSONResponse(
+            status_code=200,
+            content={
+                "success": True,
+                "session_id": session_id,
+                "message": "Recording started invisibly",
+                "config": result["config"]
+            }
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/v1/invisibility/sessions/{session_id}/recording/stop")
+async def stop_invisible_recording(
+    session_id: str,
+    background_tasks: BackgroundTasks
+):
+    """Stop invisible recording and begin processing."""
+    try:
+        result = await invisibility_service.stop_invisible_recording(session_id)
+        
+        # Process recording data in background
+        background_tasks.add_task(
+            invisibility_service.process_recording_data,
+            session_id
+        )
+        
+        # Generate final insights in background
+        background_tasks.add_task(
+            invisibility_service.generate_final_insights,
+            session_id
+        )
+        
+        return JSONResponse(
+            status_code=200,
+            content={
+                "success": True,
+                "session_id": session_id,
+                "message": "Recording stopped, processing initiated",
+                "duration": result["duration"],
+                "data_size": result["data_size"]
+            }
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# UI Component Management Endpoints
+@app.post("/api/v1/invisibility/sessions/{session_id}/ui/hide")
+async def hide_ui_components(
+    session_id: str,
+    components_to_hide: List[UIComponentEnum],
+    hide_mode: HideModeEnum = HideModeEnum.MINIMIZE
+):
+    """Hide specified UI components."""
+    try:
+        result = await invisibility_service.hide_ui_components(
+            session_id=session_id,
+            components_to_hide=components_to_hide,
+            hide_mode=hide_mode
+        )
+        
+        return JSONResponse(
+            status_code=200,
+            content={
+                "success": True,
+                "session_id": session_id,
+                "message": "UI components hidden",
+                "hidden_components": result["hidden_components"]
+            }
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/v1/invisibility/sessions/{session_id}/ui/show")
+async def show_ui_components(
+    session_id: str,
+    components_to_show: List[UIComponentEnum]
+):
+    """Show/restore specified UI components."""
+    try:
+        result = await invisibility_service.show_ui_components(
+            session_id=session_id,
+            components_to_show=components_to_show
+        )
+        
+        return JSONResponse(
+            status_code=200,
+            content={
+                "success": True,
+                "session_id": session_id,
+                "message": "UI components restored",
+                "visible_components": result["visible_components"]
+            }
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# Insights Endpoints
+@app.post("/api/v1/invisibility/sessions/{session_id}/insights/generate")
+async def generate_insights(
+    session_id: str,
+    insight_types: List[InsightTypeEnum],
+    processing_options: Optional[Dict[str, Any]] = None,
+    background_tasks: BackgroundTasks = None
+):
+    """Generate AI insights from captured data."""
+    try:
+        if processing_options is None:
+            processing_options = {}
+        
+        # Run insight generation in background
+        background_tasks.add_task(
+            invisibility_service.generate_insights,
+            session_id,
+            insight_types,
+            processing_options
+        )
+        
+        return JSONResponse(
+            status_code=202,
+            content={
+                "success": True,
+                "session_id": session_id,
+                "message": "Insight generation initiated",
+                "insight_types": [t.value for t in insight_types]
+            }
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/v1/invisibility/sessions/{session_id}/insights")
+async def get_session_insights(session_id: str):
+    """Retrieve generated insights for a session."""
+    try:
+        insights = await invisibility_service.get_session_insights(session_id)
+        if insights is None:
+            raise HTTPException(
+                status_code=404,
+                detail="No insights found for this session"
+            )
+        
+        return JSONResponse(
+            status_code=200,
+            content={
+                "success": True,
+                "session_id": session_id,
+                "insights": insights
+            }
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# Security Endpoints
+@app.get("/api/v1/invisibility/sessions/{session_id}/security")
+async def get_security_status(session_id: str):
+    """Check security status to ensure no data leakage."""
+    try:
+        security_status = await invisibility_service.get_security_status(session_id)
+        
+        return JSONResponse(
+            status_code=200,
+            content={
+                "success": True,
+                "session_id": session_id,
+                "security_status": security_status
+            }
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# Cleanup Endpoint
+@app.delete("/api/v1/invisibility/sessions/{session_id}")
+async def cleanup_session(session_id: str):
+    """Clean up session data and remove all traces."""
+    try:
+        result = await invisibility_service.cleanup_session(session_id)
+        
+        return JSONResponse(
+            status_code=200,
+            content={
+                "success": True,
+                "session_id": session_id,
+                "message": "Session cleaned up successfully",
+                "data_removed": result["data_removed"]
+            }
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# Startup and Shutdown Events
+@app.on_event("startup")
+async def startup_event():
+    """Initialize service on startup."""
+    print("Invisibility Service API starting...")
+    print("Service initialized and ready")
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Cleanup on shutdown."""
+    print("Invisibility Service API shutting down...")
+    # Clean up any active sessions
+    for session_id in list(invisibility_service.active_sessions.keys()):
+        try:
+            await invisibility_service.cleanup_session(session_id)
+        except Exception as e:
+            print(f"Error cleaning up session {session_id}: {e}")
+    print("Shutdown complete")
+
+
+# Root endpoint
+@app.get("/")
+async def root():
+    """Root endpoint with API information."""
+    return {
+        "service": "Invisibility Mode API",
+        "version": "1.0.0",
+        "status": "running",
+        "documentation": "/docs",
+        "health_check": "/health"
+    }
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(
+        "main:app",
+        host="0.0.0.0",
+        port=8000,
+        reload=True,
+        log_level="info"
+    )
+
+################## SUMMARIZATION###########
+
+summarization_service = SummarizationService()
+
+
+# Dependency for getting current user (implement based on your auth system)
+async def get_current_user(user_id: str = Query(..., description="User ID")):
+    """Get current user from request"""
+    if not user_id:
+        raise HTTPException(status_code=401, detail="User ID required")
+    return user_id
+
+
+@app.get("/")
+async def root():
+    """Root endpoint"""
+    return {
+        "message": "Meeting Summarization API",
+        "version": "1.0.0",
+        "endpoints": {
+            "upload_audio": "/api/v1/audio/upload",
+            "analyze_meeting": "/api/v1/meetings/analyze",
+            "generate_summary": "/api/v1/summaries/generate",
+            "real_time_analysis": "/api/v1/meetings/real-time",
+            "get_summary": "/api/v1/summaries/{meeting_id}",
+            "get_user_summaries": "/api/v1/summaries/user",
+            "delete_summary": "/api/v1/summaries/{meeting_id}"
+        }
+    }
+
+
+@app.post("/api/v1/audio/upload", status_code=status.HTTP_201_CREATED)
+async def upload_audio(
+    file: UploadFile = File(..., description="Audio file to upload"),
+    user_id: str = Depends(get_current_user),
+    meeting_id: Optional[str] = Query(None, description="Optional meeting ID")
+):
+    """
+    Upload audio file for processing
+    
+    - **file**: Audio file (WAV, MP3, M4A, etc.)
+    - **user_id**: User ID (from query or auth)
+    - **meeting_id**: Optional meeting ID to associate with
+    """
+    try:
+        logger.info(f"Uploading audio file: {file.filename} for user: {user_id}")
+        
+        # Validate file type
+        allowed_extensions = ['.wav', '.mp3', '.m4a', '.ogg', '.flac', '.aac']
+        file_ext = file.filename[file.filename.rfind('.'):].lower()
+        
+        if file_ext not in allowed_extensions:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unsupported file format. Allowed: {', '.join(allowed_extensions)}"
+            )
+        
+        # Process upload
+        result = await summarization_service.process_audio_upload(
+            audio_file=file,
+            user_id=user_id,
+            meeting_id=meeting_id
+        )
+        
+        return JSONResponse(
+            status_code=status.HTTP_201_CREATED,
+            content={
+                "success": True,
+                "message": "Audio file uploaded successfully",
+                "data": result
+            }
+        )
+        
+    except Exception as e:
+        logger.error(f"Error uploading audio: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error uploading audio: {str(e)}")
+
+
+@app.post("/api/v1/meetings/analyze", response_model=MeetingAnalysisResponse)
+async def analyze_meeting(
+    audio_file_path: str = Query(..., description="Path to audio file"),
+    user_id: str = Depends(get_current_user),
+    meeting_context: Optional[str] = Query(None, description="Context about the meeting"),
+    analysis_type: str = Query("post_meeting", description="Type of analysis (post_meeting, real_time)")
+):
+    """
+    Analyze meeting audio and generate comprehensive insights
+    
+    - **audio_file_path**: Path to the uploaded audio file
+    - **meeting_context**: Optional context about the meeting
+    - **analysis_type**: Type of analysis (post_meeting or real_time)
+    """
+    try:
+        logger.info(f"Analyzing meeting audio for user: {user_id}")
+        
+        # Perform analysis
+        analysis_result = await summarization_service.analyze_meeting_audio(
+            audio_file_path=audio_file_path,
+            meeting_context=meeting_context,
+            user_id=user_id,
+            analysis_type=analysis_type
+        )
+        
+        # Create response object
+        response = await summarization_service.create_meeting_analysis_response(
+            analysis_id=analysis_result["analysis_id"],
+            meeting_id=None,
+            summary=analysis_result["summary"],
+            key_points=analysis_result["key_points"],
+            action_items=analysis_result["action_items"],
+            sentiment_analysis=analysis_result["sentiment_analysis"],
+            speaker_insights=analysis_result["speaker_insights"],
+            recommendations=analysis_result["recommendations"],
+            confidence_score=analysis_result["confidence_score"],
+            processing_time=analysis_result["processing_time"]
+        )
+        
+        return response
+        
+    except Exception as e:
+        logger.error(f"Error analyzing meeting: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error analyzing meeting: {str(e)}")
+
+
+@app.post("/api/v1/summaries/generate", response_model=SummarizationResponse)
+async def generate_summary(
+    content: str = Query(..., description="Meeting content/transcript to summarize"),
+    summary_type: SummaryType = Query(SummaryType.DETAILED, description="Type of summary"),
+    user_id: str = Depends(get_current_user),
+    meeting_id: Optional[str] = Query(None, description="Optional meeting ID"),
+    include_action_items: bool = Query(True, description="Include action items in summary")
+):
+    """
+    Generate a summary from meeting content
+    
+    - **content**: Meeting transcript or content
+    - **summary_type**: Type of summary (detailed, brief, action_items)
+    - **include_action_items**: Whether to extract action items
+    """
+    try:
+        logger.info(f"Generating {summary_type.value} summary for user: {user_id}")
+        
+        # Validate content
+        if not content or len(content.strip()) < 50:
+            raise HTTPException(
+                status_code=400,
+                detail="Content is too short. Minimum 50 characters required."
+            )
+        
+        # Generate summary
+        summary_result = await summarization_service.generate_summary(
+            content=content,
+            summary_type=summary_type,
+            user_id=user_id,
+            meeting_id=meeting_id,
+            include_action_items=include_action_items
+        )
+        
+        # Create response object
+        response = await summarization_service.create_summarization_response(
+            summary_id=summary_result["summary_id"],
+            meeting_id=summary_result.get("meeting_id"),
+            summary_type=summary_result["summary_type"],
+            summary_text=summary_result["summary_text"],
+            key_points=summary_result["key_points"],
+            action_items=summary_result["action_items"],
+            next_steps=summary_result["next_steps"],
+            participants=summary_result.get("participants"),
+            topics_discussed=summary_result["topics_discussed"],
+            decisions_made=summary_result["decisions_made"],
+            questions_raised=summary_result["questions_raised"],
+            meeting_effectiveness_score=summary_result.get("meeting_effectiveness_score"),
+            word_count=summary_result["word_count"],
+            summary_ratio=summary_result["summary_ratio"]
+        )
+        
+        return response
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error generating summary: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error generating summary: {str(e)}")
+
+
+@app.post("/api/v1/meetings/real-time", response_model=MeetingAnalysisResponse)
+async def real_time_analysis(
+    audio_chunk_path: str = Query(..., description="Path to audio chunk"),
+    user_id: str = Depends(get_current_user),
+    meeting_context: Optional[str] = Query(None, description="Context about the ongoing meeting")
+):
+    """
+    Perform real-time analysis on audio chunk during ongoing meeting
+    
+    - **audio_chunk_path**: Path to the audio chunk file
+    - **meeting_context**: Optional context about the meeting
+    """
+    try:
+        logger.info(f"Performing real-time analysis for user: {user_id}")
+        
+        # Perform real-time analysis
+        analysis_result = await summarization_service.real_time_audio_analysis(
+            audio_chunk_path=audio_chunk_path,
+            meeting_context=meeting_context,
+            user_id=user_id
+        )
+        
+        # Create response object
+        response = await summarization_service.create_meeting_analysis_response(
+            analysis_id=analysis_result["analysis_id"],
+            meeting_id=None,
+            summary=analysis_result["summary"],
+            key_points=analysis_result["key_points"],
+            action_items=analysis_result["action_items"],
+            sentiment_analysis=analysis_result["sentiment_analysis"],
+            speaker_insights=None,
+            recommendations=analysis_result["recommendations"],
+            confidence_score=analysis_result["confidence_score"],
+            processing_time=None
+        )
+        
+        return response
+        
+    except Exception as e:
+        logger.error(f"Error in real-time analysis: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error in real-time analysis: {str(e)}")
+
+
+@app.get("/api/v1/summaries/{meeting_id}")
+async def get_meeting_summary(
+    meeting_id: str,
+    user_id: str = Depends(get_current_user)
+):
+    """
+    Get existing summary for a specific meeting
+    
+    - **meeting_id**: Meeting ID
+    """
+    try:
+        logger.info(f"Fetching summary for meeting: {meeting_id}, user: {user_id}")
+        
+        summary = await summarization_service.get_meeting_summary(
+            meeting_id=meeting_id,
+            user_id=user_id
+        )
+        
+        if not summary:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Summary not found for meeting: {meeting_id}"
+            )
+        
+        return JSONResponse(
+            status_code=status.HTTP_200_OK,
+            content={
+                "success": True,
+                "data": summary
+            }
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching summary: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error fetching summary: {str(e)}")
+
+
+@app.get("/api/v1/summaries/user")
+async def get_user_summaries(
+    user_id: str = Depends(get_current_user),
+    limit: int = Query(10, ge=1, le=100, description="Number of summaries to return"),
+    offset: int = Query(0, ge=0, description="Offset for pagination")
+):
+    """
+    Get all summaries for a user with pagination
+    
+    - **limit**: Maximum number of summaries to return (1-100)
+    - **offset**: Number of summaries to skip
+    """
+    try:
+        logger.info(f"Fetching summaries for user: {user_id}, limit: {limit}, offset: {offset}")
+        
+        summaries = await summarization_service.get_user_summaries(
+            user_id=user_id,
+            limit=limit,
+            offset=offset
+        )
+        
+        return JSONResponse(
+            status_code=status.HTTP_200_OK,
+            content={
+                "success": True,
+                "data": summaries,
+                "pagination": {
+                    "limit": limit,
+                    "offset": offset,
+                    "count": len(summaries)
+                }
+            }
+        )
+        
+    except Exception as e:
+        logger.error(f"Error fetching user summaries: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error fetching user summaries: {str(e)}")
+
+
+@app.delete("/api/v1/summaries/{meeting_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_meeting_summary(
+    meeting_id: str,
+    user_id: str = Depends(get_current_user)
+):
+    """
+    Delete summary for a specific meeting
+    
+    - **meeting_id**: Meeting ID
+    """
+    try:
+        logger.info(f"Deleting summary for meeting: {meeting_id}, user: {user_id}")
+        
+        deleted = await summarization_service.delete_meeting_summary(
+            meeting_id=meeting_id,
+            user_id=user_id
+        )
+        
+        if not deleted:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Summary not found for meeting: {meeting_id}"
+            )
+        
+        return None  # 204 No Content
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting summary: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error deleting summary: {str(e)}")
+
+
+@app.get("/api/v1/health")
+async def health_check():
+    """Health check endpoint"""
+    return {
+        "status": "healthy",
+        "timestamp": datetime.utcnow().isoformat(),
+        "service": "summarization-api",
+        "version": "1.0.0"
+    }
+
+
+# Exception handlers
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request, exc):
+    """Handle HTTP exceptions"""
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "success": False,
+            "error": exc.detail,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+    )
+
+
+@app.exception_handler(Exception)
+async def general_exception_handler(request, exc):
+    """Handle general exceptions"""
+    logger.error(f"Unhandled exception: {str(exc)}")
+    return JSONResponse(
+        status_code=500,
+        content={
+            "success": False,
+            "error": "Internal server error",
+            "timestamp": datetime.utcnow().isoformat()
+        }
+    )
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(
+        "main:app",
+        host="0.0.0.0",
+        port=8000,
+        reload=True,
+        log_level="info"
+    )
+
+#################VOICE RECOGNITION##########
+camera_service = CameraService()
+expression_service = ExpressionDetectionService()
+chat_service = ChatService()
+recording_service = ScreenRecordingService()
+ai_analysis_service = AIAnalysisService()
+recording_enum_service = RecordingService()
+
+
+# ==================== HEALTH CHECK ====================
+
+@app.get("/health")
+async def health_check():
+    """Health check endpoint"""
+    return {
+        "status": "healthy",
+        "timestamp": datetime.now(),
+        "services": {
+            "camera": camera_service.is_healthy(),
+            "expression": expression_service.is_healthy(),
+            "chat": chat_service.is_healthy()
+        }
+    }
+
+
+# ==================== CAMERA ENDPOINTS ====================
+
+@app.get("/camera/devices")
+async def get_camera_devices():
+    """Get list of available camera devices"""
+    try:
+        devices = await camera_service.get_available_cameras()
+        return {"devices": devices, "count": len(devices)}
+    except Exception as e:
+        logger.error(f"Failed to get camera devices: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/camera/session/start")
+async def start_camera_session(
+    device_id: str,
+    resolution: CameraResolution = CameraResolution.MEDIUM,
+    fps: int = 30
+):
+    """Start a new camera session"""
+    try:
+        session = await camera_service.start_session(device_id, resolution, fps)
+        return session
+    except Exception as e:
+        logger.error(f"Failed to start camera session: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/camera/session/{session_id}/stop")
+async def stop_camera_session(session_id: str):
+    """Stop a camera session"""
+    try:
+        success = await camera_service.stop_session(session_id)
+        if not success:
+            raise HTTPException(status_code=404, detail="Session not found")
+        return {"success": True, "message": "Session stopped successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to stop camera session: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/camera/session/{session_id}/status")
+async def get_camera_status(session_id: str):
+    """Get camera session status"""
+    try:
+        status = await camera_service.get_session_status(session_id)
+        if not status:
+            raise HTTPException(status_code=404, detail="Session not found")
+        return status
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get camera status: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/camera/session/{session_id}/test")
+async def test_camera_connection(session_id: str):
+    """Test camera connection and capture test frame"""
+    try:
+        result = await camera_service.test_camera_connection(session_id)
+        return result
+    except Exception as e:
+        logger.error(f"Camera test failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/camera/stream/{session_id}")
+async def stream_camera(session_id: str):
+    """Stream camera video feed"""
+    try:
+        return StreamingResponse(
+            camera_service.get_video_stream(session_id),
+            media_type="multipart/x-mixed-replace; boundary=frame"
+        )
+    except Exception as e:
+        logger.error(f"Failed to stream camera: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==================== EXPRESSION DETECTION ENDPOINTS ====================
+
+@app.post("/expression/detect/{session_id}")
+async def detect_expression(
+    session_id: str,
+    frame_data: Optional[str] = None,
+    confidence_threshold: float = 0.5
+):
+    """Detect facial expressions from camera frame"""
+    try:
+        result = await expression_service.detect_expression(
+            session_id, frame_data, confidence_threshold
+        )
+        return result
+    except Exception as e:
+        logger.error(f"Expression detection failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/expression/monitoring/start")
+async def start_expression_monitoring(
+    session_id: str,
+    interval_seconds: int = 2
+):
+    """Start continuous expression monitoring"""
+    try:
+        monitoring_id = await expression_service.start_monitoring(
+            session_id, interval_seconds
+        )
+        return {
+            "monitoring_id": monitoring_id,
+            "session_id": session_id,
+            "status": "active"
+        }
+    except Exception as e:
+        logger.error(f"Failed to start monitoring: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/expression/monitoring/{monitoring_id}/stop")
+async def stop_expression_monitoring(monitoring_id: str):
+    """Stop expression monitoring"""
+    try:
+        success = await expression_service.stop_monitoring(monitoring_id)
+        if not success:
+            raise HTTPException(status_code=404, detail="Monitoring session not found")
+        return {"success": True, "message": "Monitoring stopped"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to stop monitoring: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==================== CHAT ENDPOINTS ====================
+
+@app.get("/chat/{session_id}/messages")
+async def get_chat_messages(session_id: str, limit: int = 50):
+    """Get chat messages for a session"""
+    try:
+        messages = await chat_service.get_messages(session_id, limit)
+        return {"messages": messages, "count": len(messages)}
+    except Exception as e:
+        logger.error(f"Failed to get messages: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/chat/{session_id}/message")
+async def add_chat_message(session_id: str, message: ChatMessage):
+    """Add a new chat message"""
+    try:
+        new_message = await chat_service.add_message(session_id, message)
+        return new_message
+    except Exception as e:
+        logger.error(f"Failed to add message: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/chat/{session_id}/simplify")
+async def simplify_message(
+    session_id: str,
+    original_message_id: str,
+    confusion_confidence: float
+):
+    """Simplify an AI message"""
+    try:
+        simplified = await chat_service.simplify_last_ai_message(
+            session_id, original_message_id, confusion_confidence
+        )
+        return simplified
+    except Exception as e:
+        logger.error(f"Failed to simplify message: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==================== SCREEN RECORDING ENDPOINTS ====================
+
+@app.get("/recording/status")
+async def get_recording_status():
+    """Get current recording status"""
+    try:
+        status = await recording_service.get_recording_status()
+        return status
+    except Exception as e:
+        logger.error(f"Failed to get recording status: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/recording/start")
+async def start_recording(
+    quality: RecordingQuality = RecordingQuality.MEDIUM,
+    include_audio: bool = True,
+    capture_mouse: bool = True,
+    frame_rate: int = 30
+):
+    """Start screen recording"""
+    try:
+        result = await recording_service.start_recording(
+            quality, include_audio, capture_mouse, frame_rate
+        )
+        return result
+    except Exception as e:
+        logger.error(f"Failed to start recording: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/recording/stop")
+async def stop_recording():
+    """Stop current recording"""
+    try:
+        result = await recording_service.stop_recording()
+        return result
+    except Exception as e:
+        logger.error(f"Failed to stop recording: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/recording/{recording_id}/screenshots/start")
+async def start_screenshot_capture(
+    recording_id: str,
+    interval_seconds: int = 5
+):
+    """Start capturing screenshots during recording"""
+    try:
+        await recording_service.start_screenshot_capture(
+            recording_id, interval_seconds
+        )
+        return {
+            "success": True,
+            "recording_id": recording_id,
+            "interval_seconds": interval_seconds
+        }
+    except Exception as e:
+        logger.error(f"Failed to start screenshot capture: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/recording/list")
+async def list_recordings(limit: int = 50, offset: int = 0):
+    """List all recordings"""
+    try:
+        recordings = await recording_service.list_recordings(limit, offset)
+        return {"recordings": recordings, "count": len(recordings)}
+    except Exception as e:
+        logger.error(f"Failed to list recordings: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/recording/{recording_id}")
+async def get_recording_info(recording_id: str):
+    """Get detailed recording information"""
+    try:
+        info = await recording_service.get_recording_info(recording_id)
+        if not info:
+            raise HTTPException(status_code=404, detail="Recording not found")
+        return info
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get recording info: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/recording/{recording_id}")
+async def delete_recording(recording_id: str):
+    """Delete a recording"""
+    try:
+        success = await recording_service.delete_recording(recording_id)
+        if not success:
+            raise HTTPException(status_code=404, detail="Recording not found")
+        return {"success": True, "message": "Recording deleted"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to delete recording: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==================== AI ANALYSIS ENDPOINTS ====================
+
+@app.post("/analysis/recording/{recording_id}")
+async def analyze_recording(
+    recording_id: str,
+    question: str,
+    analysis_type: AnalysisType = AnalysisType.SPECIFIC_QUESTION,
+    time_range_start: Optional[float] = None,
+    time_range_end: Optional[float] = None,
+    include_screenshots: bool = True
+):
+    """Analyze a recording with AI"""
+    try:
+        time_range = None
+        if time_range_start is not None and time_range_end is not None:
+            time_range = {"start": time_range_start, "end": time_range_end}
+        
+        result = await ai_analysis_service.analyze_recording(
+            recording_id, question, analysis_type, time_range, include_screenshots
+        )
+        return result
+    except Exception as e:
+        logger.error(f"Recording analysis failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/analysis/screenshot")
+async def analyze_screenshot(
+    file: UploadFile = File(...),
+    question: str = Query(...),
+    context: Optional[str] = None,
+    analysis_focus: AnalysisFocus = AnalysisFocus.GENERAL
+):
+    """Analyze a single screenshot"""
+    try:
+        screenshot_data = await file.read()
+        result = await ai_analysis_service.analyze_screenshot(
+            screenshot_data, question, context, analysis_focus
+        )
+        return result
+    except Exception as e:
+        logger.error(f"Screenshot analysis failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/analysis/history/{recording_id}")
+async def get_analysis_history(recording_id: str):
+    """Get analysis history for a recording"""
+    try:
+        history = await ai_analysis_service.get_analysis_history(recording_id)
+        return {"history": history, "count": len(history)}
+    except Exception as e:
+        logger.error(f"Failed to get analysis history: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/analysis/progress/{recording_id}")
+async def stream_analysis_progress(recording_id: str):
+    """Stream analysis progress updates"""
+    async def progress_generator():
+        try:
+            async for update in ai_analysis_service.get_analysis_progress(recording_id):
+                yield f"data: {JSONResponse(content=update).body.decode()}\n\n"
+        except Exception as e:
+            logger.error(f"Progress stream error: {e}")
+            yield f"data: {JSONResponse(content={'error': str(e)}).body.decode()}\n\n"
+    
+    return StreamingResponse(
+        progress_generator(),
+        media_type="text/event-stream"
+    )
+
+
+# ==================== ENUM/CONFIG ENDPOINTS ====================
+
+@app.get("/config/recording-qualities")
+async def get_recording_qualities():
+    """Get available recording quality options"""
+    try:
+        qualities = await recording_enum_service.get_recording_qualities()
+        return {"qualities": qualities}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/config/recording-statuses")
+async def get_recording_statuses():
+    """Get possible recording status values"""
+    try:
+        statuses = await recording_enum_service.get_recording_statuses()
+        return {"statuses": statuses}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/config/analysis-focus-options")
+async def get_analysis_focus_options():
+    """Get available analysis focus options"""
+    try:
+        options = await recording_enum_service.get_analysis_focus_options()
+        return {"focus_options": options}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==================== WEBSOCKET ENDPOINTS ====================
+
+@app.websocket("/ws/camera/{session_id}")
+async def websocket_camera_feed(websocket: WebSocket, session_id: str):
+    """WebSocket endpoint for real-time camera feed"""
+    await websocket.accept()
+    try:
+        while True:
+            frame = camera_service.get_current_frame(session_id)
+            if frame is not None:
+                # Convert frame to bytes and send
+                import cv2
+                _, buffer = cv2.imencode('.jpg', frame)
+                await websocket.send_bytes(buffer.tobytes())
+            await asyncio.sleep(0.033)  # ~30 FPS
+    except WebSocketDisconnect:
+        logger.info(f"WebSocket disconnected for session {session_id}")
+    except Exception as e:
+        logger.error(f"WebSocket error: {e}")
+
+
+@app.websocket("/ws/expression/{session_id}")
+async def websocket_expression_feed(websocket: WebSocket, session_id: str):
+    """WebSocket endpoint for real-time expression detection"""
+    await websocket.accept()
+    try:
+        while True:
+            result = await expression_service.detect_expression(session_id)
+            await websocket.send_json(result.dict())
+            await asyncio.sleep(2)  # Check every 2 seconds
+    except WebSocketDisconnect:
+        logger.info(f"Expression WebSocket disconnected for session {session_id}")
+    except Exception as e:
+        logger.error(f"Expression WebSocket error: {e}")
+
+
+# ==================== STARTUP/SHUTDOWN EVENTS ====================
+
+@app.on_event("startup")
+async def startup_event():
+    """Initialize services on startup"""
+    logger.info("Starting Smart Camera & Recording API...")
+    logger.info("Services initialized successfully")
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Cleanup on shutdown"""
+    logger.info("Shutting down Smart Camera & Recording API...")
+    # Add cleanup logic here if needed
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
+
+######################hands free services##############
+
+hands_free_service = HandsFreeService()
+
+# Active WebSocket connections
+active_websockets: Dict[str, WebSocket] = {}
+
+
+# ============================================================================
+# SESSION MANAGEMENT ENDPOINTS
+# ============================================================================
+
+@app.post("/api/v1/sessions/create")
+async def create_session(
+    user_id: str,
+    default_mic_id: str,
+    interview_type: InterviewType,
+    company_info: Optional[str] = None,
+    job_role: Optional[str] = None
+):
+    """Create a new hands-free interview session"""
+    try:
+        session_id = await hands_free_service.create_session(
+            user_id=user_id,
+            default_mic_id=default_mic_id,
+            interview_type=interview_type,
+            company_info=company_info,
+            job_role=job_role
+        )
+        
+        return {
+            "success": True,
+            "session_id": session_id,
+            "message": "Session created successfully",
+            "timestamp": datetime.utcnow().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Failed to create session: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/v1/sessions/{session_id}/configure-audio")
+async def configure_audio(session_id: str, mic_id: str):
+    """Configure audio input for the session"""
+    try:
+        success = await hands_free_service.configure_audio_input(session_id, mic_id)
+        
+        return {
+            "success": success,
+            "message": "Audio configured successfully" if success else "Audio configuration failed",
+            "timestamp": datetime.utcnow().isoformat()
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.error(f"Failed to configure audio: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/v1/sessions/{session_id}/initialize-ai")
+async def initialize_ai(session_id: str):
+    """Initialize AI systems for the session"""
+    try:
+        success = await hands_free_service.initialize_ai_systems(session_id)
+        
+        return {
+            "success": success,
+            "message": "AI systems initialized successfully" if success else "AI initialization failed",
+            "timestamp": datetime.utcnow().isoformat()
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.error(f"Failed to initialize AI: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/v1/sessions/{session_id}/activate")
+async def activate_hands_free(session_id: str):
+    """Activate hands-free mode"""
+    try:
+        await hands_free_service.activate_hands_free_mode(session_id)
+        
+        return {
+            "success": True,
+            "message": "Hands-free mode activated",
+            "timestamp": datetime.utcnow().isoformat()
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Failed to activate hands-free mode: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/v1/sessions/{session_id}/pause")
+async def pause_session(session_id: str):
+    """Emergency pause hands-free mode"""
+    try:
+        await hands_free_service.emergency_pause(session_id)
+        
+        return {
+            "success": True,
+            "message": "Session paused",
+            "timestamp": datetime.utcnow().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Failed to pause session: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/v1/sessions/{session_id}/resume")
+async def resume_session(session_id: str):
+    """Resume hands-free mode"""
+    try:
+        await hands_free_service.resume_hands_free(session_id)
+        
+        return {
+            "success": True,
+            "message": "Session resumed",
+            "timestamp": datetime.utcnow().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Failed to resume session: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/v1/sessions/{session_id}/stop")
+async def stop_session(session_id: str):
+    """Stop session and get summary"""
+    try:
+        summary = await hands_free_service.stop_session(session_id)
+        
+        return {
+            "success": True,
+            "message": "Session stopped successfully",
+            "summary": summary.dict(),
+            "timestamp": datetime.utcnow().isoformat()
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.error(f"Failed to stop session: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================================
+# SESSION STATUS AND INSIGHTS ENDPOINTS
+# ============================================================================
+
+@app.get("/api/v1/sessions/{session_id}/status")
+async def get_session_status(session_id: str):
+    """Get current session status"""
+    try:
+        status = await hands_free_service.get_session_status(session_id)
+        return status.dict()
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.error(f"Failed to get session status: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/v1/sessions/{session_id}/insights")
+async def get_session_insights(session_id: str):
+    """Get comprehensive session insights"""
+    try:
+        insights = await hands_free_service.get_session_insights(session_id)
+        return insights.dict()
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.error(f"Failed to get session insights: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.put("/api/v1/sessions/{session_id}/settings")
+async def update_session_settings(session_id: str, settings: SessionSettings):
+    """Update session settings"""
+    try:
+        await hands_free_service.update_session_settings(session_id, settings)
+        
+        return {
+            "success": True,
+            "message": "Settings updated successfully",
+            "timestamp": datetime.utcnow().isoformat()
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.error(f"Failed to update settings: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================================
+# RESPONSE GENERATION ENDPOINT
+# ============================================================================
+
+@app.post("/api/v1/sessions/{session_id}/generate-response")
+async def generate_response(
+    session_id: str,
+    question: str,
+    context: Optional[str] = None
+):
+    """Generate automated response to a question"""
+    try:
+        response = await hands_free_service.generate_automated_response(
+            session_id=session_id,
+            question=question,
+            context=context
+        )
+        
+        return response.dict()
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.error(f"Failed to generate response: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================================
+# FACIAL ANALYSIS ENDPOINT
+# ============================================================================
+
+@app.post("/api/v1/sessions/{session_id}/analyze-facial")
+async def analyze_facial_expression(
+    session_id: str,
+    frame: UploadFile = File(...)
+):
+    """Analyze facial expression from uploaded frame"""
+    try:
+        # Read frame data
+        frame_data = await frame.read()
+        
+        # Analyze facial expression
+        analysis = await hands_free_service.analyze_facial_expression(
+            session_id=session_id,
+            frame_data=frame_data
+        )
+        
+        # Generate confidence tips based on analysis
+        tips = await hands_free_service.generate_confidence_tips(
+            session_id=session_id,
+            analysis_result=analysis
+        )
+        
+        return {
+            "analysis": analysis.dict(),
+            "confidence_tips": tips.dict(),
+            "timestamp": datetime.utcnow().isoformat()
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.error(f"Failed to analyze facial expression: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================================
+# WEBSOCKET ENDPOINT FOR REAL-TIME AUDIO STREAMING
+# ============================================================================
+
+@app.websocket("/ws/sessions/{session_id}/audio-stream")
+async def websocket_audio_stream(websocket: WebSocket, session_id: str):
+    """WebSocket endpoint for real-time audio streaming"""
+    await websocket.accept()
+    active_websockets[session_id] = websocket
+    
+    try:
+        logger.info(f"WebSocket connected for session {session_id}")
+        
+        # Verify session exists
+        if not await hands_free_service.verify_session(session_id):
+            await websocket.send_json({
+                "error": "Session not found",
+                "code": "SESSION_NOT_FOUND"
+            })
+            await websocket.close()
+            return
+        
+        while True:
+            # Receive audio data from client
+            data = await websocket.receive_bytes()
+            
+            # Process audio stream
+            result = await hands_free_service.process_audio_stream(
+                session_id=session_id,
+                audio_data=data
+            )
+            
+            # Send result back to client
+            response = {
+                "type": "audio_stream_result",
+                "data": result.dict(),
+                "timestamp": datetime.utcnow().isoformat()
+            }
+            
+            await websocket.send_json(response)
+            
+            # If question detected, automatically generate response
+            if result.question_detected and result.detected_question:
+                logger.info(f"Question detected: {result.detected_question}")
+                
+                # Send question detection notification
+                await websocket.send_json({
+                    "type": "question_detected",
+                    "question": result.detected_question,
+                    "context": result.context,
+                    "timestamp": datetime.utcnow().isoformat()
+                })
+                
+                # Generate automated response
+                response_data = await hands_free_service.generate_automated_response(
+                    session_id=session_id,
+                    question=result.detected_question,
+                    context=result.context
+                )
+                
+                # Send response to client
+                await websocket.send_json({
+                    "type": "automated_response",
+                    "response": response_data.dict(),
+                    "timestamp": datetime.utcnow().isoformat()
+                })
+    
+    except WebSocketDisconnect:
+        logger.info(f"WebSocket disconnected for session {session_id}")
+    except Exception as e:
+        logger.error(f"WebSocket error for session {session_id}: {e}")
+        await websocket.send_json({
+            "type": "error",
+            "error": str(e),
+            "timestamp": datetime.utcnow().isoformat()
+        })
+    finally:
+        if session_id in active_websockets:
+            del active_websockets[session_id]
+
+
+# ============================================================================
+# WEBSOCKET ENDPOINT FOR REAL-TIME VIDEO STREAMING
+# ============================================================================
+
+@app.websocket("/ws/sessions/{session_id}/video-stream")
+async def websocket_video_stream(websocket: WebSocket, session_id: str):
+    """WebSocket endpoint for real-time video streaming and facial analysis"""
+    await websocket.accept()
+    
+    try:
+        logger.info(f"Video WebSocket connected for session {session_id}")
+        
+        # Verify session exists
+        if not await hands_free_service.verify_session(session_id):
+            await websocket.send_json({
+                "error": "Session not found",
+                "code": "SESSION_NOT_FOUND"
+            })
+            await websocket.close()
+            return
+        
+        while True:
+            # Receive video frame from client
+            frame_data = await websocket.receive_bytes()
+            
+            # Analyze facial expression
+            analysis = await hands_free_service.analyze_facial_expression(
+                session_id=session_id,
+                frame_data=frame_data
+            )
+            
+            # Generate confidence tips
+            tips = await hands_free_service.generate_confidence_tips(
+                session_id=session_id,
+                analysis_result=analysis
+            )
+            
+            # Send analysis and tips back to client
+            await websocket.send_json({
+                "type": "facial_analysis_result",
+                "analysis": analysis.dict(),
+                "confidence_tips": tips.dict(),
+                "timestamp": datetime.utcnow().isoformat()
+            })
+    
+    except WebSocketDisconnect:
+        logger.info(f"Video WebSocket disconnected for session {session_id}")
+    except Exception as e:
+        logger.error(f"Video WebSocket error for session {session_id}: {e}")
+        await websocket.send_json({
+            "type": "error",
+            "error": str(e),
+            "timestamp": datetime.utcnow().isoformat()
+        })
+
+
+# ============================================================================
+# SYSTEM HEALTH AND MONITORING ENDPOINTS
+# ============================================================================
+
+@app.get("/api/v1/health")
+async def health_check():
+    """System health check"""
+    try:
+        health = await hands_free_service.system_health_check()
+        return health.dict()
+    except Exception as e:
+        logger.error(f"Health check failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/v1/status")
+async def system_status():
+    """Get overall system status"""
+    return {
+        "status": "operational",
+        "active_sessions": len(hands_free_service.active_sessions),
+        "active_websockets": len(active_websockets),
+        "timestamp": datetime.utcnow().isoformat()
+    }
+
+
+# ============================================================================
+# ROOT ENDPOINT
+# ============================================================================
+
+@app.get("/")
+async def root():
+    """Root endpoint"""
+    return {
+        "service": "Hands-Free Interview Assistant API",
+        "version": "1.0.0",
+        "status": "operational",
+        "endpoints": {
+            "docs": "/docs",
+            "health": "/api/v1/health",
+            "status": "/api/v1/status"
+        }
+    }
+
+
+# ============================================================================
+# APPLICATION STARTUP AND SHUTDOWN EVENTS
+# ============================================================================
+
+@app.on_event("startup")
+async def startup_event():
+    """Initialize services on startup"""
+    logger.info("Starting Hands-Free Interview Assistant API")
+    logger.info("All systems initialized successfully")
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Cleanup on shutdown"""
+    logger.info("Shutting down Hands-Free Interview Assistant API")
+    
+    # Close all active WebSocket connections
+    for session_id, ws in active_websockets.items():
+        try:
+            await ws.close()
+        except Exception as e:
+            logger.error(f"Error closing WebSocket for session {session_id}: {e}")
+    
+    logger.info("Shutdown complete")
+
+
+# ============================================================================
+# RUN APPLICATION
+# ============================================================================
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(
+        "main:app",
+        host="0.0.0.0",
+        port=8000,
+        reload=True,
+        log_level="info"
+    )
+
+
+################KEEEYYY INSIGHTS############
+
+insights_service = KeyInsightsService()
+
+
+@app.get("/")
+async def root():
+    """Root endpoint with API information"""
+    return {
+        "message": "Key Insights API",
+        "version": "1.0.0",
+        "status": "operational",
+        "endpoints": {
+            "health": "/health",
+            "generate_insights": "/api/v1/insights/generate",
+            "get_insights": "/api/v1/insights/{meeting_id}",
+            "insights_by_type": "/api/v1/insights/{meeting_id}/type/{insight_type}",
+            "clear_cache": "/api/v1/cache/clear"
+        }
+    }
+
+
+@app.get("/health")
+async def health_check():
+    """Health check endpoint"""
+    health_data = await insights_service.health_check_safe()
+    
+    if isinstance(health_data, ErrorResponse):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=health_data.model_dump()
+        )
+    
+    return JSONResponse(
+        status_code=status.HTTP_200_OK,
+        content=health_data
+    )
+
+
+@app.post("/api/v1/insights/generate", response_model=KeyInsightResponse)
+async def generate_insights(
+    request: KeyInsightRequest,
+    image: Optional[UploadFile] = File(None)
+):
+    """
+    Generate key insights from meeting transcript and optional image
+    
+    Args:
+        request: KeyInsightRequest containing transcript and parameters
+        image: Optional image file for visual context analysis
+    
+    Returns:
+        KeyInsightResponse with extracted insights and summary
+    """
+    try:
+        # Validate request
+        validation_error = await insights_service.validate_request(request)
+        if validation_error:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=validation_error.model_dump()
+            )
+        
+        # Read image data if provided
+        image_data = None
+        if image:
+            try:
+                image_data = await image.read()
+                logger.info(f"Received image: {image.filename}, size: {len(image_data)} bytes")
+            except Exception as e:
+                logger.error(f"Error reading image file: {str(e)}")
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail={"error": "Failed to read image file", "details": str(e)}
+                )
+        
+        # Generate insights
+        result = await insights_service.generate_insights_safe(request, image_data)
+        
+        if isinstance(result, ErrorResponse):
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=result.model_dump()
+            )
+        
+        return result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Unexpected error in generate_insights endpoint: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={"error": "Internal server error", "details": str(e)}
+        )
+
+
+@app.get("/api/v1/insights/{meeting_id}", response_model=KeyInsightResponse)
+async def get_insights(meeting_id: str):
+    """
+    Get cached insights for a specific meeting
+    
+    Args:
+        meeting_id: Unique meeting identifier
+    
+    Returns:
+        KeyInsightResponse with cached insights
+    """
+    try:
+        result = await insights_service.get_cached_insights_safe(meeting_id)
+        
+        if isinstance(result, ErrorResponse):
+            if result.error_code == "INSIGHTS_NOT_FOUND":
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=result.model_dump()
+                )
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=result.model_dump()
+                )
+        
+        return result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in get_insights endpoint: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={"error": "Failed to retrieve insights", "details": str(e)}
+        )
+
+
+@app.get("/api/v1/insights/{meeting_id}/type/{insight_type}", response_model=List[KeyInsight])
+async def get_insights_by_type(meeting_id: str, insight_type: InsightType):
+    """
+    Get insights filtered by type for a specific meeting
+    
+    Args:
+        meeting_id: Unique meeting identifier
+        insight_type: Type of insights to retrieve (DECISION, ACTION_ITEM, etc.)
+    
+    Returns:
+        List of KeyInsight objects of the specified type
+    """
+    try:
+        result = await insights_service.get_insights_by_type_safe(meeting_id, insight_type)
+        
+        if isinstance(result, ErrorResponse):
+            if result.error_code == "INVALID_MEETING_ID":
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=result.model_dump()
+                )
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=result.model_dump()
+                )
+        
+        if not result:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={
+                    "error": f"No {insight_type.value} insights found for meeting {meeting_id}",
+                    "error_code": "NO_INSIGHTS_OF_TYPE"
+                }
+            )
+        
+        return result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in get_insights_by_type endpoint: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={"error": "Failed to retrieve insights by type", "details": str(e)}
+        )
+
+
+@app.delete("/api/v1/cache/clear")
+async def clear_cache(meeting_id: Optional[str] = None):
+    """
+    Clear insights cache
+    
+    Args:
+        meeting_id: Optional meeting ID to clear specific cache, or None to clear all
+    
+    Returns:
+        Success message
+    """
+    try:
+        result = await insights_service.clear_cache_safe(meeting_id)
+        
+        if isinstance(result, ErrorResponse):
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=result.model_dump()
+            )
+        
+        if meeting_id:
+            message = f"Cache cleared for meeting: {meeting_id}"
+        else:
+            message = "All caches cleared successfully"
+        
+        return {
+            "success": True,
+            "message": message
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in clear_cache endpoint: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={"error": "Failed to clear cache", "details": str(e)}
+        )
+
+
+@app.get("/api/v1/insights/types/list")
+async def list_insight_types():
+    """
+    List all available insight types
+    
+    Returns:
+        Dictionary of insight types with descriptions
+    """
+    return {
+        "insight_types": [
+            {
+                "type": InsightType.DECISION.value,
+                "description": "Important decisions that were made"
+            },
+            {
+                "type": InsightType.ACTION_ITEM.value,
+                "description": "Specific tasks or actions assigned"
+            },
+            {
+                "type": InsightType.KEY_POINT.value,
+                "description": "Important discussion points or conclusions"
+            },
+            {
+                "type": InsightType.RISK.value,
+                "description": "Potential risks or concerns identified"
+            },
+            {
+                "type": InsightType.OPPORTUNITY.value,
+                "description": "Opportunities or positive developments discussed"
+            },
+            {
+                "type": InsightType.QUESTION.value,
+                "description": "Important unresolved questions or issues"
+            }
+        ]
+    }
+
+
+# Exception handlers
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request, exc):
+    """Custom HTTP exception handler"""
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"detail": exc.detail}
+    )
+
+
+@app.exception_handler(Exception)
+async def general_exception_handler(request, exc):
+    """General exception handler for unhandled errors"""
+    logger.error(f"Unhandled exception: {str(exc)}")
+    return JSONResponse(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        content={
+            "error": "Internal server error",
+            "details": str(exc)
+        }
+    )
+
+
+# Startup event
+@app.on_event("startup")
+async def startup_event():
+    """Run on application startup"""
+    logger.info("Starting Key Insights API")
+    logger.info(f"Ollama URL: {insights_service.ollama_base_url}")
+    logger.info(f"Text Model: {insights_service.text_model}")
+    logger.info(f"Vision Model: {insights_service.llava_model}")
+    
+    # Perform health check
+    health = await insights_service.health_check()
+    if health.get("service_healthy"):
+        logger.info("Service startup successful")
+    else:
+        logger.warning(f"Service startup with warnings: {health.get('error')}")
+
+
+# Shutdown event
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Run on application shutdown"""
+    logger.info("Shutting down Key Insights API")
+    # Clear cache on shutdown
+    await insights_service.clear_cache_safe()
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(
+        "main:app",
+        host="0.0.0.0",
+        port=8000,
+        reload=True,
+        log_level="info"
+    )
 #########VOICE RECOGNITION############
 
 voice_service = VoiceProcessingService()
