@@ -8,6 +8,8 @@ from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.exception_handlers import http_exception_handler
 from fastapi.exceptions import RequestValidationError, ResponseValidationError
+from langchain_community.vectorstores import FAISS
+from langchain_community.embeddings import OpenAIEmbeddings
 import uvicorn
 from fastapi import Query
 from typing import Dict, Any, List, Optional
@@ -24,7 +26,7 @@ import redis
 import asyncpg
 from redis import asyncio as redis  # ✅ new import
 from redis.asyncio.client import Redis  # for type-hinting if you want it
-from app.db.connection import (
+from db.connection import (
     create_database_connection,
     create_redis_connection,
     create_file_storage_connection,
@@ -44,7 +46,7 @@ router = APIRouter(prefix="/expression", tags=["Expression"])
 import os
 
 # Import all schemas - now properly utilized
-from app.handFree.schemas import (
+from handFree.schemas import (
     HandsFreeSessionRequest,
     InterviewResponseRequest,
     FacialAnalysisRequest,
@@ -66,7 +68,7 @@ from app.handFree.schemas import (
     SystemStatusMessage
 )
 
-from app.summarization.schemas import(
+from summarization.schemas import(
     SummaryType,
     AnalysisType,
     AudioUploadResponse,
@@ -83,14 +85,14 @@ from app.summarization.schemas import(
     BatchSummarizationRequest
 )
 
-from app.key_insights.schemas import (
+from key_insights.schemas import (
     KeyInsight,
     KeyInsightRequest,
     KeyInsightResponse,
     ErrorResponse as KeyInsightErrorResponse
 )
 
-from app.voice_recognition.schemas import (
+from voice_recognition.schemas import (
     VoiceSessionRequest,
     MicrophoneStatusRequest,
     DeviceSelectionRequest,
@@ -112,7 +114,7 @@ from app.voice_recognition.schemas import (
     ServiceHealth
 )
 
-from app.image_recognition.schemas import(
+from image_recognition.schemas import(
     CameraStatus,
     ExpressionConfig,
     ExpressionType,
@@ -155,7 +157,7 @@ from app.image_recognition.schemas import(
     ScreenshotAnalysisResponse
 )
 
-from app.MainFeature.schemas import(
+from MainFeature.schemas import(
     HideModeEnum,
     RecordingTypeEnum,
     RecordingConfig,
@@ -184,7 +186,7 @@ from app.MainFeature.schemas import(
 )
 
 # Import Quick Respond schemas
-from app.quick_respond.schemas import (
+from quick_respond.schemas import (
     QuickRespondRequest,
     QuickRespondResponse,
     SimplifyRequest,
@@ -218,22 +220,23 @@ from app.quick_respond.schemas import (
 )
 
 # Import services
-from app.quick_respond.service import (
+from quick_respond.service import (
     QuickRespondService,
+
 )
 
-from app.voice_recognition.services import (
+from voice_recognition.services import (
     VoiceProcessingService,
     AudioService
 )
 
-from app.key_insights.services import KeyInsightsService
+from key_insights.services import KeyInsightsService
 
 
-from app.handFree.service import (
+from handFree.service import (
     HandsFreeService)  
 
-from app.image_recognition.service import(
+from image_recognition.service import(
     CameraService,
     ExpressionDetectionService,
     ChatService,
@@ -241,11 +244,11 @@ from app.image_recognition.service import(
     AIAnalysisService
 )
 
-from app.summarization.service import(
+from summarization.service import(
     SummarizationService,
 )
 
-from app.MainFeature.service import(
+from MainFeature.service import(
     InvisibilityService,
 )
 
@@ -263,26 +266,34 @@ logger = logging.getLogger(__name__)
 async def create_database_connection():
     """Create PostgreSQL database connection"""
     try:
-        database_url = os.getenv("DATABASE_URL", "postgresql://user:password@localhost/interview_ai")
+        database_url = os.getenv("DATABASE_URL", "postgresql://postgres:NewStrongP@ssrd!@localhost:5432/ai_interviewer")
         return await asyncpg.create_pool(database_url)
     except Exception as e:
         logger.warning(f"Database connection failed: {e}. Using in-memory storage.")
         return None
 
 
-UPSTASH_REDIS_URL = "your-upstash-url"  # e.g. "redis://default:pass@host:port"
-
 async def create_redis_connection() -> Redis:
-    r = redis.from_url(
-        UPSTASH_REDIS_URL,
-        encoding="utf-8",
-        decode_responses=True
-    )
-    # Simple connectivity check
-    await r.ping()
-    print("✅ Connected to Redis!")
-    return r
-
+    """Create Redis connection using environment variable"""
+    redis_url = os.getenv("REDIS_URL")
+    
+    try:
+        # For rediss:// URLs, SSL is handled automatically
+        r = redis.from_url(
+            redis_url,
+            encoding="utf-8",
+            decode_responses=True,
+            socket_connect_timeout=10,
+            socket_keepalive=True,
+            health_check_interval=30
+        )
+        await r.ping()
+        logger.info("✅ Connected to Redis!")
+        return r
+    except Exception as e:
+        logger.warning(f"Redis connection failed: {e}. App will run without cache.")
+        return None
+    
 async def create_file_storage_connection():
     """Create file storage connection"""
     try:
@@ -312,22 +323,19 @@ async def create_file_storage_connection():
         return None
 
 async def create_vector_database_connection():
-    """Create vector database connection"""
+    """Create vector database connection without requiring OpenAI"""
     try:
-        # Mock vector DB - replace with actual implementation (ChromaDB, etc.)
-        class MockVectorDB:
-            async def store_embedding(self, id: str, embedding: list, metadata: dict):
-                pass
-            
-            async def search(self, query_embedding: list, limit: int = 10):
-                return []
-            
-            async def close(self):
-                pass
+        # Use HuggingFace embeddings instead (free, no API key needed)
+        from langchain_community.embeddings import HuggingFaceEmbeddings
         
-        return MockVectorDB()
+        embeddings = HuggingFaceEmbeddings(
+            model_name="sentence-transformers/all-MiniLM-L6-v2"
+        )
+        vectorstore = FAISS(embedding_function=embeddings, index=None)
+        logger.info("✅ Connected to FAISS vector database with HuggingFace embeddings!")
+        return vectorstore
     except Exception as e:
-        logger.warning(f"Vector database connection failed: {e}")
+        logger.warning(f"Vector database initialization failed: {e}")
         return None
 
 # ==============================================
@@ -989,6 +997,839 @@ app.include_router(expression_router)
 app.include_router(hands_free_router)
 app.include_router(key_insights_router)
 app.include_router(main_feature_router)
+
+####SERVICES
+
+# ============================================================================
+# HEALTH CHECK ENDPOINTS
+# ============================================================================
+
+#########VOICE RECOGNITION############
+
+voice_service = VoiceProcessingService()
+audio_service = AudioService()
+
+# Pydantic models for request/response
+class SessionCreateRequest(BaseModel):
+    user_id: str
+    meeting_id: Optional[str] = None
+
+class DeviceSelectRequest(BaseModel):
+    device_id: str
+
+class AudioProcessRequest(BaseModel):
+    audio_data: str  # Base64 encoded
+    filename: Optional[str] = None
+
+class TranscribeRequest(BaseModel):
+    audio_data: str  # Base64 encoded
+
+class AIResponseRequest(BaseModel):
+    question: str
+    response_format: ResponseFormat = ResponseFormat.SUMMARY
+    context: Optional[str] = None
+
+class SimplifyRequest(BaseModel):
+    original_response: str
+    simplification_level: SimplificationLevel = SimplificationLevel.BASIC
+
+class CalibrationRequest(BaseModel):
+    duration: int = Field(default=3, ge=1, le=10)
+    sample_rate: int = Field(default=16000, ge=8000, le=48000)
+    channels: int = Field(default=1, ge=1, le=2)
+
+class TestRecordingRequest(BaseModel):
+    duration: int = Field(default=5, ge=1, le=30)
+    sample_rate: int = Field(default=16000, ge=8000, le=48000)
+    channels: int = Field(default=1, ge=1, le=2)
+    apply_calibration: bool = True
+
+class TranscribeUploadRequest(BaseModel):
+    language: str = "auto"
+    model_size: str = "base"
+
+# ==================== Voice Processing Service Routes ====================
+
+@app.post("/api/v1/voice/session", tags=["Voice Processing"])
+async def create_voice_session(request: SessionCreateRequest):
+    """Create a new voice processing session"""
+    try:
+        session_id = await voice_service.create_session(
+            user_id=request.user_id,
+            meeting_id=request.meeting_id
+        )
+        return {
+            "success": True,
+            "session_id": session_id,
+            "message": "Voice session created successfully"
+        }
+    except Exception as e:
+        logger.error(f"Failed to create session: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/v1/voice/session/{session_id}/status", tags=["Voice Processing"])
+async def get_session_status(session_id: str):
+    """Get current session status"""
+    try:
+        status = await voice_service.get_session_status(session_id)
+        return {"success": True, **status}
+    except Exception as e:
+        logger.error(f"Failed to get session status: {str(e)}")
+        raise HTTPException(status_code=404, detail=str(e))
+
+@app.delete("/api/v1/voice/session/{session_id}", tags=["Voice Processing"])
+async def end_voice_session(session_id: str):
+    """End voice session and cleanup resources"""
+    try:
+        await voice_service.end_session(session_id)
+        return {
+            "success": True,
+            "message": "Session ended successfully"
+        }
+    except Exception as e:
+        logger.error(f"Failed to end session: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/v1/voice/session/{session_id}/microphone/status", tags=["Voice Processing"])
+async def check_microphone_status(session_id: str):
+    """Check microphone availability and status"""
+    try:
+        status = await voice_service.check_microphone_status(session_id)
+        return {"success": True, **status}
+    except Exception as e:
+        logger.error(f"Failed to check microphone: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/v1/voice/session/{session_id}/devices", tags=["Voice Processing"])
+async def get_audio_devices(session_id: str):
+    """Get list of available audio input devices"""
+    try:
+        devices = await voice_service.get_audio_devices(session_id)
+        return {
+            "success": True,
+            "devices": [device.dict() for device in devices],
+            "count": len(devices)
+        }
+    except Exception as e:
+        logger.error(f"Failed to get devices: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/v1/voice/session/{session_id}/device/select", tags=["Voice Processing"])
+async def select_audio_device(session_id: str, request: DeviceSelectRequest):
+    """Select and connect to a specific audio device"""
+    try:
+        result = await voice_service.select_audio_device(session_id, request.device_id)
+        return {"success": True, **result}
+    except Exception as e:
+        logger.error(f"Failed to select device: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/v1/voice/session/{session_id}/device/disable", tags=["Voice Processing"])
+async def disable_microphone(session_id: str):
+    """Disable microphone for the session"""
+    try:
+        await voice_service.disable_microphone(session_id)
+        return {
+            "success": True,
+            "message": "Microphone disabled"
+        }
+    except Exception as e:
+        logger.error(f"Failed to disable microphone: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/v1/voice/session/{session_id}/process", tags=["Voice Processing"])
+async def process_audio(session_id: str, file: UploadFile = File(...)):
+    """Process audio data: analyze quality, transcribe, and prepare for AI response"""
+    try:
+        audio_data = await file.read()
+        result = await voice_service.process_audio(
+            session_id=session_id,
+            audio_data=audio_data,
+            filename=file.filename
+        )
+        return {"success": True, **result}
+    except Exception as e:
+        logger.error(f"Failed to process audio: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/v1/voice/session/{session_id}/transcribe", tags=["Voice Processing"])
+async def transcribe_audio(session_id: str, request: TranscribeRequest):
+    """Transcribe audio to text"""
+    try:
+        result = await voice_service.transcribe_audio(
+            session_id=session_id,
+            audio_data=request.audio_data
+        )
+        return {"success": True, **result}
+    except Exception as e:
+        logger.error(f"Failed to transcribe: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/v1/voice/session/{session_id}/ai-response", tags=["Voice Processing"])
+async def generate_ai_response(session_id: str, request: AIResponseRequest):
+    """Generate AI response using Ollama"""
+    try:
+        result = await voice_service.generate_ai_response(
+            session_id=session_id,
+            question=request.question,
+            response_format=request.response_format,
+            context=request.context
+        )
+        return {"success": True, **result}
+    except Exception as e:
+        logger.error(f"Failed to generate AI response: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/v1/voice/session/{session_id}/analyze-voice", tags=["Voice Processing"])
+async def analyze_voice_characteristics(session_id: str, request: TranscribeRequest):
+    """Analyze voice characteristics and provide confidence rating"""
+    try:
+        result = await voice_service.analyze_voice_characteristics(
+            session_id=session_id,
+            audio_data=request.audio_data
+        )
+        return {"success": True, **result}
+    except Exception as e:
+        logger.error(f"Failed to analyze voice: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/v1/voice/session/{session_id}/simplify", tags=["Voice Processing"])
+async def simplify_response(session_id: str, request: SimplifyRequest):
+    """Generate a simplified version of the AI response"""
+    try:
+        result = await voice_service.simplify_response(
+            session_id=session_id,
+            original_response=request.original_response,
+            simplification_level=request.simplification_level
+        )
+        return {"success": True, **result}
+    except Exception as e:
+        logger.error(f"Failed to simplify response: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ==================== Audio Service Routes ====================
+
+@app.post("/api/v1/audio/calibrate", tags=["Audio Service"])
+async def calibrate_audio(request: CalibrationRequest):
+    """Perform audio calibration by measuring background noise"""
+    try:
+        result = await audio_service.calibrate_audio(
+            duration=request.duration,
+            sample_rate=request.sample_rate,
+            channels=request.channels
+        )
+        return {"success": True, **result.dict()}
+    except Exception as e:
+        logger.error(f"Calibration failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/v1/audio/calibration/status", tags=["Audio Service"])
+async def get_calibration_status():
+    """Get current calibration status"""
+    try:
+        status = await audio_service.get_calibration_status()
+        return {"success": True, **status}
+    except Exception as e:
+        logger.error(f"Failed to get calibration status: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/v1/audio/calibration/reset", tags=["Audio Service"])
+async def reset_calibration():
+    """Reset calibration settings"""
+    try:
+        await audio_service.reset_calibration()
+        return {
+            "success": True,
+            "message": "Calibration reset successfully"
+        }
+    except Exception as e:
+        logger.error(f"Failed to reset calibration: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/v1/audio/test-recording", tags=["Audio Service"])
+async def test_recording(request: TestRecordingRequest):
+    """Record a test audio clip and analyze quality"""
+    try:
+        result = await audio_service.test_recording(
+            duration=request.duration,
+            sample_rate=request.sample_rate,
+            channels=request.channels,
+            apply_calibration=request.apply_calibration
+        )
+        return {"success": True, **result.dict()}
+    except Exception as e:
+        logger.error(f"Test recording failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/v1/audio/transcribe", tags=["Audio Service"])
+async def transcribe_audio_upload(
+    file: UploadFile = File(...),
+    language: str = "auto",
+    model_size: str = "base"
+):
+    """Transcribe uploaded audio file"""
+    try:
+        audio_data = await file.read()
+        result = await audio_service.transcribe_audio(
+            audio_data=audio_data,
+            filename=file.filename,
+            content_type=file.content_type,
+            language=language,
+            model_size=model_size
+        )
+        return {"success": True, **result.dict()}
+    except Exception as e:
+        logger.error(f"Transcription failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/v1/audio/transcribe-latest-test", tags=["Audio Service"])
+async def transcribe_latest_test():
+    """Transcribe the most recent test recording"""
+    try:
+        result = await audio_service.transcribe_latest_test()
+        if result is None:
+            raise HTTPException(status_code=404, detail="No test recordings found")
+        return {"success": True, **result.dict()}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to transcribe test: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/v1/audio/devices", tags=["Audio Service"])
+async def get_audio_devices_list():
+    """Get available audio input devices"""
+    try:
+        devices = await audio_service.get_audio_devices()
+        return {"success": True, **devices}
+    except Exception as e:
+        logger.error(f"Failed to get devices: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/v1/audio/device/set/{device_id}", tags=["Audio Service"])
+async def set_audio_device(device_id: int):
+    """Set the default audio input device"""
+    try:
+        await audio_service.set_audio_device(device_id)
+        return {
+            "success": True,
+            "message": f"Audio device {device_id} set successfully"
+        }
+    except Exception as e:
+        logger.error(f"Failed to set device: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/v1/audio/health", tags=["Audio Service"])
+async def audio_health_check():
+    """Check audio service health"""
+    try:
+        health = await audio_service.health_check()
+        return health
+    except Exception as e:
+        logger.error(f"Health check failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ==================== Background Tasks ====================
+
+@app.post("/api/v1/audio/cleanup", tags=["Maintenance"])
+async def cleanup_old_files(background_tasks: BackgroundTasks, max_age_hours: int = 24):
+    """Clean up old temporary files"""
+    try:
+        background_tasks.add_task(audio_service.cleanup_old_files, max_age_hours)
+        return {
+            "success": True,
+            "message": f"Cleanup scheduled for files older than {max_age_hours} hours"
+        }
+    except Exception as e:
+        logger.error(f"Cleanup scheduling failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ==================== General Routes ====================
+
+@app.get("/", tags=["General"])
+async def root():
+    """API root endpoint"""
+    return {
+        "service": "Voice Processing API",
+        "version": "1.0.0",
+        "status": "running",
+        "endpoints": {
+            "docs": "/docs",
+            "voice_processing": "/api/v1/voice/*",
+            "audio_service": "/api/v1/audio/*"
+        }
+    }
+
+@app.get("/health", tags=["General"])
+async def health_check():
+    """Overall service health check"""
+    try:
+        audio_health = await audio_service.health_check()
+        return {
+            "status": "healthy",
+            "services": {
+                "voice_processing": "healthy",
+                "audio_service": audio_health
+            }
+        }
+    except Exception as e:
+        return {
+            "status": "degraded",
+            "error": str(e)
+        }
+
+# ==================== Error Handlers ====================
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request, exc):
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "success": False,
+            "error": exc.detail,
+            "status_code": exc.status_code
+        }
+    )
+
+@app.exception_handler(Exception)
+async def general_exception_handler(request, exc):
+    logger.error(f"Unhandled exception: {str(exc)}")
+    return JSONResponse(
+        status_code=500,
+        content={
+            "success": False,
+            "error": "Internal server error",
+            "detail": str(exc)
+        }
+    )
+
+# ==================== Startup/Shutdown Events ====================
+
+@app.on_event("startup")
+async def startup_event():
+    """Initialize services on startup"""
+    logger.info("Starting Voice Processing API...")
+    logger.info("Services initialized successfully")
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Cleanup on shutdown"""
+    logger.info("Shutting down Voice Processing API...")
+    # Cleanup resources
+    audio_service.cleanup_old_files(max_age_hours=0)
+    logger.info("Cleanup completed")
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
+    
+#########quick respond##########
+quick_respond_service = QuickRespondService()
+
+@app.get("/")
+async def root():
+    """Root endpoint - API information"""
+    return {
+        "service": "QuickRespond Meeting Assistant",
+        "version": "1.0.0",
+        "status": "online",
+        "endpoints": {
+            "health": "/health",
+            "analyze": "/api/v1/analyze",
+            "analyze_stream": "/api/v1/analyze/stream",
+            "simplify": "/api/v1/simplify",
+            "meeting_context": "/api/v1/meeting/context"
+        }
+    }
+
+
+@app.get("/health")
+async def health_check():
+    """
+    Check service and model availability
+    """
+    try:
+        health_status = await quick_respond_service.check_service_health()
+        
+        if health_status["status"] == "healthy":
+            return JSONResponse(
+                status_code=200,
+                content=health_status
+            )
+        elif health_status["status"] == "partial":
+            return JSONResponse(
+                status_code=206,
+                content=health_status
+            )
+        else:
+            return JSONResponse(
+                status_code=503,
+                content=health_status
+            )
+    except Exception as e:
+        logger.error(f"Health check failed: {str(e)}")
+        return JSONResponse(
+            status_code=503,
+            content={"status": "unhealthy", "error": str(e)}
+        )
+
+
+# ============================================================================
+# MEETING ANALYSIS ENDPOINTS
+# ============================================================================
+
+@app.post("/api/v1/analyze", response_model=QuickRespondResponse)
+async def analyze_meeting(request: QuickRespondRequest):
+    """
+    Analyze meeting screenshot and provide key insights
+    
+    Args:
+        request: QuickRespondRequest containing screenshot data and context
+        
+    Returns:
+        QuickRespondResponse with key insights and analysis
+    """
+    try:
+        logger.info("Received meeting analysis request")
+        
+        # Validate screenshot data
+        if not request.screenshot_data:
+            raise HTTPException(
+                status_code=400,
+                detail="Screenshot data is required"
+            )
+        
+        # Perform analysis
+        response = await quick_respond_service.analyze_meeting_content(request)
+        
+        logger.info(f"Analysis completed successfully. Session ID: {response.session_id}")
+        return response
+        
+    except ValueError as e:
+        logger.error(f"Validation error: {str(e)}")
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Analysis error: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to analyze meeting content: {str(e)}"
+        )
+
+
+@app.post("/api/v1/analyze/stream")
+async def analyze_meeting_stream(request: QuickRespondRequest):
+    """
+    Stream real-time meeting analysis results
+    
+    Args:
+        request: QuickRespondRequest containing screenshot data and context
+        
+    Returns:
+        StreamingResponse with real-time insights
+    """
+    try:
+        logger.info("Starting streaming analysis")
+        
+        if not request.screenshot_data:
+            raise HTTPException(
+                status_code=400,
+                detail="Screenshot data is required"
+            )
+        
+        async def generate_stream():
+            """Generator function for streaming responses"""
+            try:
+                async for chunk in quick_respond_service.analyze_meeting_content_stream(request):
+                    yield f"data: {json.dumps(chunk)}\n\n"
+            except Exception as e:
+                error_chunk = {
+                    "type": "error",
+                    "data": {"error": str(e)},
+                    "timestamp": None
+                }
+                yield f"data: {json.dumps(error_chunk)}\n\n"
+        
+        return StreamingResponse(
+            generate_stream(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+            }
+        )
+        
+    except Exception as e:
+        logger.error(f"Streaming analysis error: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to start streaming analysis: {str(e)}"
+        )
+
+
+@app.post("/api/v1/analyze/file")
+async def analyze_meeting_file(
+    file: UploadFile = File(...),
+    audio_transcript: Optional[str] = None,
+    meeting_context: Optional[str] = None
+):
+    """
+    Analyze meeting from uploaded screenshot file
+    
+    Args:
+        file: Uploaded image file
+        audio_transcript: Optional audio transcript context
+        meeting_context: Optional additional context
+        
+    Returns:
+        QuickRespondResponse with analysis results
+    """
+    try:
+        logger.info(f"Received file upload: {file.filename}")
+        
+        # Validate file type
+        if not file.content_type.startswith('image/'):
+            raise HTTPException(
+                status_code=400,
+                detail="File must be an image"
+            )
+        
+        # Read file data
+        screenshot_data = await file.read()
+        
+        # Create request object
+        request = QuickRespondRequest(
+            screenshot_data=screenshot_data,
+            audio_transcript=audio_transcript,
+            meeting_context=meeting_context
+        )
+        
+        # Perform analysis
+        response = await quick_respond_service.analyze_meeting_content(request)
+        
+        logger.info(f"File analysis completed. Session ID: {response.session_id}")
+        return response
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"File analysis error: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to analyze uploaded file: {str(e)}"
+        )
+
+
+# ============================================================================
+# SIMPLIFICATION ENDPOINTS
+# ============================================================================
+
+@app.post("/api/v1/simplify", response_model=SimplifyResponse)
+async def simplify_analysis(request: SimplifyRequest):
+    """
+    Simplify complex meeting analysis for quick understanding
+    
+    Args:
+        request: SimplifyRequest containing original analysis
+        
+    Returns:
+        SimplifyResponse with simplified content
+    """
+    try:
+        logger.info("Received simplification request")
+        
+        if not request.original_analysis:
+            raise HTTPException(
+                status_code=400,
+                detail="Original analysis is required"
+            )
+        
+        # Perform simplification
+        response = await quick_respond_service.simplify_analysis(request)
+        
+        logger.info("Simplification completed successfully")
+        return response
+        
+    except ValueError as e:
+        logger.error(f"Validation error: {str(e)}")
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Simplification error: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to simplify analysis: {str(e)}"
+        )
+
+
+# ============================================================================
+# MEETING CONTEXT ENDPOINTS
+# ============================================================================
+
+@app.post("/api/v1/meeting/context")
+async def update_meeting_context(context: MeetingContext):
+    """
+    Update meeting context for better analysis
+    
+    Args:
+        context: MeetingContext with meeting details
+        
+    Returns:
+        Success confirmation
+    """
+    try:
+        logger.info(f"Updating meeting context: {context.meeting_title}")
+        
+        await quick_respond_service.update_meeting_context(context)
+        
+        return {
+            "status": "success",
+            "message": "Meeting context updated successfully",
+            "meeting_title": context.meeting_title
+        }
+        
+    except Exception as e:
+        logger.error(f"Context update error: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to update meeting context: {str(e)}"
+        )
+
+
+@app.get("/api/v1/meeting/context")
+async def get_meeting_context():
+    """
+    Get current meeting context
+    
+    Returns:
+        Current meeting context and session insights
+    """
+    try:
+        return {
+            "meeting_context": quick_respond_service.meeting_context,
+            "session_insights": [
+                {
+                    "insight": insight.insight,
+                    "urgency": insight.urgency,
+                    "context": insight.context,
+                    "timestamp": insight.timestamp.isoformat()
+                }
+                for insight in quick_respond_service.session_insights
+            ],
+            "total_insights": len(quick_respond_service.session_insights)
+        }
+        
+    except Exception as e:
+        logger.error(f"Get context error: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to retrieve meeting context: {str(e)}"
+        )
+
+
+@app.delete("/api/v1/meeting/context")
+async def clear_meeting_context():
+    """
+    Clear stored meeting context and insights
+    
+    Returns:
+        Success confirmation
+    """
+    try:
+        logger.info("Clearing meeting context")
+        
+        await quick_respond_service.clear_meeting_context()
+        
+        return {
+            "status": "success",
+            "message": "Meeting context cleared successfully"
+        }
+        
+    except Exception as e:
+        logger.error(f"Clear context error: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to clear meeting context: {str(e)}"
+        )
+
+
+# ============================================================================
+# SESSION MANAGEMENT ENDPOINTS
+# ============================================================================
+
+@app.get("/api/v1/session/insights")
+async def get_session_insights():
+    """
+    Get all insights collected during current session
+    
+    Returns:
+        List of session insights
+    """
+    try:
+        insights = [
+            {
+                "insight": insight.insight,
+                "urgency": insight.urgency,
+                "context": insight.context,
+                "timestamp": insight.timestamp.isoformat()
+            }
+            for insight in quick_respond_service.session_insights
+        ]
+        
+        return {
+            "insights": insights,
+            "total_count": len(insights)
+        }
+        
+    except Exception as e:
+        logger.error(f"Get insights error: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to retrieve session insights: {str(e)}"
+        )
+
+
+# ============================================================================
+# ERROR HANDLERS
+# ============================================================================
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request, exc):
+    """Custom HTTP exception handler"""
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "error": exc.detail,
+            "status_code": exc.status_code
+        }
+    )
+
+
+@app.exception_handler(Exception)
+async def general_exception_handler(request, exc):
+    """General exception handler"""
+    logger.error(f"Unhandled exception: {str(exc)}")
+    return JSONResponse(
+        status_code=500,
+        content={
+            "error": "Internal server error",
+            "detail": str(exc)
+        }
+    )
+
+
+# ============================================================================
+# RUN APPLICATION
+# ============================================================================
+
+if __name__ == "__main__":
+    import uvicorn
+    
+    uvicorn.run(
+        "main:app",
+        host="0.0.0.0",
+        port=8000,
+        reload=True,
+        log_level="info"
+    )
 
 # ==============================================
 # FIXED: Custom middleware for proper session tracking

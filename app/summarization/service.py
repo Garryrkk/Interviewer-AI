@@ -18,8 +18,8 @@ import openai
 from transformers import pipeline
 import torch
 
-from ..database import get_db
-from ..config import settings
+from database import get_db
+from config import settings
 from .schemas import (
     ActionItem, 
     KeyPoint, 
