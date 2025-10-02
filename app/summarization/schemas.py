@@ -60,7 +60,7 @@ class KeyPoint(BaseModel):
     category: Optional[str] = Field(None, description="Category of the key point")
     timestamp: Optional[str] = Field(None, description="Timestamp in the meeting")
     importance: str = Field(default="medium", description="Importance level")
-
+  
 
 class MeetingAnalysisResponse(BaseModel):
     """Response model for meeting analysis"""
