@@ -46,7 +46,7 @@ const api = useRef(new VoiceProcessingAPI("http://localhost:8000"));
       <p className="whitespace-pre-wrap">{transcript}</p> 
     </div> 
   ); 
-}
+
 
 // VoiceProcessing component
 export function VoiceProcessing() { 
