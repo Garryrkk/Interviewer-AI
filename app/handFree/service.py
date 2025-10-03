@@ -7,13 +7,22 @@ import numpy as np
 from typing import Dict, List, Optional, Any
 from datetime import datetime, timedelta
 import speech_recognition as sr
-import openai
+try:
+    import openai
+except ImportError:
+    openai = None
 from transformers import pipeline
-import face_recognition
-import librosa
+import mediapipe as mp
+try:
+    import librosa
+except ImportError:
+    librosa = None
 from collections import defaultdict, deque
 import threading
 from concurrent.futures import ThreadPoolExecutor
+
+# MediaPipe is the primary facial analysis library
+# No need for face_recognition since we're using MediaPipe
 
 from .schemas import *
 
@@ -27,17 +36,45 @@ class HandsFreeService:
         
         # AI Services initialization
         self.speech_recognizer = sr.Recognizer()
-        self.emotion_analyzer = pipeline("text-classification", 
-                                        model="j-hartmann/emotion-english-distilroberta-base")
-        self.confidence_analyzer = pipeline("text-classification",
-                                           model="cardiffnlp/twitter-roberta-base-sentiment-latest")
+        
+        try:
+            self.emotion_analyzer = pipeline("text-classification", 
+                                            model="j-hartmann/emotion-english-distilroberta-base")
+        except Exception as e:
+            logger.warning(f"Could not load emotion analyzer: {e}")
+            self.emotion_analyzer = None
+            
+        try:
+            self.confidence_analyzer = pipeline("text-classification",
+                                               model="cardiffnlp/twitter-roberta-base-sentiment-latest")
+        except Exception as e:
+            logger.warning(f"Could not load confidence analyzer: {e}")
+            self.confidence_analyzer = None
         
         # Audio processing
         self.audio_buffer_size = 4096
         self.sample_rate = 16000
         
-        # Facial analysis
-        self.face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+        # Facial analysis - Initialize MediaPipe Face Mesh
+        self.mp_face_mesh = mp.solutions.face_mesh
+        self.face_mesh = self.mp_face_mesh.FaceMesh(
+            static_image_mode=False,
+            max_num_faces=1,
+            refine_landmarks=True,
+            min_detection_confidence=0.5,
+            min_tracking_confidence=0.5
+        )
+        
+        # MediaPipe drawing utilities for debugging (optional)
+        self.mp_drawing = mp.solutions.drawing_utils
+        self.mp_drawing_styles = mp.solutions.drawing_styles
+        
+        # Fallback to Haar cascades for basic face detection if needed
+        try:
+            self.face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+        except Exception as e:
+            logger.warning(f"Could not load face cascade: {e}")
+            self.face_cascade = None
         
         # Thread pool for intensive operations
         self.executor = ThreadPoolExecutor(max_workers=4)
@@ -306,28 +343,8 @@ class HandsFreeService:
             if frame is None:
                 raise ValueError("Invalid frame data")
             
-            # Detect faces
-            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-            faces = self.face_cascade.detectMultiScale(gray, 1.1, 4)
-            
-            if len(faces) == 0:
-                # No face detected - return default analysis
-                return FacialAnalysis(
-                    confidence_score=0.5,
-                    primary_emotion=EmotionState.CALM,
-                    eye_contact_score=0.5,
-                    posture_score=0.5,
-                    facial_expression_score=0.5,
-                    energy_level=0.5,
-                    stress_indicators=["No face detected"]
-                )
-            
-            # Analyze the largest detected face
-            (x, y, w, h) = max(faces, key=lambda rect: rect[2] * rect[3])
-            face_roi = frame[y:y+h, x:x+w]
-            
-            # Extract facial features
-            analysis = await self._analyze_facial_features(face_roi, frame)
+            # Try MediaPipe first, fallback to Haar cascades
+            analysis = await self._analyze_facial_features(frame)
             
             # Store in session history
             session['facial_analysis_history'].append({
@@ -819,7 +836,137 @@ class HandsFreeService:
         
         return suggestions
     
-    # Additional helper methods would continue here...
+    async def _analyze_facial_features(self, frame, full_frame=None):
+        """Analyze facial features using MediaPipe Face Mesh"""
+        try:
+            # Convert BGR to RGB for MediaPipe
+            rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            
+            # Process the frame with MediaPipe
+            results = self.face_mesh.process(rgb_frame)
+            
+            if results.multi_face_landmarks:
+                face_landmarks = results.multi_face_landmarks[0]
+                landmarks = face_landmarks.landmark
+                
+                # Get frame dimensions
+                h, w, _ = frame.shape
+                
+                # Extract key facial landmarks for analysis
+                # Eye landmarks (MediaPipe face mesh indices)
+                left_eye_center = landmarks[468]  # Left eye center
+                right_eye_center = landmarks[473]  # Right eye center
+                nose_tip = landmarks[1]  # Nose tip
+                mouth_center = landmarks[13]  # Mouth center
+                
+                # Calculate eye contact score based on eye positioning
+                # More centered eyes indicate better eye contact
+                left_eye_x = left_eye_center.x * w
+                right_eye_x = right_eye_center.x * w
+                eye_center_x = (left_eye_x + right_eye_x) / 2
+                frame_center_x = w / 2
+                
+                # Eye contact score (closer to center = better score)
+                eye_deviation = abs(eye_center_x - frame_center_x) / (w / 2)
+                eye_contact_score = max(0.0, 1.0 - eye_deviation)
+                
+                # Calculate facial expression score based on mouth positioning
+                mouth_y = mouth_center.y * h
+                nose_y = nose_tip.y * h
+                mouth_nose_distance = abs(mouth_y - nose_y)
+                
+                # Normalize facial expression score
+                facial_expression_score = min(1.0, mouth_nose_distance / (h * 0.1))
+                
+                # Calculate confidence score based on multiple factors
+                eye_distance = abs(left_eye_x - right_eye_x)
+                face_width_ratio = eye_distance / w
+                
+                # Confidence heuristic: better posture and positioning = higher confidence
+                confidence_score = (eye_contact_score * 0.4 + 
+                                  facial_expression_score * 0.3 + 
+                                  face_width_ratio * 2.0 * 0.3)
+                confidence_score = min(1.0, max(0.0, confidence_score))
+                
+                # Determine primary emotion based on facial features
+                # This is simplified - in production, you'd use emotion detection models
+                if facial_expression_score > 0.7:
+                    primary_emotion = EmotionState.HAPPY
+                elif confidence_score < 0.4:
+                    primary_emotion = EmotionState.NERVOUS
+                elif eye_contact_score > 0.7:
+                    primary_emotion = EmotionState.FOCUSED
+                else:
+                    primary_emotion = EmotionState.CALM
+                
+                # Calculate energy level based on facial positioning
+                energy_level = min(1.0, (confidence_score + eye_contact_score) / 2.0)
+                
+                # Detect stress indicators
+                stress_indicators = []
+                if eye_contact_score < 0.3:
+                    stress_indicators.append("Poor eye contact")
+                if confidence_score < 0.4:
+                    stress_indicators.append("Low confidence posture")
+                if face_width_ratio < 0.15:  # Face too small/far from camera
+                    stress_indicators.append("Positioning issues")
+                
+                return FacialAnalysis(
+                    confidence_score=confidence_score,
+                    primary_emotion=primary_emotion,
+                    eye_contact_score=eye_contact_score,
+                    posture_score=min(1.0, face_width_ratio * 3.0),  # Based on face positioning
+                    facial_expression_score=facial_expression_score,
+                    energy_level=energy_level,
+                    stress_indicators=stress_indicators
+                )
+                
+        except Exception as e:
+            logger.debug(f"MediaPipe facial analysis failed: {e}")
+        
+        # Fallback to basic face detection with Haar cascades
+        try:
+            if self.face_cascade is not None:
+                gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                faces = self.face_cascade.detectMultiScale(gray, 1.1, 4)
+                
+                if len(faces) > 0:
+                    # Basic analysis based on face detection
+                    (x, y, w, h) = faces[0]
+                    frame_h, frame_w, _ = frame.shape
+                    
+                    # Simple heuristics based on face size and position
+                    face_size_ratio = (w * h) / (frame_w * frame_h)
+                    center_deviation = abs((x + w/2) - frame_w/2) / (frame_w/2)
+                    
+                    confidence_score = min(1.0, face_size_ratio * 10.0)  # Larger face = more confident
+                    eye_contact_score = max(0.0, 1.0 - center_deviation)  # Centered = better eye contact
+                    
+                    return FacialAnalysis(
+                        confidence_score=confidence_score,
+                        primary_emotion=EmotionState.CALM,
+                        eye_contact_score=eye_contact_score,
+                        posture_score=confidence_score,
+                        facial_expression_score=0.6,
+                        energy_level=0.6,
+                        stress_indicators=[] if confidence_score > 0.5 else ["Low confidence detected"]
+                    )
+                    
+        except Exception as e:
+            logger.debug(f"Haar cascade analysis failed: {e}")
+        
+        # Final fallback - no face detected
+        return FacialAnalysis(
+            confidence_score=0.3,
+            primary_emotion=EmotionState.CALM,
+            eye_contact_score=0.3,
+            posture_score=0.3,
+            facial_expression_score=0.3,
+            energy_level=0.3,
+            stress_indicators=["No face detected or analysis failed"]
+        )
+    
+    # Additional helper methods
     async def verify_session(self, session_id: str) -> bool:
         """Verify session exists and is active"""
         return session_id in self.active_sessions
@@ -848,53 +995,167 @@ class HandsFreeService:
     def _load_response_templates(self) -> Dict:
         """Load response templates for different interview types"""
         return {
-            'technical': [],
-            'behavioral': [],
-            'general': []
+            'technical': [
+                "Based on my experience with {technology}, I would approach this by...",
+                "In my previous role, I handled similar challenges by...",
+                "The key considerations for this problem would be..."
+            ],
+            'behavioral': [
+                "In a similar situation, I demonstrated...",
+                "My approach to team collaboration involves...",
+                "When faced with challenges, I typically..."
+            ],
+            'general': [
+                "I believe my experience in {field} makes me well-suited because...",
+                "My career goal aligns with this role by...",
+                "I'm particularly excited about this opportunity because..."
+            ]
         }
     
     def _load_confidence_tips(self) -> Dict:
         """Load confidence tips database"""
-        return {}
+        return {
+            'posture': [
+                "Sit up straight with shoulders back",
+                "Lean slightly forward to show engagement",
+                "Keep your feet flat on the floor"
+            ],
+            'eye_contact': [
+                "Look directly at the camera/interviewer",
+                "Maintain steady eye contact while speaking",
+                "Avoid looking away frequently"
+            ],
+            'breathing': [
+                "Take slow, deep breaths before responding",
+                "Pause briefly to collect your thoughts",
+                "Speak at a measured pace"
+            ],
+            'expression': [
+                "Maintain a pleasant, professional expression",
+                "Show enthusiasm through facial expressions",
+                "Relax your facial muscles"
+            ]
+        }
     
     async def _load_question_patterns(self, interview_type: InterviewType) -> List:
         """Load common question patterns for the interview type"""
-        return []
+        patterns = {
+            'technical': [
+                "how would you implement",
+                "explain the difference between",
+                "what is your experience with",
+                "walk me through",
+                "design a system"
+            ],
+            'behavioral': [
+                "tell me about a time",
+                "describe a situation",
+                "how do you handle",
+                "give me an example",
+                "what would you do if"
+            ],
+            'general': [
+                "why do you want",
+                "what interests you",
+                "where do you see yourself",
+                "what are your strengths",
+                "why should we hire you"
+            ]
+        }
+        return patterns.get(interview_type, patterns['general'])
     
     async def _monitor_audio_continuously(self, session_id: str) -> None:
         """Background task to monitor audio continuously"""
-        # Implementation for continuous monitoring
-        pass
+        session = self.active_sessions.get(session_id)
+        if not session:
+            return
+        
+        try:
+            while session.get('hands_free_active', False):
+                # Monitor audio levels and quality
+                current_level = session['real_time_data'].get('current_audio_level', 0.0)
+                
+                # Log audio monitoring (simplified)
+                if current_level > 0.1:  # Some audio detected
+                    logger.debug(f"Audio level: {current_level:.2f} for session {session_id}")
+                
+                await asyncio.sleep(0.1)  # Check every 100ms
+                
+        except Exception as e:
+            logger.error(f"Audio monitoring error for session {session_id}: {e}")
     
     async def _monitor_confidence_continuously(self, session_id: str) -> None:
         """Background task to monitor confidence levels"""
-        # Implementation for continuous monitoring
-        pass
-    
-    async def _analyze_facial_features(self, face_roi, full_frame) -> FacialAnalysis:
-        """Analyze facial features for confidence assessment"""
-        # Simplified facial analysis
-        return FacialAnalysis(
-            confidence_score=0.75,
-            primary_emotion=EmotionState.FOCUSED,
-            eye_contact_score=0.8,
-            posture_score=0.7,
-            facial_expression_score=0.8,
-            energy_level=0.7
-        )
+        session = self.active_sessions.get(session_id)
+        if not session:
+            return
+        
+        try:
+            while session.get('hands_free_active', False):
+                # Monitor confidence trends
+                history = session.get('confidence_history', [])
+                
+                # Add current confidence if available
+                if session['conversation_history']:
+                    latest = session['conversation_history'][-1]
+                    confidence = latest.get('confidence_score', 0.5)
+                    history.append({
+                        'confidence': confidence,
+                        'timestamp': datetime.utcnow()
+                    })
+                    
+                    # Keep only recent history (last hour)
+                    cutoff = datetime.utcnow() - timedelta(hours=1)
+                    session['confidence_history'] = [
+                        h for h in history 
+                        if h['timestamp'] > cutoff
+                    ]
+                
+                await asyncio.sleep(5)  # Check every 5 seconds
+                
+        except Exception as e:
+            logger.error(f"Confidence monitoring error for session {session_id}: {e}")
     
     async def _test_microphone_service(self) -> bool:
         """Test microphone service health"""
-        return True
+        try:
+            # Try to list available microphones
+            mic_list = sr.Microphone.list_microphone_names()
+            return len(mic_list) > 0
+        except Exception as e:
+            logger.error(f"Microphone test failed: {e}")
+            return False
     
     async def _test_speech_recognition(self) -> bool:
         """Test speech recognition service"""
-        return True
+        try:
+            # Test speech recognizer initialization
+            recognizer = sr.Recognizer()
+            return recognizer is not None
+        except Exception as e:
+            logger.error(f"Speech recognition test failed: {e}")
+            return False
     
     async def _test_ai_response_service(self) -> bool:
         """Test AI response generation service"""
-        return True
+        try:
+            # Test response generation
+            test_response = await self._generate_ai_response(
+                question="Test question",
+                context=None,
+                ai_context={'interview_type': 'general'},
+                history=[]
+            )
+            return len(test_response) > 0
+        except Exception as e:
+            logger.error(f"AI response test failed: {e}")
+            return False
     
     async def _test_facial_analysis(self) -> bool:
         """Test facial analysis service"""
-        return True
+        try:
+            # Test MediaPipe initialization
+            return self.mp_face_mesh is not None
+        except Exception as e:
+            logger.error(f"Facial analysis test failed: {e}")
+            return False

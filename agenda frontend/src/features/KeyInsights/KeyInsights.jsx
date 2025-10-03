@@ -1,28 +1,29 @@
 import React, { useState, useEffect } from 'react';
 import { Upload, FileText, Brain, TrendingUp, Clock, Trash2, RefreshCw, Users, AlertCircle, CheckCircle } from 'lucide-react';
 
-const BASE_URL = "http://localhost:8000/api/v1/key-insights";
-
-
 const KeyInsightsDashboard = () => {
-  const [meetingContext, setMeetingContext] = useState('');
-  const [meetingId, setMeetingId] = useState('');
-  const [participants, setParticipants] = useState('');
-  const [analysisFocus, setAnalysisFocus] = useState('');
-  const [selectedFile, setSelectedFile] = useState(null);
-  const [insights, setInsights] = useState(null);
+  const [api] = useState(new KeyInsightsAPI());
+  const [activeTab, setActiveTab] = useState('analyze');
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [successMessage, setSuccessMessage] = useState('');
-  const [analysisStatus, setAnalysisStatus] = useState(null);
-  const [statusPolling, setStatusPolling] = useState(false);
+  const [error, setError] = useState(null);
+  const [success, setSuccess] = useState(null);
+  
+  // State for different features
+  const [transcript, setTranscript] = useState('');
+  const [meetingId, setMeetingId] = useState('');
+  const [imageFile, setImageFile] = useState(null);
+  const [insights, setInsights] = useState(null);
+  const [insightTypes, setInsightTypes] = useState([]);
+  const [selectedTypes, setSelectedTypes] = useState([]);
+  const [maxInsights, setMaxInsights] = useState(10);
+  const [analysisStatus, setAnalysisStatus] = useState({});
+  const [history, setHistory] = useState([]);
+  const [simplifiedInsights, setSimplifiedInsights] = useState(null);
   const [simplificationLevel, setSimplificationLevel] = useState('moderate');
   const [insightsHistory, setInsightsHistory] = useState([]);
   const [batchMode, setBatchMode] = useState(false);
   const [batchContexts, setBatchContexts] = useState(['']);
   const [batchIds, setBatchIds] = useState(['']);
-  const [insightTypes, setInsightTypes] = useState([]);
-  const [sampleInsight, setSampleInsight] = useState(null);
 
   // Clear error handler
   const clearError = () => {
@@ -49,11 +50,11 @@ const KeyInsightsDashboard = () => {
 
     try {
       let response;
-
+      
       if (selectedFile) {
         // Use FormData for file upload
         const formData = new FormData();
-
+        
         const requestData = {
           meeting_context: meetingContext || null,
           meeting_id: meetingId || null,
@@ -100,7 +101,7 @@ const KeyInsightsDashboard = () => {
       const data = await response.json();
       setInsights(data);
       setSuccessMessage('Insights generated successfully!');
-
+      
       // Start status polling
       if (data.insight_id) {
         pollAnalysisStatus(data.insight_id);
@@ -112,43 +113,23 @@ const KeyInsightsDashboard = () => {
     }
   };
 
-  // Simplify Insights
-  const simplifyInsights = async () => {
-    if (!insights) {
-      setError('No insights to simplify');
+  const handleSimplifyInsights = async () => {
+    if (!insights?.key_insights) {
+      setError('No insights to simplify. Generate insights first.');
       return;
     }
 
     setLoading(true);
-    setError('');
-
-    const requestData = {
-      original_insight_id: insights.insight_id,
-      original_insights: insights.key_insights,
-      original_tips: insights.situation_tips,
-      simplification_level: simplificationLevel
-    };
-
+    setError(null);
     try {
-      const response = await fetch(`${BASE_URL}/simplify`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(requestData),
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const data = await response.json();
-      setInsights(prev => ({
-        ...prev,
-        simplified_insights: data.simplified_insights,
-        simplified_tips: data.simplified_tips,
-        simplification_level: data.simplification_level
-      }));
+      const result = await api.simplifyInsights(
+        insights.key_insights,
+        insights.situation_tips || [],
+        simplificationLevel,
+        insights.insight_id
+      );
+      setSimplifiedInsights(result);
+      setSuccess('Insights simplified successfully!');
     } catch (err) {
       setError(`Failed to simplify insights: ${err.message}`);
     } finally {
@@ -159,7 +140,7 @@ const KeyInsightsDashboard = () => {
   // Poll Analysis Status
   const pollAnalysisStatus = async (insightId) => {
     setStatusPolling(true);
-
+    
     const pollInterval = setInterval(async () => {
       try {
         const response = await fetch(`${BASE_URL}/status/${insightId}`);
@@ -184,25 +165,20 @@ const KeyInsightsDashboard = () => {
     }, 300000);
   };
 
-  // Get Insights History
-  const getInsightsHistory = async () => {
-    if (!meetingId) {
-      setError('Please provide a meeting ID');
+  const handleLoadHistory = async () => {
+    if (!meetingId.trim()) {
+      setError('Please enter a meeting ID');
       return;
     }
 
     setLoading(true);
-    setError('');
-
+    setError(null);
     try {
-      const response = await fetch(`${BASE_URL}/history/${meetingId}`);
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      const data = await response.json();
-      setInsightsHistory(data.insights_history);
+      const result = await api.getInsightsHistory(meetingId);
+      setHistory(result.insights_history || []);
+      setSuccess('History loaded successfully!');
     } catch (err) {
-      setError(`Failed to get insights history: ${err.message}`);
+      setError(`Failed to load history: ${err.message}`);
     } finally {
       setLoading(false);
     }
@@ -216,7 +192,7 @@ const KeyInsightsDashboard = () => {
       const response = await fetch(`${BASE_URL}/insights/${insightId}`, {
         method: 'DELETE',
       });
-
+      
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
@@ -232,36 +208,19 @@ const KeyInsightsDashboard = () => {
   const batchAnalyzeInsights = async () => {
     const validContexts = batchContexts.filter(c => c.trim());
     const validIds = batchIds.filter(id => id.trim());
-
+    
     if (validContexts.length !== validIds.length || validContexts.length === 0) {
       setError('Please provide valid contexts and IDs for batch analysis. Each meeting must have both a context and an ID.');
       return;
     }
 
     setLoading(true);
-    setError('');
-
     try {
-      const response = await fetch(`${BASE_URL}/batch-analyze`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          meeting_contexts: validContexts,
-          meeting_ids: validIds
-        }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ detail: 'Unknown error' }));
-        throw new Error(errorData.detail || `HTTP error! status: ${response.status}`);
-      }
-
-      const data = await response.json();
-      setInsights(data);
+      await api.deleteInsights(insightId);
+      setHistory(history.filter(h => h.insight_id !== insightId));
+      setSuccess('Insight deleted successfully!');
     } catch (err) {
-      setError(`Failed to perform batch analysis: ${err.message}`);
+      setError(`Failed to delete insight: ${err.message}`);
     } finally {
       setLoading(false);
     }
@@ -279,53 +238,21 @@ const KeyInsightsDashboard = () => {
     setBatchIds(batchIds.filter((_, i) => i !== index));
   };
 
-  // Fetch available insight types
-  const fetchInsightTypes = async () => {
-    try {
-      const response = await fetch(`${BASE_URL}/types`);
-      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-      const data = await response.json();
-      setInsightTypes(data);
-    } catch (err) {
-      setError(`Failed to fetch insight types: ${err.message}`);
-    }
-  };
-
-  // Fetch sample insight
-  const fetchSampleInsight = async () => {
-    try {
-      const response = await fetch(`${BASE_URL}/sample`);
-      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-      const data = await response.json();
-      setSampleInsight(data);
-    } catch (err) {
-      setError(`Failed to fetch sample insight: ${err.message}`);
-    }
-  };
-
-
   // File upload handler
   const handleFileUpload = (event) => {
     const file = event.target.files[0];
     if (file && file.type.startsWith('image/')) {
-      setSelectedFile(file);
+      setImageFile(file);
     } else {
       setError('Please select a valid image file');
     }
   };
 
-  // On component mount, fetch available types + sample
-  useEffect(() => {
-    fetchInsightTypes();
-    fetchSampleInsight();
-  }, []);
-
-
   return (
-    <div style={{
-      minHeight: '100vh',
-      backgroundColor: '#1E1E2F',
-      color: '#F8FAFC',
+    <div style={{ 
+      minHeight: '100vh', 
+      backgroundColor: '#1E1E2F', 
+      color: '#F8FAFC', 
       fontFamily: 'Roboto, sans-serif',
       padding: '20px'
     }}>
@@ -337,11 +264,11 @@ const KeyInsightsDashboard = () => {
 
         {/* Success Message */}
         {successMessage && (
-          <div style={{
-            backgroundColor: '#d1fae5',
-            color: '#065f46',
-            padding: '12px',
-            borderRadius: '8px',
+          <div style={{ 
+            backgroundColor: '#d1fae5', 
+            color: '#065f46', 
+            padding: '12px', 
+            borderRadius: '8px', 
             marginBottom: '20px',
             display: 'flex',
             alignItems: 'center',
@@ -369,11 +296,11 @@ const KeyInsightsDashboard = () => {
 
         {/* Error Display */}
         {error && (
-          <div style={{
-            backgroundColor: '#fee2e2',
-            color: '#dc2626',
-            padding: '12px',
-            borderRadius: '8px',
+          <div style={{ 
+            backgroundColor: '#fee2e2', 
+            color: '#dc2626', 
+            padding: '12px', 
+            borderRadius: '8px', 
             marginBottom: '20px',
             display: 'flex',
             alignItems: 'center',
@@ -401,10 +328,10 @@ const KeyInsightsDashboard = () => {
 
         {/* Analysis Status */}
         {analysisStatus && (
-          <div style={{
-            backgroundColor: '#374151',
-            padding: '16px',
-            borderRadius: '12px',
+          <div style={{ 
+            backgroundColor: '#374151', 
+            padding: '16px', 
+            borderRadius: '12px', 
             marginBottom: '20px',
             border: '1px solid #4B5563'
           }}>
@@ -413,15 +340,15 @@ const KeyInsightsDashboard = () => {
               <span style={{ fontWeight: '600' }}>Analysis Status: {analysisStatus.status}</span>
               {statusPolling && <RefreshCw style={{ marginLeft: '10px', animation: 'spin 1s linear infinite' }} size={16} />}
             </div>
-            <div style={{
-              backgroundColor: '#1F2937',
-              borderRadius: '8px',
-              height: '8px',
-              overflow: 'hidden'
+            <div style={{ 
+              backgroundColor: '#1F2937', 
+              borderRadius: '8px', 
+              height: '8px', 
+              overflow: 'hidden' 
             }}>
-              <div style={{
-                backgroundColor: '#8F74D4',
-                height: '100%',
+              <div style={{ 
+                backgroundColor: '#8F74D4', 
+                height: '100%', 
                 width: `${analysisStatus.progress}%`,
                 transition: 'width 0.3s ease'
               }} />
@@ -453,10 +380,10 @@ const KeyInsightsDashboard = () => {
 
         {!batchMode ? (
           // Single Analysis Mode
-          <div style={{
-            backgroundColor: '#374151',
-            padding: '24px',
-            borderRadius: '16px',
+          <div style={{ 
+            backgroundColor: '#374151', 
+            padding: '24px', 
+            borderRadius: '16px', 
             marginBottom: '24px',
             border: '1px solid #4B5563'
           }}>
@@ -467,134 +394,89 @@ const KeyInsightsDashboard = () => {
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
               <div>
-                <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500' }}>
-                  Meeting ID
-                </label>
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  <input
-                    type="text"
-                    value={meetingId}
-                    onChange={(e) => setMeetingId(e.target.value)}
-                    placeholder="Enter meeting ID"
-                    style={{
-                      flex: 1,
-                      padding: '12px',
-                      backgroundColor: '#1F2937',
-                      border: '1px solid #4B5563',
-                      borderRadius: '8px',
-                      color: '#F8FAFC',
-                      fontSize: '14px'
-                    }}
-                  />
-                  <button
-                    onClick={generateMeetingId}
-                    type="button"
-                    style={{
-                      backgroundColor: '#6B7280',
-                      color: '#F8FAFC',
-                      border: 'none',
-                      padding: '12px',
-                      borderRadius: '8px',
-                      cursor: 'pointer',
-                      fontSize: '12px',
-                      fontWeight: '500',
-                      whiteSpace: 'nowrap'
-                    }}
-                  >
-                    Generate
-                  </button>
-                </div>
-              </div>
+                <h2 className="text-2xl font-semibold mb-4 flex items-center">
+                  <FileText className="mr-2" size={24} />
+                  Generate Insights
+                </h2>
+                
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                      Meeting Transcript *
+                    </label>
+                    <textarea
+                      value={transcript}
+                      onChange={(e) => setTranscript(e.target.value)}
+                      placeholder="Enter your meeting transcript here..."
+                      className="w-full h-32 p-3 bg-gray-700 border border-gray-600 rounded-lg text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    />
+                  </div>
 
-              <div>
-                <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500' }}>
-                  Participants (comma-separated)
-                </label>
-                <input
-                  type="text"
-                  value={participants}
-                  onChange={(e) => setParticipants(e.target.value)}
-                  placeholder="John, Sarah, Mike"
-                  style={{
-                    width: '100%',
-                    padding: '12px',
-                    backgroundColor: '#1F2937',
-                    border: '1px solid #4B5563',
-                    borderRadius: '8px',
-                    color: '#F8FAFC',
-                    fontSize: '14px'
-                  }}
-                />
-              </div>
-            </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                      Meeting ID (Optional)
+                    </label>
+                    <input
+                      type="text"
+                      value={meetingId}
+                      onChange={(e) => setMeetingId(e.target.value)}
+                      placeholder="Enter meeting ID"
+                      className="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    />
+                  </div>
 
-            <div style={{ marginBottom: '20px' }}>
-              <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500' }}>
-                Analysis Focus
-              </label>
-              <input
-                type="text"
-                value={analysisFocus}
-                onChange={(e) => setAnalysisFocus(e.target.value)}
-                placeholder="e.g., Decision making, Team dynamics, Action items"
-                style={{
-                  width: '100%',
-                  padding: '12px',
-                  backgroundColor: '#1F2937',
-                  border: '1px solid #4B5563',
-                  borderRadius: '8px',
-                  color: '#F8FAFC',
-                  fontSize: '14px'
-                }}
-              />
-            </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                      Upload Image (Optional)
+                    </label>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleFileChange}
+                      className="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg text-gray-100 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-purple-600 file:text-white hover:file:bg-purple-700"
+                    />
+                  </div>
 
-            <div style={{ marginBottom: '20px' }}>
-              <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500' }}>
-                Meeting Context/Transcript
-              </label>
-              <textarea
-                value={meetingContext}
-                onChange={(e) => setMeetingContext(e.target.value)}
-                placeholder="Enter meeting context, transcript, or discussion points..."
-                rows={6}
-                style={{
-                  width: '100%',
-                  padding: '12px',
-                  backgroundColor: '#1F2937',
-                  border: '1px solid #4B5563',
-                  borderRadius: '8px',
-                  color: '#F8FAFC',
-                  fontSize: '14px',
-                  resize: 'vertical'
-                }}
-              />
-            </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                      Insight Types (Optional)
+                    </label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {insightTypes.map((type) => (
+                        <label key={type} className="flex items-center space-x-2">
+                          <input
+                            type="checkbox"
+                            checked={selectedTypes.includes(type)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedTypes([...selectedTypes, type]);
+                              } else {
+                                setSelectedTypes(selectedTypes.filter(t => t !== type));
+                              }
+                            }}
+                            className="rounded border-gray-600 text-purple-600 focus:ring-purple-500"
+                          />
+                          <span className="text-sm text-gray-300 capitalize">
+                            {type.replace('_', ' ')}
+                          </span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
 
-            <div style={{ marginBottom: '20px' }}>
-              <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500' }}>
-                Upload Image (for facial expression analysis)
-              </label>
-              <input
-                type="file"
-                accept="image/*"
-                onChange={handleFileUpload}
-                style={{
-                  width: '100%',
-                  padding: '12px',
-                  backgroundColor: '#1F2937',
-                  border: '1px solid #4B5563',
-                  borderRadius: '8px',
-                  color: '#F8FAFC',
-                  fontSize: '14px'
-                }}
-              />
-              {selectedFile && (
-                <p style={{ fontSize: '14px', color: '#9CA3AF', marginTop: '4px' }}>
-                  Selected: {selectedFile.name}
-                </p>
-              )}
-            </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                      Max Insights: {maxInsights}
+                    </label>
+                    <input
+                      type="range"
+                      min="1"
+                      max="50"
+                      value={maxInsights}
+                      onChange={(e) => setMaxInsights(parseInt(e.target.value))}
+                      className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer slider"
+                    />
+                  </div>
 
             <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
               <button
@@ -646,10 +528,10 @@ const KeyInsightsDashboard = () => {
           </div>
         ) : (
           // Batch Analysis Mode
-          <div style={{
-            backgroundColor: '#374151',
-            padding: '24px',
-            borderRadius: '16px',
+          <div style={{ 
+            backgroundColor: '#374151', 
+            padding: '24px', 
+            borderRadius: '16px', 
             marginBottom: '24px',
             border: '1px solid #4B5563'
           }}>
@@ -679,7 +561,7 @@ const KeyInsightsDashboard = () => {
                     </button>
                   )}
                 </div>
-
+                
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '12px' }}>
                   <input
                     type="text"
@@ -700,7 +582,7 @@ const KeyInsightsDashboard = () => {
                       fontSize: '14px'
                     }}
                   />
-
+                  
                   <textarea
                     value={context}
                     onChange={(e) => {
@@ -722,59 +604,14 @@ const KeyInsightsDashboard = () => {
                   />
                 </div>
               </div>
-            ))}
-
-            <div style={{ display: 'flex', gap: '12px', marginBottom: '20px' }}>
-              <button
-                onClick={addBatchInput}
-                style={{
-                  backgroundColor: '#374151',
-                  color: '#F8FAFC',
-                  border: '1px solid #8F74D4',
-                  padding: '8px 16px',
-                  borderRadius: '8px',
-                  cursor: 'pointer',
-                  fontWeight: '500',
-                  fontSize: '14px'
-                }}
-              >
-                Add Meeting
-              </button>
-            </div>
-
-            <button
-              onClick={batchAnalyzeInsights}
-              disabled={loading}
-              style={{
-                backgroundColor: '#8F74D4',
-                color: '#F8FAFC',
-                border: 'none',
-                padding: '14px 28px',
-                borderRadius: '12px',
-                cursor: loading ? 'not-allowed' : 'pointer',
-                fontWeight: '600',
-                fontSize: '16px',
-                display: 'flex',
-                alignItems: 'center',
-                opacity: loading ? 0.7 : 1
-              }}
-            >
-              {loading ? (
-                <RefreshCw style={{ marginRight: '8px', animation: 'spin 1s linear infinite' }} size={20} />
-              ) : (
-                <TrendingUp style={{ marginRight: '8px' }} size={20} />
-              )}
-              {loading ? 'Processing Batch...' : 'Analyze Batch'}
-            </button>
-          </div>
-        )}
+            )}
 
         {/* Insights Display */}
         {insights && (
-          <div style={{
-            backgroundColor: '#374151',
-            padding: '24px',
-            borderRadius: '16px',
+          <div style={{ 
+            backgroundColor: '#374151', 
+            padding: '24px', 
+            borderRadius: '16px', 
             marginBottom: '24px',
             border: '1px solid #4B5563'
           }}>
@@ -783,7 +620,7 @@ const KeyInsightsDashboard = () => {
                 <CheckCircle style={{ marginRight: '8px', color: '#10B981' }} />
                 Generated Insights
               </h2>
-
+              
               <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
                 <select
                   value={simplificationLevel}
@@ -801,7 +638,7 @@ const KeyInsightsDashboard = () => {
                   <option value="moderate">Moderate Simplification</option>
                   <option value="heavy">Heavy Simplification</option>
                 </select>
-
+                
                 <button
                   onClick={simplifyInsights}
                   style={{
@@ -817,7 +654,7 @@ const KeyInsightsDashboard = () => {
                 >
                   Simplify
                 </button>
-
+                
                 <button
                   onClick={() => deleteInsights(insights.insight_id)}
                   style={{
@@ -835,11 +672,11 @@ const KeyInsightsDashboard = () => {
             </div>
 
             {/* Insights Meta Info */}
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-              gap: '16px',
-              marginBottom: '20px'
+            <div style={{ 
+              display: 'grid', 
+              gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', 
+              gap: '16px', 
+              marginBottom: '20px' 
             }}>
               <div style={{ backgroundColor: '#1F2937', padding: '12px', borderRadius: '8px' }}>
                 <div style={{ fontSize: '12px', color: '#9CA3AF', marginBottom: '4px' }}>Insight ID</div>
@@ -871,9 +708,9 @@ const KeyInsightsDashboard = () => {
               </h3>
               <div style={{ display: 'grid', gap: '12px' }}>
                 {(insights.simplified_insights || insights.key_insights)?.map((insight, index) => (
-                  <div key={index} style={{
-                    backgroundColor: '#1F2937',
-                    padding: '16px',
+                  <div key={index} style={{ 
+                    backgroundColor: '#1F2937', 
+                    padding: '16px', 
                     borderRadius: '8px',
                     borderLeft: '4px solid #8F74D4'
                   }}>
@@ -896,9 +733,9 @@ const KeyInsightsDashboard = () => {
               </h3>
               <div style={{ display: 'grid', gap: '12px' }}>
                 {(insights.simplified_tips || insights.situation_tips)?.map((tip, index) => (
-                  <div key={index} style={{
-                    backgroundColor: '#1F2937',
-                    padding: '16px',
+                  <div key={index} style={{ 
+                    backgroundColor: '#1F2937', 
+                    padding: '16px', 
                     borderRadius: '8px',
                     borderLeft: '4px solid #10B981'
                   }}>
@@ -916,9 +753,9 @@ const KeyInsightsDashboard = () => {
 
         {/* History Display */}
         {insightsHistory.length > 0 && (
-          <div style={{
-            backgroundColor: '#374151',
-            padding: '24px',
+          <div style={{ 
+            backgroundColor: '#374151', 
+            padding: '24px', 
             borderRadius: '16px',
             border: '1px solid #4B5563'
           }}>
@@ -926,12 +763,12 @@ const KeyInsightsDashboard = () => {
               <Clock style={{ marginRight: '8px' }} />
               Insights History
             </h2>
-
+            
             <div style={{ display: 'grid', gap: '16px' }}>
               {insightsHistory.map((item, index) => (
-                <div key={index} style={{
-                  backgroundColor: '#1F2937',
-                  padding: '16px',
+                <div key={index} style={{ 
+                  backgroundColor: '#1F2937', 
+                  padding: '16px', 
                   borderRadius: '8px',
                   display: 'flex',
                   justifyContent: 'space-between',
@@ -945,7 +782,7 @@ const KeyInsightsDashboard = () => {
                       Insights: {item.insights_count} | Tips: {item.tips_count}
                     </div>
                   </div>
-
+                  
                   <button
                     onClick={() => deleteInsights(item.insight_id)}
                     style={{
@@ -967,9 +804,9 @@ const KeyInsightsDashboard = () => {
 
         {/* Batch Results Display */}
         {insights?.batch_results && (
-          <div style={{
-            backgroundColor: '#374151',
-            padding: '24px',
+          <div style={{ 
+            backgroundColor: '#374151', 
+            padding: '24px', 
             borderRadius: '16px',
             marginTop: '24px',
             border: '1px solid #4B5563'
@@ -978,20 +815,20 @@ const KeyInsightsDashboard = () => {
               <TrendingUp style={{ marginRight: '8px' }} />
               Batch Analysis Results
             </h2>
-
+            
             <div style={{ display: 'grid', gap: '16px' }}>
               {insights.batch_results.map((result, index) => (
-                <div key={index} style={{
-                  backgroundColor: result.status === 'success' ? '#1F2937' : '#7F1D1D',
-                  padding: '16px',
+                <div key={index} style={{ 
+                  backgroundColor: result.status === 'success' ? '#1F2937' : '#7F1D1D', 
+                  padding: '16px', 
                   borderRadius: '8px',
                   borderLeft: `4px solid ${result.status === 'success' ? '#10B981' : '#EF4444'}`
                 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                     <span style={{ fontWeight: '600' }}>Meeting ID: {result.meeting_id}</span>
-                    <span style={{
-                      fontSize: '12px',
-                      padding: '4px 8px',
+                    <span style={{ 
+                      fontSize: '12px', 
+                      padding: '4px 8px', 
                       borderRadius: '12px',
                       backgroundColor: result.status === 'success' ? '#10B981' : '#EF4444',
                       color: '#F8FAFC'
@@ -999,32 +836,33 @@ const KeyInsightsDashboard = () => {
                       {result.status.toUpperCase()}
                     </span>
                   </div>
-
+                  
                   {result.status === 'success' && result.insights && (
                     <div>
                       <div style={{ fontSize: '14px', color: '#9CA3AF', marginBottom: '8px' }}>
-                        Insights: {result.insights.key_insights?.length || 0} |
+                        Insights: {result.insights.key_insights?.length || 0} | 
                         Tips: {result.insights.situation_tips?.length || 0} |
                         Confidence: {((result.insights.confidence_score || 0) * 100).toFixed(1)}%
                       </div>
                     </div>
                   )}
-
+                  
                   {result.status === 'error' && (
                     <div style={{ fontSize: '14px', color: '#FCA5A5' }}>
                       Error: {result.error}
                     </div>
                   )}
-                </div>
-              ))}
-            </div>
+                  Get Sample Insight
+                </button>
+              </div>
+            )}
           </div>
         )}
 
         {/* API Configuration */}
-        <div style={{
-          backgroundColor: '#374151',
-          padding: '20px',
+        <div style={{ 
+          backgroundColor: '#374151', 
+          padding: '20px', 
           borderRadius: '12px',
           marginTop: '24px',
           border: '1px solid #4B5563'
@@ -1071,39 +909,29 @@ const KeyInsightsDashboard = () => {
             </div>
           )}
         </div>
-
-        {/* Footer */}
-        <div style={{ textAlign: 'center', marginTop: '40px', paddingTop: '20px', borderTop: '1px solid #4B5563' }}>
-          <p style={{ color: '#9CA3AF', fontSize: '14px' }}>
-            Key Insights Dashboard - Powered by LLAVA & Ollama
-          </p>
-        </div>
       </div>
 
       <style jsx>{`
-        @keyframes spin {
-          from { transform: rotate(0deg); }
-          to { transform: rotate(360deg); }
+        .slider::-webkit-slider-thumb {
+          appearance: none;
+          height: 20px;
+          width: 20px;
+          border-radius: 50%;
+          background: #8F74D4;
+          cursor: pointer;
         }
-        
-        button:hover:not(:disabled) {
-          transform: translateY(-1px);
-          box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
-        }
-        
-        input:focus, textarea:focus, select:focus {
-          outline: none;
-          border-color: #8F74D4;
-          box-shadow: 0 0 0 2px rgba(143, 116, 212, 0.2);
-        }
-        
-        .insight-card:hover {
-          transform: translateY(-2px);
-          transition: transform 0.2s ease;
+        .slider::-moz-range-thumb {
+          height: 20px;
+          width: 20px;
+          border-radius: 50%;
+          background: #8F74D4;
+          cursor: pointer;
+          border: none;
         }
       `}</style>
     </div>
   );
 };
 
-export default KeyInsightsDashboard; Generated: { new Date(item.generated_at).toLocaleString() }
+export default KeyInsightsDashboard;Generated: {new Date(item.generated_at).toLocaleString()}
+                    

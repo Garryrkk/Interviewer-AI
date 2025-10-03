@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useRef } from 'react';
 import { Upload, Mic, FileAudio, Loader2, Play, Pause, Download, Trash2, Eye, Clock, Users, Target } from 'lucide-react';
-import { summarizationService } from './summarizationService';
+import { summarizationService } from './summarizationUtils';
 
 const BASE_URL = "http://localhost:8000/api/v1/summarization";
 const MeetingSummarization = () => {

@@ -1,67 +1,52 @@
-
-import os
 from pathlib import Path
 from dotenv import load_dotenv
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import field_validator
 
-# Load .env file from project root
 BASE_DIR = Path(__file__).resolve().parent
 load_dotenv(BASE_DIR / ".env")
 
 
 class Settings(BaseSettings):
-    # ---------------------------
-    # Application metadata
-    # ---------------------------
-    APP_NAME: str = "Interviewer-AI"
+    APP_NAME: str = "Interview AI Assistant"
     APP_VERSION: str = "1.0.0"
-    APP_DESCRIPTION: str = "AI-powered interviewer assistant with summarization, quick response, voice & image recognition."
+    DEBUG: bool = False
 
-    DEBUG: bool = os.getenv("DEBUG", "false").lower() == "true"
+    DATABASE_URL: str
+    REDIS_URL: str
 
-    # ---------------------------
-    # Database config
-    # ---------------------------
-    DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite:///./interviewer.db")
+    SECRET_KEY: str
+    API_KEY: str
 
-    # ---------------------------
-    # Ollama / LLM settings
-    # ---------------------------
-    OLLAMA_BASE_URL: str = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-    OLLAMA_MODEL: str = os.getenv("OLLAMA_MODEL", "nous-hermes2")
+    ALLOWED_HOSTS: list[str] = ["localhost"]
+    BACKEND_CORS_ORIGINS: list[str] = ["*"]
 
-    # ---------------------------
-    # Security / Auth
-    # ---------------------------
-    JWT_SECRET: str = os.getenv("JWT_SECRET", "super-secret-key")
-    JWT_ALGORITHM: str = os.getenv("JWT_ALGORITHM", "HS256")
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30"))
+    PROMETHEUS_ENABLED: bool = False
+    RATE_LIMIT: str = "100/minute"
 
-    # ---------------------------
-    # CORS / Allowed Origins
-    # ---------------------------
-    BACKEND_CORS_ORIGINS: list[str] = os.getenv("BACKEND_CORS_ORIGINS", "*").split(",")
+    # Optional LLM / voice / image settings
+    OLLAMA_BASE_URL: str = "http://localhost:11434"
+    OLLAMA_MODEL: str = "nous-hermes2"
 
-    # ---------------------------
-    # Voice recognition
-    # ---------------------------
-    VOICE_SAMPLE_RATE: int = int(os.getenv("VOICE_SAMPLE_RATE", "16000"))
-    VOICE_MAX_DURATION: int = int(os.getenv("VOICE_MAX_DURATION", "300"))  # in seconds
-    VOICE_MODEL: str = os.getenv("VOICE_MODEL", "whisper-small")
+    VOICE_SAMPLE_RATE: int = 16000
+    VOICE_MAX_DURATION: int = 300
+    VOICE_MODEL: str = "whisper-small"
 
+    IMAGE_MAX_SIZE_MB: int = 5
+    ALLOWED_IMAGE_TYPES: list[str] = ["jpg", "jpeg", "png"]
+    IMAGE_MODEL: str = "clip-vit-base"
 
-    # ---------------------------
-    # Image recognition
-    # ---------------------------
-    IMAGE_MAX_SIZE_MB: int = int(os.getenv("IMAGE_MAX_SIZE_MB", "5"))
-    ALLOWED_IMAGE_TYPES: list[str] = os.getenv("ALLOWED_IMAGE_TYPES", "jpg,jpeg,png").split(",")
-    IMAGE_MODEL: str = os.getenv("IMAGE_MODEL", "clip-vit-base")
+    model_config = SettingsConfigDict(
+        env_file=str(BASE_DIR / ".env"),
+        case_sensitive=True,
+        extra="allow",
+    )
+
+    @field_validator("ALLOWED_HOSTS", "BACKEND_CORS_ORIGINS", mode="before")
+    def parse_env_list(cls, v):
+        if isinstance(v, str):
+            return [i.strip() for i in v.split(",")]
+        return v
 
 
-    class Config:
-        env_file = ".env"
-        case_sensitive = True
-
-
-# Create settings instance
 settings = Settings()

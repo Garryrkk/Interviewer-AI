@@ -1,511 +1,615 @@
+// keyInsightsAPI.js - Complete API Service for Key Insights Feature
+
 /**
- * Key Insights Service - JavaScript utility file
- * This file contains all the business logic, API calls, and data processing
- * for the Key Insights Dashboard React component.
+ * Configuration object for API endpoints
  */
+const API_CONFIG = {
+  BASE_URL: process.env.REACT_APP_API_URL || 'http://localhost:8000',
+  ENDPOINTS: {
+    TYPES: '/api/v1/key-insights/types',
+    SAMPLE: '/api/v1/key-insights/sample',
+    ANALYZE: '/api/v1/key-insights/analyze',
+    SIMPLIFY: '/api/v1/key-insights/simplify',
+    STATUS: '/api/v1/key-insights/status',
+    HISTORY: '/api/v1/key-insights/history',
+    DELETE: '/api/v1/key-insights/insights',
+    BATCH_ANALYZE: '/api/v1/key-insights/batch-analyze'
+  },
+  TIMEOUT: 60000, // 60 seconds
+  RETRY_ATTEMPTS: 3,
+  RETRY_DELAY: 1000 // 1 second
+};
 
-class KeyInsightsService {
-  constructor(baseUrl = 'http://localhost:8000/api/v1/key-insights') {
-    this.baseUrl = baseUrl;
-    this.pollingIntervals = new Map();
-    this.requestTimeouts = new Map();
+/**
+ * Utility functions for API handling
+ */
+class APIUtils {
+  /**
+   * Sleep function for retry delays
+   * @param {number} ms - Milliseconds to sleep
+   */
+  static sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
   }
 
-  // API Configuration and Headers
-  getDefaultHeaders() {
-    return {
-      'Content-Type': 'application/json',
-      'Accept': 'application/json',
-    };
-  }
-
-  // Error handling utility
-  async handleResponse(response) {
-    if (!response.ok) {
-      let errorMessage;
+  /**
+   * Retry a function with exponential backoff
+   * @param {Function} fn - Function to retry
+   * @param {number} maxAttempts - Maximum retry attempts
+   * @param {number} delay - Initial delay in ms
+   */
+  static async retry(fn, maxAttempts = API_CONFIG.RETRY_ATTEMPTS, delay = API_CONFIG.RETRY_DELAY) {
+    let attempt = 1;
+    
+    while (attempt <= maxAttempts) {
       try {
-        const errorData = await response.json();
-        errorMessage = errorData.detail || errorData.message || `HTTP error! status: ${response.status}`;
-      } catch {
-        errorMessage = `HTTP error! status: ${response.status}`;
+        return await fn();
+      } catch (error) {
+        if (attempt === maxAttempts) {
+          throw error;
+        }
+        
+        console.warn(`Attempt ${attempt} failed, retrying in ${delay}ms...`, error.message);
+        await APIUtils.sleep(delay);
+        delay *= 2; // Exponential backoff
+        attempt++;
       }
-      throw new Error(errorMessage);
     }
-    return await response.json();
   }
 
-  // Generate unique meeting ID
-  generateMeetingId() {
-    const timestamp = Date.now();
-    const random = Math.random().toString(36).substring(2, 8);
-    return `meeting_${timestamp}_${random}`;
-  }
-
-  // Validate file upload
-  validateImageFile(file) {
-    if (!file) return { valid: false, error: 'No file selected' };
+  /**
+   * Validate image file
+   * @param {File} file - Image file to validate
+   * @returns {boolean} - Whether file is valid
+   */
+  static validateImageFile(file) {
+    if (!file) return false;
     
-    if (!file.type.startsWith('image/')) {
-      return { valid: false, error: 'Please select a valid image file' };
+    const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
+    const maxSize = 10 * 1024 * 1024; // 10MB
+    
+    if (!validTypes.includes(file.type)) {
+      throw new Error('Invalid file type. Please upload JPEG, PNG, GIF, or WebP images.');
     }
     
-    // Check file size (max 10MB)
-    const maxSize = 10 * 1024 * 1024;
     if (file.size > maxSize) {
-      return { valid: false, error: 'File size must be less than 10MB' };
+      throw new Error('File size too large. Please upload images smaller than 10MB.');
     }
     
-    return { valid: true };
+    return true;
   }
 
-  // Parse participants string
-  parseParticipants(participantsString) {
-    if (!participantsString) return [];
-    return participantsString
-      .split(',')
-      .map(p => p.trim())
-      .filter(p => p.length > 0);
+  /**
+   * Format insight types for display
+   * @param {string} type - Insight type
+   * @returns {string} - Formatted type
+   */
+  static formatInsightType(type) {
+    return type
+      .split('_')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+      .join(' ');
   }
 
-  // Validate meeting context
-  validateMeetingContext(context) {
-    if (!context || context.trim().length < 20) {
-      return { 
-        valid: false, 
-        error: 'Meeting context must be at least 20 characters long' 
-      };
-    }
-    return { valid: true };
+  /**
+   * Calculate confidence color based on score
+   * @param {number} score - Confidence score (0-1)
+   * @returns {string} - CSS color class
+   */
+  static getConfidenceColor(score) {
+    if (score >= 0.8) return 'text-green-400';
+    if (score >= 0.6) return 'text-yellow-400';
+    return 'text-red-400';
   }
 
-  // Generate insights from meeting context and optional image
-  async generateInsights({
-    meetingContext,
-    meetingId,
-    participants,
-    analysisFocus,
-    selectedFile,
-    onProgress = () => {},
-    onStatusUpdate = () => {}
-  }) {
-    // Validation
-    if (!meetingContext && !selectedFile) {
-      throw new Error('Please provide either meeting context or upload an image file');
-    }
-
-    if (meetingContext) {
-      const contextValidation = this.validateMeetingContext(meetingContext);
-      if (!contextValidation.valid) {
-        throw new Error(contextValidation.error);
-      }
-    }
-
-    if (selectedFile) {
-      const fileValidation = this.validateImageFile(selectedFile);
-      if (!fileValidation.valid) {
-        throw new Error(fileValidation.error);
-      }
-    }
-
-    const parsedParticipants = this.parseParticipants(participants);
-    
+  /**
+   * Format timestamp for display
+   * @param {string} timestamp - ISO timestamp
+   * @returns {string} - Formatted timestamp
+   */
+  static formatTimestamp(timestamp) {
     try {
-      let response;
-      
-      if (selectedFile) {
-        // Use FormData for file upload
-        const formData = new FormData();
-        formData.append('meeting_context', meetingContext || '');
-        formData.append('meeting_id', meetingId || '');
-        formData.append('participants', JSON.stringify(parsedParticipants));
-        formData.append('analysis_focus', analysisFocus || '');
-        formData.append('include_visual_analysis', 'true');
-        formData.append('image_file', selectedFile);
-
-        response = await fetch(`${this.baseUrl}/analyze`, {
-          method: 'POST',
-          body: formData,
-        });
-      } else {
-        // Use JSON for text-only requests
-        const requestData = {
-          meeting_context: meetingContext,
-          meeting_id: meetingId || null,
-          participants: parsedParticipants,
-          analysis_focus: analysisFocus || null,
-          include_visual_analysis: false
-        };
-
-        response = await fetch(`${this.baseUrl}/analyze`, {
-          method: 'POST',
-          headers: this.getDefaultHeaders(),
-          body: JSON.stringify(requestData),
-        });
-      }
-
-      const data = await this.handleResponse(response);
-      
-      // Start status polling if insight ID is available
-      if (data.insight_id) {
-        this.startStatusPolling(data.insight_id, onStatusUpdate);
-      }
-
-      return data;
+      return new Intl.DateTimeFormat('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+      }).format(new Date(timestamp));
     } catch (error) {
-      throw new Error(`Failed to generate insights: ${error.message}`);
+      return 'Invalid date';
     }
   }
+}
 
-  // Simplify existing insights
+/**
+ * Main API service class for Key Insights
+ */
+class KeyInsightsAPIService {
+  constructor(baseURL = API_CONFIG.BASE_URL) {
+    this.baseURL = baseURL;
+    this.requestId = 0;
+  }
+
+  /**
+   * Generate unique request ID for tracking
+   */
+  generateRequestId() {
+    return `req_${Date.now()}_${++this.requestId}`;
+  }
+
+  /**
+   * Generic HTTP request method with error handling and retries
+   * @param {string} endpoint - API endpoint
+   * @param {Object} options - Request options
+   * @returns {Promise} - Response data
+   */
+  async request(endpoint, options = {}) {
+    const requestId = this.generateRequestId();
+    const url = `${this.baseURL}${endpoint}`;
+    
+    const config = {
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Request-ID': requestId,
+      },
+      timeout: API_CONFIG.TIMEOUT,
+      ...options,
+    };
+
+    // Remove Content-Type for FormData
+    if (options.body && options.body instanceof FormData) {
+      delete config.headers['Content-Type'];
+    }
+
+    const makeRequest = async () => {
+      console.log(`[${requestId}] Making request to: ${url}`);
+      
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), config.timeout);
+
+      try {
+        const response = await fetch(url, {
+          ...config,
+          signal: controller.signal
+        });
+
+        clearTimeout(timeoutId);
+
+        const data = await response.json();
+        
+        if (!response.ok) {
+          throw new APIError(
+            data.detail || `HTTP error! status: ${response.status}`,
+            response.status,
+            data.error_code || 'UNKNOWN_ERROR',
+            requestId
+          );
+        }
+        
+        console.log(`[${requestId}] Request successful`);
+        return data;
+      } catch (error) {
+        clearTimeout(timeoutId);
+        
+        if (error.name === 'AbortError') {
+          throw new APIError('Request timeout', 408, 'TIMEOUT', requestId);
+        }
+        
+        throw error;
+      }
+    };
+
+    return APIUtils.retry(makeRequest);
+  }
+
+  /**
+   * Get all available insight types
+   * @returns {Promise<Array>} - Array of insight type strings
+   */
+  async getInsightTypes() {
+    return this.request(API_CONFIG.ENDPOINTS.TYPES);
+  }
+
+  /**
+   * Get a sample insight for testing/demo purposes
+   * @returns {Promise<Object>} - Sample insight object
+   */
+  async getSampleInsight() {
+    return this.request(API_CONFIG.ENDPOINTS.SAMPLE);
+  }
+
+  /**
+   * Generate insights from meeting transcript with optional image analysis
+   * @param {Object} params - Request parameters
+   * @param {string} params.transcript - Meeting transcript text
+   * @param {string} [params.meetingId] - Optional meeting identifier
+   * @param {File} [params.imageFile] - Optional image file for visual analysis
+   * @param {Array} [params.extractTypes] - Specific insight types to extract
+   * @param {number} [params.maxInsights=10] - Maximum number of insights to return
+   * @returns {Promise<Object>} - Generated insights response
+   */
+  async generateInsights({
+    transcript,
+    meetingId = null,
+    imageFile = null,
+    extractTypes = null,
+    maxInsights = 10
+  }) {
+    if (!transcript || transcript.trim().length < 10) {
+      throw new APIError('Transcript must be at least 10 characters long', 400, 'INVALID_TRANSCRIPT');
+    }
+
+    if (imageFile) {
+      APIUtils.validateImageFile(imageFile);
+    }
+
+    const formData = new FormData();
+    
+    // Create the request object that matches the backend schema
+    const requestData = {
+      transcript: transcript.trim(),
+      meeting_id: meetingId,
+      extract_types: extractTypes,
+      max_insights: Math.max(1, Math.min(50, maxInsights))
+    };
+
+    formData.append('request', JSON.stringify(requestData));
+    
+    if (imageFile) {
+      formData.append('image_file', imageFile);
+    }
+
+    return this.request(API_CONFIG.ENDPOINTS.ANALYZE, {
+      method: 'POST',
+      body: formData
+    });
+  }
+
+  /**
+   * Simplify existing insights for easier understanding
+   * @param {Object} params - Simplification parameters
+   * @param {Array} params.originalInsights - Original insight objects
+   * @param {Array} params.originalTips - Original tip objects
+   * @param {string} [params.simplificationLevel='moderate'] - Level of simplification
+   * @param {string} [params.originalInsightId] - ID of original insight
+   * @returns {Promise<Object>} - Simplified insights response
+   */
   async simplifyInsights({
-    originalInsightId,
     originalInsights,
     originalTips,
     simplificationLevel = 'moderate',
-    targetAudience = null
+    originalInsightId = null
   }) {
-    if (!originalInsights || originalInsights.length === 0) {
-      throw new Error('No insights to simplify');
+    if (!originalInsights || !Array.isArray(originalInsights) || originalInsights.length === 0) {
+      throw new APIError('Original insights are required for simplification', 400, 'MISSING_INSIGHTS');
     }
 
-    const requestData = {
-      original_insight_id: originalInsightId,
-      original_insights: originalInsights,
-      original_tips: originalTips,
-      simplification_level: simplificationLevel,
-      target_audience: targetAudience
-    };
-
-    try {
-      const response = await fetch(`${this.baseUrl}/simplify`, {
-        method: 'POST',
-        headers: this.getDefaultHeaders(),
-        body: JSON.stringify(requestData),
-      });
-
-      return await this.handleResponse(response);
-    } catch (error) {
-      throw new Error(`Failed to simplify insights: ${error.message}`);
+    const validLevels = ['light', 'moderate', 'heavy'];
+    if (!validLevels.includes(simplificationLevel)) {
+      throw new APIError('Invalid simplification level. Must be: light, moderate, or heavy', 400, 'INVALID_LEVEL');
     }
+
+    return this.request(API_CONFIG.ENDPOINTS.SIMPLIFY, {
+      method: 'POST',
+      body: JSON.stringify({
+        original_insights: originalInsights,
+        original_tips: originalTips || [],
+        simplification_level: simplificationLevel,
+        original_insight_id: originalInsightId
+      })
+    });
   }
 
-  // Get analysis status
+  /**
+   * Get the status of an ongoing insight analysis
+   * @param {string} insightId - Insight analysis ID
+   * @returns {Promise<Object>} - Analysis status response
+   */
   async getAnalysisStatus(insightId) {
-    try {
-      const response = await fetch(`${this.baseUrl}/status/${insightId}`);
-      return await this.handleResponse(response);
-    } catch (error) {
-      throw new Error(`Failed to get analysis status: ${error.message}`);
+    if (!insightId || typeof insightId !== 'string') {
+      throw new APIError('Valid insight ID is required', 400, 'INVALID_INSIGHT_ID');
     }
+
+    return this.request(`${API_CONFIG.ENDPOINTS.STATUS}/${encodeURIComponent(insightId)}`);
   }
 
-  // Start polling for analysis status
-  startStatusPolling(insightId, onStatusUpdate, pollInterval = 2000, maxDuration = 300000) {
-    // Clear existing polling for this insight
-    this.stopStatusPolling(insightId);
-    
-    const intervalId = setInterval(async () => {
-      try {
-        const status = await this.getAnalysisStatus(insightId);
-        onStatusUpdate(status);
-
-        if (status.status === 'completed' || status.status === 'failed') {
-          this.stopStatusPolling(insightId);
-        }
-      } catch (error) {
-        console.error('Status polling error:', error);
-        this.stopStatusPolling(insightId);
-        onStatusUpdate({ 
-          insight_id: insightId, 
-          status: 'failed', 
-          error: error.message 
-        });
-      }
-    }, pollInterval);
-
-    this.pollingIntervals.set(insightId, intervalId);
-
-    // Stop polling after max duration
-    const timeoutId = setTimeout(() => {
-      this.stopStatusPolling(insightId);
-      onStatusUpdate({ 
-        insight_id: insightId, 
-        status: 'timeout', 
-        error: 'Status polling timed out' 
-      });
-    }, maxDuration);
-
-    this.requestTimeouts.set(insightId, timeoutId);
-  }
-
-  // Stop status polling
-  stopStatusPolling(insightId) {
-    const intervalId = this.pollingIntervals.get(insightId);
-    const timeoutId = this.requestTimeouts.get(insightId);
-    
-    if (intervalId) {
-      clearInterval(intervalId);
-      this.pollingIntervals.delete(insightId);
-    }
-    
-    if (timeoutId) {
-      clearTimeout(timeoutId);
-      this.requestTimeouts.delete(insightId);
-    }
-  }
-
-  // Get insights history for a meeting
+  /**
+   * Get insights history for a specific meeting
+   * @param {string} meetingId - Meeting identifier
+   * @returns {Promise<Object>} - Insights history response
+   */
   async getInsightsHistory(meetingId) {
-    if (!meetingId) {
-      throw new Error('Meeting ID is required');
+    if (!meetingId || typeof meetingId !== 'string') {
+      throw new APIError('Valid meeting ID is required', 400, 'INVALID_MEETING_ID');
     }
 
-    try {
-      const response = await fetch(`${this.baseUrl}/history/${meetingId}`);
-      const data = await this.handleResponse(response);
-      return data.insights_history || [];
-    } catch (error) {
-      throw new Error(`Failed to get insights history: ${error.message}`);
-    }
+    return this.request(`${API_CONFIG.ENDPOINTS.HISTORY}/${encodeURIComponent(meetingId)}`);
   }
 
-  // Delete specific insights
+  /**
+   * Delete specific insights by ID
+   * @param {string} insightId - Insight ID to delete
+   * @returns {Promise<Object>} - Deletion confirmation
+   */
   async deleteInsights(insightId) {
-    if (!insightId) {
-      throw new Error('Insight ID is required');
+    if (!insightId || typeof insightId !== 'string') {
+      throw new APIError('Valid insight ID is required', 400, 'INVALID_INSIGHT_ID');
     }
 
-    try {
-      const response = await fetch(`${this.baseUrl}/insights/${insightId}`, {
-        method: 'DELETE',
-      });
-
-      return await this.handleResponse(response);
-    } catch (error) {
-      throw new Error(`Failed to delete insights: ${error.message}`);
-    }
+    return this.request(`${API_CONFIG.ENDPOINTS.DELETE}/${encodeURIComponent(insightId)}`, {
+      method: 'DELETE'
+    });
   }
 
-  // Batch analysis for multiple meetings
-  async batchAnalyzeInsights({
+  /**
+   * Batch analyze multiple meetings at once
+   * @param {Object} params - Batch analysis parameters
+   * @param {Array<string>} params.meetingContexts - Array of meeting transcripts
+   * @param {Array<string>} params.meetingIds - Array of meeting IDs
+   * @param {Array<File>} [params.imageFiles] - Optional array of image files
+   * @returns {Promise<Object>} - Batch analysis results
+   */
+  async batchAnalyze({
     meetingContexts,
     meetingIds,
-    participantsList = null,
-    analysisFocusList = null,
-    onBatchProgress = () => {}
+    imageFiles = null
   }) {
-    // Validation
-    const validContexts = meetingContexts.filter(c => c && c.trim());
-    const validIds = meetingIds.filter(id => id && id.trim());
-    
-    if (validContexts.length !== validIds.length || validContexts.length === 0) {
-      throw new Error('Please provide valid contexts and IDs for batch analysis. Each meeting must have both a context and an ID.');
+    if (!Array.isArray(meetingContexts) || !Array.isArray(meetingIds)) {
+      throw new APIError('Meeting contexts and IDs must be arrays', 400, 'INVALID_BATCH_DATA');
+    }
+
+    if (meetingContexts.length !== meetingIds.length) {
+      throw new APIError('Number of meeting contexts and IDs must match', 400, 'MISMATCHED_ARRAYS');
+    }
+
+    if (meetingContexts.length === 0) {
+      throw new APIError('At least one meeting context is required', 400, 'EMPTY_BATCH');
     }
 
     // Validate each context
-    for (let i = 0; i < validContexts.length; i++) {
-      const contextValidation = this.validateMeetingContext(validContexts[i]);
-      if (!contextValidation.valid) {
-        throw new Error(`Meeting ${i + 1}: ${contextValidation.error}`);
+    meetingContexts.forEach((context, index) => {
+      if (!context || context.trim().length < 10) {
+        throw new APIError(`Meeting context at index ${index} is too short`, 400, 'INVALID_CONTEXT');
       }
-    }
+    });
 
-    const requestData = {
-      meeting_contexts: validContexts,
-      meeting_ids: validIds,
-      participants_list: participantsList,
-      analysis_focus_list: analysisFocusList,
-      batch_id: this.generateMeetingId()
-    };
-
-    try {
-      const response = await fetch(`${this.baseUrl}/batch-analyze`, {
-        method: 'POST',
-        headers: this.getDefaultHeaders(),
-        body: JSON.stringify(requestData),
+    // Validate image files if provided
+    if (imageFiles) {
+      if (!Array.isArray(imageFiles)) {
+        throw new APIError('Image files must be an array', 400, 'INVALID_IMAGE_FILES');
+      }
+      imageFiles.forEach((file, index) => {
+        if (file) {
+          try {
+            APIUtils.validateImageFile(file);
+          } catch (error) {
+            throw new APIError(`Image file at index ${index}: ${error.message}`, 400, 'INVALID_IMAGE_FILE');
+          }
+        }
       });
-
-      return await this.handleResponse(response);
-    } catch (error) {
-      throw new Error(`Failed to perform batch analysis: ${error.message}`);
     }
-  }
 
-  // Utility methods for data processing
-  calculateInsightsMetrics(insights) {
-    if (!insights) return null;
-
-    const keyInsights = insights.key_insights || [];
-    const situationTips = insights.situation_tips || [];
+    const formData = new FormData();
     
-    return {
-      totalInsights: keyInsights.length,
-      totalTips: situationTips.length,
-      averageConfidence: this.calculateAverageConfidence(keyInsights),
-      highPriorityCount: keyInsights.filter(i => i.priority === 'high' || i.priority === 'critical').length,
-      highActionabilityTips: situationTips.filter(t => t.actionability === 'high').length,
-      visualAnalysisIncluded: insights.visual_analysis_included || false,
-      participantsCount: insights.participants_analyzed?.length || 0
-    };
-  }
-
-  calculateAverageConfidence(insights) {
-    if (!insights || insights.length === 0) return 0;
+    meetingContexts.forEach(context => formData.append('meeting_contexts', context.trim()));
+    meetingIds.forEach(id => formData.append('meeting_ids', id));
     
-    const totalConfidence = insights.reduce((sum, insight) => sum + (insight.confidence || 0), 0);
-    return (totalConfidence / insights.length * 100).toFixed(1);
-  }
-
-  // Format insights for display
-  formatInsightsForDisplay(insights) {
-    if (!insights) return null;
-
-    return {
-      ...insights,
-      key_insights: insights.key_insights?.map(insight => ({
-        ...insight,
-        confidence_percentage: Math.round(insight.confidence * 100),
-        category_display: this.formatCategoryDisplay(insight.category),
-        priority_display: this.formatPriorityDisplay(insight.priority)
-      })) || [],
-      situation_tips: insights.situation_tips?.map(tip => ({
-        ...tip,
-        category_display: this.formatCategoryDisplay(tip.category),
-        actionability_display: this.formatActionabilityDisplay(tip.actionability)
-      })) || []
-    };
-  }
-
-  formatCategoryDisplay(category) {
-    return category?.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) || 'General';
-  }
-
-  formatPriorityDisplay(priority) {
-    const priorityMap = {
-      low: { text: 'Low', color: '#6B7280' },
-      medium: { text: 'Medium', color: '#F59E0B' },
-      high: { text: 'High', color: '#EF4444' },
-      critical: { text: 'Critical', color: '#DC2626' }
-    };
-    return priorityMap[priority] || priorityMap.medium;
-  }
-
-  formatActionabilityDisplay(actionability) {
-    const actionabilityMap = {
-      low: { text: 'Low', color: '#6B7280' },
-      medium: { text: 'Medium', color: '#F59E0B' },
-      high: { text: 'High', color: '#10B981' }
-    };
-    return actionabilityMap[actionability] || actionabilityMap.medium;
-  }
-
-  // Export insights data
-  exportInsightsToJSON(insights) {
-    if (!insights) return null;
-    
-    const exportData = {
-      export_timestamp: new Date().toISOString(),
-      insight_id: insights.insight_id,
-      meeting_id: insights.meeting_id,
-      generated_at: insights.generated_at,
-      confidence_score: insights.confidence_score,
-      visual_analysis_included: insights.visual_analysis_included,
-      participants_analyzed: insights.participants_analyzed,
-      key_insights: insights.key_insights,
-      situation_tips: insights.situation_tips,
-      metrics: this.calculateInsightsMetrics(insights)
-    };
-
-    return JSON.stringify(exportData, null, 2);
-  }
-
-  // Import insights data
-  importInsightsFromJSON(jsonString) {
-    try {
-      const data = JSON.parse(jsonString);
-      
-      // Validate required fields
-      if (!data.insight_id || !data.key_insights || !data.situation_tips) {
-        throw new Error('Invalid insights data format');
-      }
-      
-      return data;
-    } catch (error) {
-      throw new Error(`Failed to import insights: ${error.message}`);
-    }
-  }
-
-  // Clean up resources
-  cleanup() {
-    // Clear all polling intervals
-    for (const [insightId] of this.pollingIntervals) {
-      this.stopStatusPolling(insightId);
-    }
-    
-    this.pollingIntervals.clear();
-    this.requestTimeouts.clear();
-  }
-
-  // Health check for the API
-  async healthCheck() {
-    try {
-      const response = await fetch(`${this.baseUrl.replace('/key-insights', '')}/health`, {
-        method: 'GET',
-        headers: { 'Accept': 'application/json' }
+    if (imageFiles) {
+      imageFiles.forEach(file => {
+        if (file) {
+          formData.append('image_files', file);
+        }
       });
-      
-      if (response.ok) {
-        return { status: 'healthy', timestamp: new Date().toISOString() };
-      } else {
-        return { status: 'unhealthy', error: `HTTP ${response.status}` };
-      }
-    } catch (error) {
-      return { status: 'unreachable', error: error.message };
     }
+
+    return this.request(API_CONFIG.ENDPOINTS.BATCH_ANALYZE, {
+      method: 'POST',
+      body: formData
+    });
   }
 
-  // Get API configuration info
-  getApiInfo() {
-    return {
-      baseUrl: this.baseUrl,
-      endpoints: {
-        analyze: `${this.baseUrl}/analyze`,
-        simplify: `${this.baseUrl}/simplify`,
-        status: `${this.baseUrl}/status/:id`,
-        history: `${this.baseUrl}/history/:meeting_id`,
-        delete: `${this.baseUrl}/insights/:id`,
-        batchAnalyze: `${this.baseUrl}/batch-analyze`
-      },
-      supportedMethods: ['POST', 'GET', 'DELETE'],
-      supportedFileTypes: ['image/jpeg', 'image/png', 'image/gif', 'image/webp'],
-      maxFileSize: '10MB',
-      maxBatchSize: 10
-    };
+  /**
+   * Poll analysis status until completion or timeout
+   * @param {string} insightId - Insight ID to poll
+   * @param {Object} options - Polling options
+   * @param {number} [options.interval=2000] - Polling interval in ms
+   * @param {number} [options.timeout=300000] - Timeout in ms (5 minutes)
+   * @param {Function} [options.onUpdate] - Callback for status updates
+   * @returns {Promise<Object>} - Final status when completed
+   */
+  async pollAnalysisStatus(insightId, options = {}) {
+    const {
+      interval = 2000,
+      timeout = 300000,
+      onUpdate = null
+    } = options;
+
+    const startTime = Date.now();
+
+    while (true) {
+      try {
+        const status = await this.getAnalysisStatus(insightId);
+        
+        if (onUpdate) {
+          onUpdate(status);
+        }
+
+        if (status.status === 'completed' || status.status === 'failed') {
+          return status;
+        }
+
+        if (Date.now() - startTime > timeout) {
+          throw new APIError('Analysis polling timeout', 408, 'POLLING_TIMEOUT');
+        }
+
+        await APIUtils.sleep(interval);
+      } catch (error) {
+        if (error.status === 404) {
+          throw new APIError('Analysis not found', 404, 'ANALYSIS_NOT_FOUND');
+        }
+        throw error;
+      }
+    }
   }
 }
 
-// Factory function to create service instance
-function createKeyInsightsService(baseUrl) {
-  return new KeyInsightsService(baseUrl);
+/**
+ * Custom API Error class with enhanced error information
+ */
+class APIError extends Error {
+  constructor(message, status = 500, code = 'UNKNOWN_ERROR', requestId = null) {
+    super(message);
+    this.name = 'APIError';
+    this.status = status;
+    this.code = code;
+    this.requestId = requestId;
+    this.timestamp = new Date().toISOString();
+  }
+
+  /**
+   * Convert error to user-friendly message
+   * @returns {string} - User-friendly error message
+   */
+  toUserMessage() {
+    const userMessages = {
+      'INVALID_TRANSCRIPT': 'Please enter a valid meeting transcript (at least 10 characters).',
+      'MISSING_INSIGHTS': 'No insights available to simplify. Please generate insights first.',
+      'INVALID_LEVEL': 'Please select a valid simplification level.',
+      'INVALID_INSIGHT_ID': 'Invalid insight ID provided.',
+      'INVALID_MEETING_ID': 'Invalid meeting ID provided.',
+      'TIMEOUT': 'Request timed out. Please try again.',
+      'NETWORK_ERROR': 'Network error. Please check your connection.',
+      'SERVER_ERROR': 'Server error. Please try again later.',
+      'ANALYSIS_NOT_FOUND': 'Analysis not found. It may have expired.',
+      'POLLING_TIMEOUT': 'Analysis is taking longer than expected. Please check status manually.'
+    };
+
+    return userMessages[this.code] || this.message || 'An unexpected error occurred.';
+  }
+
+  /**
+   * Check if error is retryable
+   * @returns {boolean} - Whether the error can be retried
+   */
+  isRetryable() {
+    const retryableCodes = ['TIMEOUT', 'NETWORK_ERROR', 'SERVER_ERROR'];
+    const retryableStatuses = [408, 429, 500, 502, 503, 504];
+    
+    return retryableCodes.includes(this.code) || retryableStatuses.includes(this.status);
+  }
 }
 
-// Singleton instance for default usage
-const defaultService = new KeyInsightsService();
+/**
+ * React Hook for managing Key Insights API state
+ * @param {string} [baseURL] - API base URL
+ * @returns {Object} - Hook state and methods
+ */
+function useKeyInsightsAPI(baseURL) {
+  const [api] = useState(() => new KeyInsightsAPIService(baseURL));
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
 
-// Export for different module systems
-if (typeof module !== 'undefined' && module.exports) {
-  // CommonJS
-  module.exports = {
-    KeyInsightsService,
-    createKeyInsightsService,
-    defaultService
+  const handleRequest = async (requestFn, successMessage = null) => {
+    setLoading(true);
+    setError(null);
+    
+    try {
+      const result = await requestFn();
+      if (successMessage) {
+        // You could trigger a success notification here
+        console.log(successMessage);
+      }
+      return result;
+    } catch (err) {
+      const apiError = err instanceof APIError ? err : new APIError(err.message);
+      setError(apiError);
+      console.error('API request failed:', apiError);
+      throw apiError;
+    } finally {
+      setLoading(false);
+    }
   };
-} else if (typeof window !== 'undefined') {
-  // Browser globals
-  window.KeyInsightsService = KeyInsightsService;
-  window.createKeyInsightsService = createKeyInsightsService;
-  window.keyInsightsService = defaultService;
+
+  return {
+    api,
+    loading,
+    error,
+    setError,
+    handleRequest
+  };
 }
 
-// ES6 modules export (if supported)
-export { KeyInsightsService, createKeyInsightsService, defaultService };
+/**
+ * Local storage utilities for caching insights
+ */
+class InsightsCache {
+  static CACHE_PREFIX = 'key_insights_';
+  static CACHE_EXPIRY = 24 * 60 * 60 * 1000; // 24 hours
+
+  static set(key, data) {
+    try {
+      const cacheData = {
+        data,
+        timestamp: Date.now(),
+        expires: Date.now() + this.CACHE_EXPIRY
+      };
+      localStorage.setItem(this.CACHE_PREFIX + key, JSON.stringify(cacheData));
+    } catch (error) {
+      console.warn('Failed to cache data:', error);
+    }
+  }
+
+  static get(key) {
+    try {
+      const cached = localStorage.getItem(this.CACHE_PREFIX + key);
+      if (!cached) return null;
+
+      const cacheData = JSON.parse(cached);
+      if (Date.now() > cacheData.expires) {
+        this.remove(key);
+        return null;
+      }
+
+      return cacheData.data;
+    } catch (error) {
+      console.warn('Failed to retrieve cached data:', error);
+      return null;
+    }
+  }
+
+  static remove(key) {
+    try {
+      localStorage.removeItem(this.CACHE_PREFIX + key);
+    } catch (error) {
+      console.warn('Failed to remove cached data:', error);
+    }
+  }
+
+  static clear() {
+    try {
+      const keys = Object.keys(localStorage);
+      keys.forEach(key => {
+        if (key.startsWith(this.CACHE_PREFIX)) {
+          localStorage.removeItem(key);
+        }
+      });
+    } catch (error) {
+      console.warn('Failed to clear cache:', error);
+    }
+  }
+}
+
+// Export everything for use in React components
+export {
+  KeyInsightsAPIService,
+  APIUtils,
+  APIError,
+  useKeyInsightsAPI,
+  InsightsCache,
+  API_CONFIG
+};
+
+// Default export
+export default KeyInsightsAPIService;

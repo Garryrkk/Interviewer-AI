@@ -1,20 +1,21 @@
-import asyncio
 import base64
 import json
 import uuid
+import time
 from datetime import datetime
 from typing import List, Optional, Dict, Any
 import aiohttp
 import logging
 from io import BytesIO
 from PIL import Image
+import re
 
 from .schemas import (
-    KeyInsightsResponse,
-    SimplifiedInsightsResponse,
-    AnalysisStatusResponse,
-    InsightPoint,
-    TipPoint
+    KeyInsight,
+    KeyInsightRequest,
+    KeyInsightResponse,
+    ErrorResponse,
+    InsightType
 )
 
 # Configure logging
@@ -30,107 +31,81 @@ class KeyInsightsService:
     def __init__(self):
         self.ollama_base_url = "http://localhost:11434"  # Default Ollama URL
         self.llava_model = "llava:latest"
-        self.text_model = "llama3.1:latest"  # Fallback text model
-        self.analysis_status = {}  # In-memory status tracking
+        self.text_model = "llama3.1:latest"  # Primary text model for analysis
         self.insights_cache = {}   # Simple cache for insights
         
     async def generate_insights(
         self,
-        meeting_context: Optional[str] = None,
-        meeting_id: Optional[str] = None,
-        participants: Optional[List[str]] = None,
-        image_data: Optional[bytes] = None,
-        analysis_focus: Optional[str] = None
-    ) -> KeyInsightsResponse:
+        request: KeyInsightRequest,
+        image_data: Optional[bytes] = None
+    ) -> KeyInsightResponse:
         """
-        Generate key insights from meeting context and optional image analysis
+        Generate key insights from meeting transcript and optional image analysis
         """
-        insight_id = str(uuid.uuid4())
+        start_time = time.time()
         
         try:
-            # Update status
-            self.analysis_status[insight_id] = {
-                "status": "processing",
-                "started_at": datetime.utcnow(),
-                "progress": 10
-            }
+            logger.info(f"Starting insight generation for meeting: {request.meeting_id}")
             
-            # Analyze image if provided (facial expressions and body language)
-            visual_analysis = None
+            # Analyze image if provided for additional context
+            visual_context = None
             if image_data:
-                logger.info("Analyzing facial expressions and body language...")
-                visual_analysis = await self._analyze_visual_cues(image_data)
-                self.analysis_status[insight_id]["progress"] = 40
+                logger.info("Analyzing visual context from image...")
+                visual_context = await self._analyze_visual_context(image_data)
             
-            # Generate key insights from context
-            logger.info("Generating key insights from meeting context...")
-            insights = await self._generate_context_insights(
-                meeting_context, participants, analysis_focus
+            # Generate insights from transcript
+            logger.info("Extracting key insights from transcript...")
+            insights = await self._extract_insights_from_transcript(
+                transcript=request.transcript,
+                extract_types=request.extract_types,
+                max_insights=request.max_insights,
+                visual_context=visual_context
             )
-            self.analysis_status[insight_id]["progress"] = 70
             
-            # Generate tips based on visual analysis and context
-            tips = await self._generate_situation_tips(
-                meeting_context, visual_analysis, participants
-            )
-            self.analysis_status[insight_id]["progress"] = 90
+            # Generate meeting summary
+            summary = await self._generate_meeting_summary(request.transcript)
+            
+            processing_time = time.time() - start_time
             
             # Create response
-            response = KeyInsightsResponse(
-                insight_id=insight_id,
-                meeting_id=meeting_id or str(uuid.uuid4()),
-                generated_at=datetime.utcnow(),
-                key_insights=insights,
-                situation_tips=tips,
-                visual_analysis_included=image_data is not None,
-                participants_analyzed=participants or [],
-                confidence_score=0.85  # Base confidence score
+            response = KeyInsightResponse(
+                insights=insights,
+                total_insights=len(insights),
+                processing_time=processing_time,
+                meeting_id=request.meeting_id,
+                summary=summary
             )
             
             # Cache the results
-            self.insights_cache[insight_id] = response
+            if request.meeting_id:
+                self.insights_cache[request.meeting_id] = response
             
-            # Update status to completed
-            self.analysis_status[insight_id] = {
-                "status": "completed",
-                "started_at": self.analysis_status[insight_id]["started_at"],
-                "completed_at": datetime.utcnow(),
-                "progress": 100
-            }
-            
+            logger.info(f"Generated {len(insights)} insights in {processing_time:.2f} seconds")
             return response
             
         except Exception as e:
-            # Update status to failed
-            self.analysis_status[insight_id] = {
-                "status": "failed",
-                "started_at": self.analysis_status.get(insight_id, {}).get("started_at", datetime.utcnow()),
-                "error": str(e),
-                "progress": 0
-            }
+            logger.error(f"Error generating insights: {str(e)}")
             raise e
     
-    async def _analyze_visual_cues(self, image_data: bytes) -> Dict[str, Any]:
+    async def _analyze_visual_context(self, image_data: bytes) -> Dict[str, Any]:
         """
-        Analyze facial expressions and body language using LLAVA
+        Analyze image for meeting context using LLAVA
         """
         try:
             # Convert image to base64
             image_b64 = base64.b64encode(image_data).decode('utf-8')
             
-            # Prepare prompt for visual analysis
+            # Prepare prompt for visual context analysis
             visual_prompt = """
-            Analyze this image focusing on facial expressions and body language of people in what appears to be a meeting or professional setting. 
-
-            Provide analysis in the following format:
-            1. Facial Expressions: [describe emotions, engagement levels, stress indicators]
-            2. Body Language: [describe posture, gestures, attention levels]
-            3. Overall Mood: [describe the general atmosphere]
-            4. Engagement Level: [rate from 1-10 and explain]
-            5. Stress Indicators: [identify any signs of stress or discomfort]
-            6. Communication Dynamics: [describe interaction patterns if multiple people visible]
-
-            Keep each point concise and actionable.
+            Analyze this image to understand the meeting context. Focus on:
+            1. Meeting setting and environment
+            2. Number of participants and their engagement
+            3. Any visible presentations, whiteboards, or materials
+            4. Overall meeting atmosphere and mood
+            5. Any body language or facial expressions that indicate meeting dynamics
+            
+            Provide a concise analysis that could help understand the meeting better.
+            Keep the response under 200 words and focus on actionable observations.
             """
             
             payload = {
@@ -139,7 +114,7 @@ class KeyInsightsService:
                 "images": [image_b64],
                 "stream": False,
                 "options": {
-                    "temperature": 0.7,
+                    "temperature": 0.6,
                     "top_p": 0.9
                 }
             }
@@ -154,193 +129,116 @@ class KeyInsightsService:
                         result = await response.json()
                         visual_analysis = result.get('response', '')
                         
-                        # Parse the analysis into structured format
                         return {
-                            "raw_analysis": visual_analysis,
-                            "engagement_level": self._extract_engagement_level(visual_analysis),
-                            "stress_indicators": self._extract_stress_indicators(visual_analysis),
-                            "mood_assessment": self._extract_mood_assessment(visual_analysis)
+                            "analysis": visual_analysis,
+                            "has_visual_context": True
                         }
                     else:
                         logger.error(f"LLAVA analysis failed: {response.status}")
-                        return {"error": "Visual analysis failed", "fallback": True}
+                        return {"has_visual_context": False, "error": "Visual analysis failed"}
                         
         except Exception as e:
             logger.error(f"Error in visual analysis: {str(e)}")
-            return {"error": str(e), "fallback": True}
+            return {"has_visual_context": False, "error": str(e)}
     
-    async def _generate_context_insights(
+    async def _extract_insights_from_transcript(
         self,
-        meeting_context: Optional[str],
-        participants: Optional[List[str]],
-        analysis_focus: Optional[str]
-    ) -> List[InsightPoint]:
+        transcript: str,
+        extract_types: Optional[List[InsightType]] = None,
+        max_insights: int = 10,
+        visual_context: Optional[Dict] = None
+    ) -> List[KeyInsight]:
         """
-        Generate key insights from meeting context
+        Extract key insights from meeting transcript
         """
         try:
-            # Prepare context prompt
-            context_prompt = f"""
-            Based on the following meeting context, generate 5-7 key insights in bullet point format. 
-            Each insight should be concise, actionable, and valuable for the participants.
+            # Prepare types filter
+            types_filter = extract_types if extract_types else list(InsightType)
+            types_str = ", ".join([t.value for t in types_filter])
+            
+            # Add visual context if available
+            context_addition = ""
+            if visual_context and visual_context.get("has_visual_context"):
+                context_addition = f"\n\nAdditional Visual Context: {visual_context.get('analysis', '')}"
+            
+            # Prepare insight extraction prompt
+            insight_prompt = f"""
+            Analyze the following meeting transcript and extract key insights. Focus on extracting the following types of insights: {types_str}
 
-            Meeting Context: {meeting_context or "General meeting discussion"}
-            Participants: {', '.join(participants) if participants else "Multiple participants"}
-            Focus Area: {analysis_focus or "General insights"}
+            Extract up to {max_insights} insights and categorize each one as:
+            - DECISION: Important decisions that were made
+            - ACTION_ITEM: Specific tasks or actions assigned
+            - KEY_POINT: Important discussion points or conclusions
+            - RISK: Potential risks or concerns identified
+            - OPPORTUNITY: Opportunities or positive developments discussed
+            - QUESTION: Important unresolved questions or issues
 
-            Format your response as numbered points:
-            1. [Key insight about decision made]
-            2. [Key insight about action items]
-            3. [Key insight about challenges identified]
-            4. [Key insight about opportunities]
-            5. [Key insight about next steps]
-            6. [Key insight about team dynamics]
-            7. [Key insight about outcomes]
+            Meeting Transcript:
+            {transcript}
+            {context_addition}
 
-            Make each point specific, actionable, and under 25 words.
+            For each insight, provide:
+            1. The insight content (clear and concise)
+            2. The type (from the categories above)
+            3. A confidence score (0.0-1.0) based on how clear and significant the insight is
+            4. The source section (brief quote or reference to where this came from)
+
+            Format your response as a JSON-like structure:
+            INSIGHT_1: [TYPE] | [CONTENT] | [CONFIDENCE] | [SOURCE_SECTION]
+            INSIGHT_2: [TYPE] | [CONTENT] | [CONFIDENCE] | [SOURCE_SECTION]
+            ...
+
+            Example:
+            INSIGHT_1: DECISION | Team agreed to implement new CRM system by Q2 | 0.95 | "We've decided to move forward with Salesforce implementation"
+            INSIGHT_2: ACTION_ITEM | John will prepare budget proposal by Friday | 0.90 | "John, can you have the budget ready by end of week?"
+
+            Keep each insight content under 100 characters and make them actionable and specific.
             """
             
-            insights_text = await self._call_ollama_text_model(context_prompt)
-            insights = self._parse_insights_from_text(insights_text)
+            insights_text = await self._call_ollama_text_model(insight_prompt)
+            insights = self._parse_insights_from_response(insights_text)
             
-            return insights
+            return insights[:max_insights]
             
         except Exception as e:
-            logger.error(f"Error generating context insights: {str(e)}")
-            # Return fallback insights
+            logger.error(f"Error extracting insights from transcript: {str(e)}")
+            # Return a basic error insight
             return [
-                InsightPoint(
-                    point="Meeting analysis unavailable - technical error occurred",
-                    category="system",
-                    priority="low",
-                    confidence=0.1
+                KeyInsight(
+                    id=str(uuid.uuid4()),
+                    content="Unable to extract insights due to processing error",
+                    type=InsightType.KEY_POINT,
+                    confidence_score=0.1,
+                    timestamp=datetime.utcnow(),
+                    source_section="system_error"
                 )
             ]
     
-    async def _generate_situation_tips(
-        self,
-        meeting_context: Optional[str],
-        visual_analysis: Optional[Dict],
-        participants: Optional[List[str]]
-    ) -> List[TipPoint]:
+    async def _generate_meeting_summary(self, transcript: str) -> str:
         """
-        Generate situational tips based on context and visual analysis
+        Generate a brief summary of the meeting
         """
         try:
-            # Build prompt with visual analysis if available
-            visual_context = ""
-            if visual_analysis and not visual_analysis.get("error"):
-                visual_context = f"""
-                Visual Analysis Results:
-                - Engagement Level: {visual_analysis.get('engagement_level', 'Not assessed')}
-                - Stress Indicators: {visual_analysis.get('stress_indicators', 'None detected')}
-                - Mood Assessment: {visual_analysis.get('mood_assessment', 'Neutral')}
-                """
+            summary_prompt = f"""
+            Provide a concise summary of this meeting transcript in 2-3 sentences. 
+            Focus on the main topics discussed, key outcomes, and overall purpose of the meeting.
             
-            tips_prompt = f"""
-            Based on the meeting context and visual analysis (if available), provide 4-5 practical tips 
-            for improving the meeting effectiveness and participant engagement.
-
-            Meeting Context: {meeting_context or "General meeting"}
-            {visual_context}
-            Participants: {', '.join(participants) if participants else "Team members"}
-
-            Provide tips in this format:
-            1. [Tip for immediate action]
-            2. [Tip for engagement improvement]
-            3. [Tip for stress reduction]
-            4. [Tip for better communication]
-            5. [Tip for follow-up actions]
-
-            Make each tip actionable and under 30 words. Focus on practical advice.
+            Transcript:
+            {transcript}
+            
+            Summary:
             """
             
-            tips_text = await self._call_ollama_text_model(tips_prompt)
-            tips = self._parse_tips_from_text(tips_text)
-            
-            return tips
+            summary = await self._call_ollama_text_model(summary_prompt)
+            return summary.strip()
             
         except Exception as e:
-            logger.error(f"Error generating situation tips: {str(e)}")
-            # Return fallback tips
-            return [
-                TipPoint(
-                    tip="Ensure all participants have a chance to speak",
-                    category="engagement",
-                    actionability="high"
-                ),
-                TipPoint(
-                    tip="Take regular breaks to maintain focus",
-                    category="wellness",
-                    actionability="high"
-                )
-            ]
-    
-    async def simplify_insights(
-        self,
-        original_insights: List[InsightPoint],
-        original_tips: List[TipPoint],
-        simplification_level: str = "moderate",
-        original_insight_id: Optional[str] = None
-    ) -> SimplifiedInsightsResponse:
-        """
-        Generate simplified version of insights
-        """
-        try:
-            # Prepare simplification prompt
-            insights_text = "\n".join([f"• {insight.point}" for insight in original_insights])
-            tips_text = "\n".join([f"• {tip.tip}" for tip in original_tips])
-            
-            simplification_prompt = f"""
-            Simplify the following insights and tips for easier understanding. 
-            Simplification level: {simplification_level}
-
-            Original Insights:
-            {insights_text}
-
-            Original Tips:
-            {tips_text}
-
-            For {simplification_level} simplification:
-            - Use simpler words and shorter sentences
-            - Combine related points where possible
-            - Make the language more conversational
-            - Keep the core meaning intact
-
-            Provide simplified insights (3-4 points) and simplified tips (3-4 points):
-
-            SIMPLIFIED INSIGHTS:
-            1. [simplified insight]
-            2. [simplified insight]
-            3. [simplified insight]
-
-            SIMPLIFIED TIPS:
-            1. [simplified tip]
-            2. [simplified tip]
-            3. [simplified tip]
-            """
-            
-            simplified_text = await self._call_ollama_text_model(simplification_prompt)
-            
-            # Parse simplified results
-            simplified_insights, simplified_tips = self._parse_simplified_response(simplified_text)
-            
-            return SimplifiedInsightsResponse(
-                simplified_insight_id=str(uuid.uuid4()),
-                original_insight_id=original_insight_id,
-                simplified_insights=simplified_insights,
-                simplified_tips=simplified_tips,
-                simplification_level=simplification_level,
-                generated_at=datetime.utcnow()
-            )
-            
-        except Exception as e:
-            logger.error(f"Error simplifying insights: {str(e)}")
-            raise e
+            logger.error(f"Error generating meeting summary: {str(e)}")
+            return "Meeting summary unavailable due to processing error."
     
     async def _call_ollama_text_model(self, prompt: str) -> str:
         """
-        Call Ollama text model for generating insights
+        Call Ollama text model for generating insights and analysis
         """
         try:
             payload = {
@@ -350,7 +248,7 @@ class KeyInsightsService:
                 "options": {
                     "temperature": 0.7,
                     "top_p": 0.9,
-                    "num_predict": 500
+                    "num_predict": 1000
                 }
             }
             
@@ -358,7 +256,7 @@ class KeyInsightsService:
                 async with session.post(
                     f"{self.ollama_base_url}/api/generate",
                     json=payload,
-                    timeout=aiohttp.ClientTimeout(total=60)
+                    timeout=aiohttp.ClientTimeout(total=120)
                 ) as response:
                     if response.status == 200:
                         result = await response.json()
@@ -371,8 +269,77 @@ class KeyInsightsService:
             logger.error(f"Error calling Ollama: {str(e)}")
             raise e
     
-    def _parse_insights_from_text(self, text: str) -> List[InsightPoint]:
-        """Parse insights from generated text"""
+    def _parse_insights_from_response(self, response_text: str) -> List[KeyInsight]:
+        """
+        Parse insights from the Ollama response text
+        """
+        insights = []
+        lines = response_text.strip().split('\n')
+        
+        for line in lines:
+            line = line.strip()
+            if line.startswith('INSIGHT_') and '|' in line:
+                try:
+                    # Parse the structured response
+                    parts = line.split('|')
+                    if len(parts) >= 4:
+                        # Extract components
+                        type_part = parts[1].strip()
+                        content_part = parts[2].strip()
+                        confidence_part = parts[3].strip()
+                        source_part = parts[4].strip() if len(parts) > 4 else "transcript"
+                        
+                        # Map type string to InsightType
+                        insight_type = self._map_type_string(type_part)
+                        
+                        # Parse confidence score
+                        try:
+                            confidence_score = float(confidence_part)
+                            confidence_score = max(0.0, min(1.0, confidence_score))  # Clamp to 0-1
+                        except (ValueError, TypeError):
+                            confidence_score = 0.7  # Default confidence
+                        
+                        # Create insight
+                        insight = KeyInsight(
+                            id=str(uuid.uuid4()),
+                            content=content_part[:500],  # Ensure max length
+                            type=insight_type,
+                            confidence_score=confidence_score,
+                            timestamp=datetime.utcnow(),
+                            source_section=source_part[:200] if source_part else None
+                        )
+                        
+                        insights.append(insight)
+                        
+                except Exception as e:
+                    logger.warning(f"Failed to parse insight line: {line}, error: {str(e)}")
+                    continue
+        
+        # If no structured insights found, try to extract from unstructured text
+        if not insights:
+            insights = self._extract_fallback_insights(response_text)
+        
+        return insights
+    
+    def _map_type_string(self, type_str: str) -> InsightType:
+        """
+        Map type string to InsightType enum
+        """
+        type_mapping = {
+            'DECISION': InsightType.DECISION,
+            'ACTION_ITEM': InsightType.ACTION_ITEM,
+            'KEY_POINT': InsightType.KEY_POINT,
+            'RISK': InsightType.RISK,
+            'OPPORTUNITY': InsightType.OPPORTUNITY,
+            'QUESTION': InsightType.QUESTION
+        }
+        
+        return type_mapping.get(type_str.upper(), InsightType.KEY_POINT)
+    
+    def _extract_fallback_insights(self, text: str) -> List[KeyInsight]:
+        """
+        Extract insights from unstructured text as fallback
+        """
         insights = []
         lines = text.strip().split('\n')
         
@@ -380,140 +347,244 @@ class KeyInsightsService:
             line = line.strip()
             if line and (line[0].isdigit() or line.startswith('•') or line.startswith('-')):
                 # Clean up the line
-                clean_line = line.lstrip('0123456789.•- ').strip()
-                if clean_line:
-                    insights.append(InsightPoint(
-                        point=clean_line,
-                        category="general",
-                        priority="medium",
-                        confidence=0.8
-                    ))
+                clean_line = re.sub(r'^[\d\.\-•\s]+', '', line).strip()
+                if clean_line and len(clean_line) > 10:  # Ensure meaningful content
+                    insight = KeyInsight(
+                        id=str(uuid.uuid4()),
+                        content=clean_line[:500],
+                        type=InsightType.KEY_POINT,
+                        confidence_score=0.6,  # Lower confidence for fallback
+                        timestamp=datetime.utcnow(),
+                        source_section="extracted_from_response"
+                    )
+                    insights.append(insight)
         
-        return insights[:7]  # Limit to 7 insights
+        return insights[:10]  # Limit to 10 insights
     
-    def _parse_tips_from_text(self, text: str) -> List[TipPoint]:
-        """Parse tips from generated text"""
-        tips = []
-        lines = text.strip().split('\n')
-        
-        for line in lines:
-            line = line.strip()
-            if line and (line[0].isdigit() or line.startswith('•') or line.startswith('-')):
-                clean_line = line.lstrip('0123456789.•- ').strip()
-                if clean_line:
-                    tips.append(TipPoint(
-                        tip=clean_line,
-                        category="general",
-                        actionability="medium"
-                    ))
-        
-        return tips[:5]  # Limit to 5 tips
-    
-    def _parse_simplified_response(self, text: str) -> tuple:
-        """Parse simplified insights and tips from response"""
-        lines = text.split('\n')
-        simplified_insights = []
-        simplified_tips = []
-        current_section = None
-        
-        for line in lines:
-            line = line.strip()
-            if 'SIMPLIFIED INSIGHTS:' in line.upper():
-                current_section = 'insights'
-                continue
-            elif 'SIMPLIFIED TIPS:' in line.upper():
-                current_section = 'tips'
-                continue
-            
-            if line and (line[0].isdigit() or line.startswith('•') or line.startswith('-')):
-                clean_line = line.lstrip('0123456789.•- ').strip()
-                if clean_line:
-                    if current_section == 'insights':
-                        simplified_insights.append(InsightPoint(
-                            point=clean_line,
-                            category="simplified",
-                            priority="medium",
-                            confidence=0.8
-                        ))
-                    elif current_section == 'tips':
-                        simplified_tips.append(TipPoint(
-                            tip=clean_line,
-                            category="simplified",
-                            actionability="high"
-                        ))
-        
-        return simplified_insights, simplified_tips
-    
-    def _extract_engagement_level(self, analysis: str) -> str:
-        """Extract engagement level from visual analysis"""
-        analysis_lower = analysis.lower()
-        if 'high engagement' in analysis_lower or 'very engaged' in analysis_lower:
-            return "high"
-        elif 'low engagement' in analysis_lower or 'disengaged' in analysis_lower:
-            return "low"
-        else:
-            return "moderate"
-    
-    def _extract_stress_indicators(self, analysis: str) -> str:
-        """Extract stress indicators from visual analysis"""
-        analysis_lower = analysis.lower()
-        stress_words = ['stress', 'tension', 'anxious', 'worried', 'concerned', 'frustrated']
-        
-        for word in stress_words:
-            if word in analysis_lower:
-                return "detected"
-        return "minimal"
-    
-    def _extract_mood_assessment(self, analysis: str) -> str:
-        """Extract mood assessment from visual analysis"""
-        analysis_lower = analysis.lower()
-        if 'positive' in analysis_lower or 'happy' in analysis_lower or 'upbeat' in analysis_lower:
-            return "positive"
-        elif 'negative' in analysis_lower or 'frustrated' in analysis_lower or 'upset' in analysis_lower:
-            return "negative"
-        else:
-            return "neutral"
-    
-    async def get_analysis_status(self, insight_id: str) -> AnalysisStatusResponse:
-        """Get the status of an insight analysis"""
-        status_data = self.analysis_status.get(insight_id)
-        
-        if not status_data:
-            return AnalysisStatusResponse(
-                insight_id=insight_id,
-                status="not_found",
-                progress=0
+    async def generate_insights_safe(
+        self,
+        request: KeyInsightRequest,
+        image_data: Optional[bytes] = None
+    ) -> KeyInsightResponse | ErrorResponse:
+        """
+        Generate key insights with proper error response handling
+        """
+        try:
+            return await self.generate_insights(request, image_data)
+        except ValueError as e:
+            logger.error(f"Validation error: {str(e)}")
+            return ErrorResponse(
+                error=f"Invalid request data: {str(e)}",
+                error_code="VALIDATION_ERROR",
+                timestamp=datetime.utcnow()
             )
-        
-        return AnalysisStatusResponse(
-            insight_id=insight_id,
-            status=status_data["status"],
-            progress=status_data.get("progress", 0),
-            started_at=status_data.get("started_at"),
-            completed_at=status_data.get("completed_at"),
-            error=status_data.get("error")
-        )
+        except aiohttp.ClientError as e:
+            logger.error(f"Ollama connection error: {str(e)}")
+            return ErrorResponse(
+                error="Unable to connect to AI model service",
+                error_code="AI_SERVICE_UNAVAILABLE",
+                timestamp=datetime.utcnow()
+            )
+        except asyncio.TimeoutError:
+            logger.error("Request timeout")
+            return ErrorResponse(
+                error="Request timed out while processing",
+                error_code="PROCESSING_TIMEOUT",
+                timestamp=datetime.utcnow()
+            )
+        except Exception as e:
+            logger.error(f"Unexpected error: {str(e)}")
+            return ErrorResponse(
+                error="An unexpected error occurred during processing",
+                error_code="INTERNAL_SERVER_ERROR",
+                timestamp=datetime.utcnow()
+            )
+
+    async def get_cached_insights_safe(
+        self, 
+        meeting_id: str
+    ) -> KeyInsightResponse | ErrorResponse:
+        """
+        Get cached insights with error handling
+        """
+        try:
+            if not meeting_id or not meeting_id.strip():
+                return ErrorResponse(
+                    error="Meeting ID is required and cannot be empty",
+                    error_code="INVALID_MEETING_ID",
+                    timestamp=datetime.utcnow()
+                )
+            
+            cached_response = await self.get_cached_insights(meeting_id)
+            if not cached_response:
+                return ErrorResponse(
+                    error=f"No insights found for meeting ID: {meeting_id}",
+                    error_code="INSIGHTS_NOT_FOUND",
+                    timestamp=datetime.utcnow()
+                )
+            
+            return cached_response
+            
+        except Exception as e:
+            logger.error(f"Error retrieving cached insights: {str(e)}")
+            return ErrorResponse(
+                error="Failed to retrieve cached insights",
+                error_code="CACHE_RETRIEVAL_ERROR",
+                timestamp=datetime.utcnow()
+            )
+
+    async def get_insights_by_type_safe(
+        self, 
+        meeting_id: str, 
+        insight_type: InsightType
+    ) -> List[KeyInsight] | ErrorResponse:
+        """
+        Get insights by type with error handling
+        """
+        try:
+            if not meeting_id or not meeting_id.strip():
+                return ErrorResponse(
+                    error="Meeting ID is required and cannot be empty",
+                    error_code="INVALID_MEETING_ID",
+                    timestamp=datetime.utcnow()
+                )
+            
+            insights = await self.get_insights_by_type(meeting_id, insight_type)
+            return insights
+            
+        except Exception as e:
+            logger.error(f"Error getting insights by type: {str(e)}")
+            return ErrorResponse(
+                error=f"Failed to retrieve {insight_type.value} insights",
+                error_code="INSIGHTS_RETRIEVAL_ERROR",
+                timestamp=datetime.utcnow()
+            )
+
+    async def validate_request(self, request: KeyInsightRequest) -> Optional[ErrorResponse]:
+        """
+        Validate the insight request and return error if invalid
+        """
+        try:
+            # Check transcript length
+            if len(request.transcript.strip()) < 10:
+                return ErrorResponse(
+                    error="Transcript is too short. Minimum 10 characters required.",
+                    error_code="TRANSCRIPT_TOO_SHORT",
+                    timestamp=datetime.utcnow()
+                )
+            
+            # Check max insights range
+            if request.max_insights < 1 or request.max_insights > 50:
+                return ErrorResponse(
+                    error="max_insights must be between 1 and 50",
+                    error_code="INVALID_MAX_INSIGHTS",
+                    timestamp=datetime.utcnow()
+                )
+            
+            # Validate extract_types if provided
+            if request.extract_types:
+                invalid_types = [
+                    t for t in request.extract_types 
+                    if t not in InsightType
+                ]
+                if invalid_types:
+                    return ErrorResponse(
+                        error=f"Invalid insight types: {invalid_types}",
+                        error_code="INVALID_INSIGHT_TYPES",
+                        timestamp=datetime.utcnow()
+                    )
+            
+            return None  # No errors
+            
+        except Exception as e:
+            logger.error(f"Error validating request: {str(e)}")
+            return ErrorResponse(
+                error="Request validation failed",
+                error_code="VALIDATION_ERROR",
+                timestamp=datetime.utcnow()
+            )
     
-    async def get_insights_history(self, meeting_id: str) -> List[Dict]:
-        """Get insights history for a meeting"""
-        # This would typically query a database
-        # For now, return cached insights that match the meeting_id
-        history = []
-        for insight_id, insights in self.insights_cache.items():
-            if insights.meeting_id == meeting_id:
-                history.append({
-                    "insight_id": insight_id,
-                    "generated_at": insights.generated_at,
-                    "visual_analysis_included": insights.visual_analysis_included,
-                    "insights_count": len(insights.key_insights),
-                    "tips_count": len(insights.situation_tips)
-                })
-        
-        return sorted(history, key=lambda x: x["generated_at"], reverse=True)
+    async def get_cached_insights(self, meeting_id: str) -> Optional[KeyInsightResponse]:
+        """
+        Get cached insights for a meeting
+        """
+        return self.insights_cache.get(meeting_id)
     
-    async def delete_insights(self, insight_id: str) -> bool:
-        """Delete specific insights"""
-        if insight_id in self.insights_cache:
-            del self.insights_cache[insight_id]
-            return True
-        return False
+    async def clear_cache_safe(self, meeting_id: Optional[str] = None) -> bool | ErrorResponse:
+        """
+        Clear insights cache with error handling
+        """
+        try:
+            result = await self.clear_cache(meeting_id)
+            return result
+        except Exception as e:
+            logger.error(f"Error clearing cache: {str(e)}")
+            return ErrorResponse(
+                error="Failed to clear cache",
+                error_code="CACHE_CLEAR_ERROR",
+                timestamp=datetime.utcnow()
+            )
+
+    async def health_check_safe(self) -> Dict[str, Any] | ErrorResponse:
+        """
+        Health check with error handling
+        """
+        try:
+            health_data = await self.health_check()
+            return health_data
+        except Exception as e:
+            logger.error(f"Health check failed: {str(e)}")
+            return ErrorResponse(
+                error="Health check failed",
+                error_code="HEALTH_CHECK_ERROR",
+                timestamp=datetime.utcnow()
+            )
+    
+    async def get_insights_by_type(
+        self, 
+        meeting_id: str, 
+        insight_type: InsightType
+    ) -> List[KeyInsight]:
+        """
+        Get insights filtered by type for a specific meeting
+        """
+        cached_response = await self.get_cached_insights(meeting_id)
+        if not cached_response:
+            return []
+        
+        return [
+            insight for insight in cached_response.insights 
+            if insight.type == insight_type
+        ]
+    
+    async def health_check(self) -> Dict[str, Any]:
+        """
+        Check the health of the service and Ollama connection
+        """
+        try:
+            # Test Ollama connection
+            async with aiohttp.ClientSession() as session:
+                async with session.get(
+                    f"{self.ollama_base_url}/api/version",
+                    timeout=aiohttp.ClientTimeout(total=10)
+                ) as response:
+                    ollama_healthy = response.status == 200
+            
+            return {
+                "service_healthy": True,
+                "ollama_connection": ollama_healthy,
+                "cached_meetings": len(self.insights_cache),
+                "timestamp": datetime.utcnow(),
+                "models": {
+                    "text_model": self.text_model,
+                    "vision_model": self.llava_model
+                }
+            }
+            
+        except Exception as e:
+            return {
+                "service_healthy": False,
+                "error": str(e),
+                "timestamp": datetime.utcnow()
+            }
+    
