@@ -1,10 +1,14 @@
 import React, { useState, useCallback, useRef } from 'react';
 import { Upload, Mic, FileAudio, Loader2, Play, Pause, Download, Trash2, Eye, Clock, Users, Target } from 'lucide-react';
+import { Summarization } from '../../services/aiService';
 
-// API Service
-const API_BASE_URL = 'http://localhost:8000/api/v1';
-const USER_ID = 'default_user'; // Replace with actual user ID from auth
-
+Summarization("This is the full transcript or meeting notes")
+  .then(response => {
+    console.log("API Response:", response);
+  })
+  .catch(err => {
+    console.error("API Error:", err);
+  });
 const summarizationService = {
   // Audio Upload Endpoints
   uploadAudio: async (file, meetingId = null) => {

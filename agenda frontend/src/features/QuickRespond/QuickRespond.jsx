@@ -1,5 +1,14 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Upload, Play, Square, Settings, Users, BarChart3, Clock, AlertTriangle, CheckCircle, XCircle, Camera, Mic, FileText, Download, RefreshCw, Trash2, Plus } from 'lucide-react';
+import { QuickRespond } from '../../services/aiService';
+
+QuickRespond("This is my user prompt")
+  .then(response => {
+    console.log("API Response:", response);
+  })
+  .catch(err => {
+    console.error("API Error:", err);
+  });
 
 const MeetingAnalysisDashboard = () => {
   const [activeTab, setActiveTab] = useState('analyze');

@@ -5808,7 +5808,8 @@ async def hands_free_update_settings(session_id: str, settings: SessionSettings)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/api/v1/hands-free/session/{session_id}/insights", response_model=SessionInsights, tags=["Hands-Free"])
+@app.get("/api/v1/hands-free/session/{session_id}"
+"/insights", response_model=SessionInsights, tags=["Hands-Free"])
 async def hands_free_insights(session_id: str):
     """Hands-Free: Get session insights"""
     try:

@@ -35,7 +35,7 @@ export async function QuickRespond(prompt) {
   return postJSON("/ai/quick-respond", { prompt });
 }
 
-/**
+/**   
  * Summarization
  * @param {string} text - full transcript or meeting notes
  */
