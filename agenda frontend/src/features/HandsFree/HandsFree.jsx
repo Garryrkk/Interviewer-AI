@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Mic, MicOff, Video, VideoOff, Pause, Play, Square, Settings, Activity, Eye, Brain, Heart, Upload, RefreshCw, Database } from 'lucide-react';
+import { HandsFreeMode } from '../../services/aiService';
 
 const HandsFreeInterviewSystem = () => {
   const [apiMode, setApiMode] = useState('original'); // 'original' or 'handsfree'
@@ -48,6 +49,15 @@ const HandsFreeInterviewSystem = () => {
   // ==========================================================================
   // ORIGINAL API ENDPOINTS
   // ==========================================================================
+const context = { meetingId: "123", action: "start" };
+
+HandsFreeMode(context)
+  .then(response => {
+    console.log("API Response:", response);
+  })
+  .catch(err => {
+    console.error("API Error:", err);
+  });
 
   const createSessionOriginal = async () => {
     try {

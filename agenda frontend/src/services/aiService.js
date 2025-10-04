@@ -51,7 +51,7 @@ export async function KeyInsights(text) {
   return postJSON("/ai/key-insights", { text });
 }
 
-/**
+/** 
  * Hands Free   
  * @param {Object} context - { meetingId, action, ... }
  * Designed for triggering hands-free AI actions

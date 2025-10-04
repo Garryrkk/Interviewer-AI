@@ -1,5 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { Upload, FileText, Brain, Clock, History, Trash2, Eye, BarChart3, RefreshCw, CheckCircle, AlertCircle } from 'lucide-react';
+import { KeyInsights } from '../../services/aiService';
+
+KeyInsights("This is the text I want insights for")
+  .then(response => {
+    console.log("API Response:", response);
+  })
+  .catch(err => {
+    console.error("API Error:", err);
+  });
 
 // API Service Class
 class KeyInsightsAPI {
