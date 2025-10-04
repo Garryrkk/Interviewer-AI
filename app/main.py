@@ -1309,7 +1309,7 @@ async def shutdown_event():
             print(f"Error cleaning up session {session_id}: {e}")
     print("Shutdown complete")
 
-
+  
 # Root endpoint
 @app.get("/")
 async def root():

@@ -1,6 +1,657 @@
 import React, { useState, useCallback, useRef } from 'react';
 import { Upload, Mic, FileAudio, Loader2, Play, Pause, Download, Trash2, Eye, Clock, Users, Target } from 'lucide-react';
-import { summarizationService } from './summarizationUtils';
+
+// API Service
+const API_BASE_URL = 'http://localhost:8000/api/v1';
+const USER_ID = 'default_user'; // Replace with actual user ID from auth
+
+const summarizationService = {
+  // Audio Upload Endpoints
+  uploadAudio: async (file, meetingId = null) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    const params = new URLSearchParams({ user_id: USER_ID });
+    if (meetingId) params.append('meeting_id', meetingId);
+
+    const response = await fetch(`${API_BASE_URL}/audio/upload?${params}`, {
+      method: 'POST',
+      body: formData
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: 'Upload failed' }));
+      throw new Error(error.detail || error.error || 'Upload failed');
+    }
+
+    const result = await response.json();
+    // Handle both wrapped and direct responses
+    return result.data || result;
+  },
+
+  uploadMeetingAudio: async (file, meetingId = null) => {
+    const formData = new FormData();
+    formData.append('audio_file', file);
+    if (meetingId) formData.append('meeting_id', meetingId);
+
+    const response = await fetch(`${API_BASE_URL}/summarization/upload-audio`, {
+      method: 'POST',
+      body: formData
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || 'Upload failed');
+    }
+
+    return response.json();
+  },
+
+  // Meeting Analysis Endpoints
+  analyzeMeeting: async (audioFilePath, meetingContext = null, analysisType = 'post_meeting') => {
+    const params = new URLSearchParams({
+      audio_file_path: audioFilePath,
+      user_id: USER_ID,
+      analysis_type: analysisType
+    });
+    
+    if (meetingContext) params.append('meeting_context', meetingContext);
+
+    const response = await fetch(`${API_BASE_URL}/meetings/analyze?${params}`, {
+      method: 'POST'
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: 'Analysis failed' }));
+      throw new Error(error.detail || error.error || 'Analysis failed');
+    }
+
+    const result = await response.json();
+    return result.data || result;
+  },
+
+  analyzeMeetingAudio: async (audioFilePath, meetingContext = null, analysisType = 'post_meeting') => {
+    const response = await fetch(`${API_BASE_URL}/summarization/analyze-meeting`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        audio_file_path: audioFilePath,
+        meeting_context: meetingContext,
+        analysis_type: analysisType
+      })
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || 'Analysis failed');
+    }
+
+    return response.json();
+  },
+
+  // Summary Generation Endpoints
+  generateSummary: async (content, summaryType = 'detailed', includeActionItems = true, meetingId = null) => {
+    const params = new URLSearchParams({
+      content: content,
+      summary_type: summaryType,
+      user_id: USER_ID,
+      include_action_items: includeActionItems.toString()
+    });
+    
+    if (meetingId) params.append('meeting_id', meetingId);
+
+    const response = await fetch(`${API_BASE_URL}/summaries/generate?${params}`, {
+      method: 'POST'
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: 'Summary generation failed' }));
+      throw new Error(error.detail || error.error || 'Summary generation failed');
+    }
+
+    const result = await response.json();
+    return result.data || result;
+  },
+
+  createSummary: async (content, summaryType = 'detailed', meetingId = null, includeActionItems = true) => {
+    const response = await fetch(`${API_BASE_URL}/summarization/summarize`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        content: content,
+        summary_type: summaryType,
+        meeting_id: meetingId,
+        include_action_items: includeActionItems
+      })
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || 'Summary creation failed');
+    }
+
+    return response.json();
+  },
+
+  // Real-time Analysis Endpoints
+  realTimeAnalysis: async (audioChunkPath, meetingContext = null) => {
+    const params = new URLSearchParams({
+      audio_chunk_path: audioChunkPath,
+      user_id: USER_ID
+    });
+    
+    if (meetingContext) params.append('meeting_context', meetingContext);
+
+    const response = await fetch(`${API_BASE_URL}/meetings/real-time?${params}`, {
+      method: 'POST'
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || 'Real-time analysis failed');
+    }
+
+    return response.json();
+  },
+
+  realTimeMeetingAnalysis: async (audioFilePath, meetingContext = null) => {
+    const response = await fetch(`${API_BASE_URL}/summarization/real-time-analysis`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        audio_file_path: audioFilePath,
+        meeting_context: meetingContext
+      })
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || 'Real-time analysis failed');
+    }
+
+    return response.json();
+  },
+
+  // Get Summary Endpoints
+  getMeetingSummary: async (meetingId) => {
+    const params = new URLSearchParams({ user_id: USER_ID });
+    const response = await fetch(`${API_BASE_URL}/summaries/${meetingId}?${params}`);
+
+    if (!response.ok) {
+      if (response.status === 404) return null;
+      const error = await response.json();
+      throw new Error(error.detail || 'Failed to fetch summary');
+    }
+
+    const result = await response.json();
+    return result.data;
+  },
+
+  getSummaryByMeetingId: async (meetingId) => {
+    const response = await fetch(`${API_BASE_URL}/summarization/meeting/${meetingId}/summary`);
+
+    if (!response.ok) {
+      if (response.status === 404) return null;
+      const error = await response.json();
+      throw new Error(error.detail || 'Failed to fetch summary');
+    }
+
+    return response.json();
+  },
+
+  // User Summaries Endpoints
+  getUserSummaries: async (limit = 10, offset = 0) => {
+    const params = new URLSearchParams({
+      user_id: USER_ID,
+      limit: limit.toString(),
+      offset: offset.toString()
+    });
+
+    const response = await fetch(`${API_BASE_URL}/summaries/user?${params}`);
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: 'Failed to fetch summaries' }));
+      throw new Error(error.detail || error.error || 'Failed to fetch summaries');
+    }
+
+    const result = await response.json();
+    return result.data || result;
+  },
+
+  getAllUserSummaries: async (limit = 10, offset = 0) => {
+    const params = new URLSearchParams({
+      limit: limit.toString(),
+      offset: offset.toString()
+    });
+
+    const response = await fetch(`${API_BASE_URL}/summarization/user/summaries?${params}`);
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || 'Failed to fetch summaries');
+    }
+
+    return response.json();
+  },
+
+  // Delete Summary Endpoints
+  deleteSummary: async (meetingId) => {
+    const params = new URLSearchParams({ user_id: USER_ID });
+    const response = await fetch(`${API_BASE_URL}/summaries/${meetingId}?${params}`, {
+      method: 'DELETE'
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || 'Failed to delete summary');
+    }
+
+    return true;
+  },
+
+  deleteMeetingSummary: async (meetingId) => {
+    const response = await fetch(`${API_BASE_URL}/summarization/meeting/${meetingId}/summary`, {
+      method: 'DELETE'
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || 'Failed to delete summary');
+    }
+
+    return response.json();
+  },
+
+  // Batch Summarization
+  batchSummarize: async (meetingIds) => {
+    const response = await fetch(`${API_BASE_URL}/summarization/batch`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        meeting_ids: meetingIds
+      })
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || 'Batch summarization failed');
+    }
+
+    return response.json();
+  },
+
+  // Action Items CRUD
+  createActionItem: async (item) => {
+    const response = await fetch(`${API_BASE_URL}/actionitems/`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(item)
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || 'Failed to create action item');
+    }
+
+    return response.json();
+  },
+
+  getActionItems: async () => {
+    const response = await fetch(`${API_BASE_URL}/actionitems/`);
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || 'Failed to fetch action items');
+    }
+
+    return response.json();
+  },
+
+  getActionItem: async (itemId) => {
+    const response = await fetch(`${API_BASE_URL}/actionitems/${itemId}`);
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || 'Failed to fetch action item');
+    }
+
+    return response.json();
+  },
+
+  updateActionItem: async (itemId, item) => {
+    const response = await fetch(`${API_BASE_URL}/actionitems/${itemId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(item)
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || 'Failed to update action item');
+    }
+
+    return response.json();
+  },
+
+  deleteActionItem: async (itemId) => {
+    const response = await fetch(`${API_BASE_URL}/actionitems/${itemId}`, {
+      method: 'DELETE'
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || 'Failed to delete action item');
+    }
+
+    return response.json();
+  },
+
+  // Key Points CRUD
+  createKeyPoint: async (point) => {
+    const response = await fetch(`${API_BASE_URL}/keypoints/`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(point)
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || 'Failed to create key point');
+    }
+
+    return response.json();
+  },
+
+  getKeyPoints: async () => {
+    const response = await fetch(`${API_BASE_URL}/keypoints/`);
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || 'Failed to fetch key points');
+    }
+
+    return response.json();
+  },
+
+  getKeyPoint: async (pointId) => {
+    const response = await fetch(`${API_BASE_URL}/keypoints/${pointId}`);
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || 'Failed to fetch key point');
+    }
+
+    return response.json();
+  },
+
+  updateKeyPoint: async (pointId, point) => {
+    const response = await fetch(`${API_BASE_URL}/keypoints/${pointId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(point)
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || 'Failed to update key point');
+    }
+
+    return response.json();
+  },
+
+  deleteKeyPoint: async (pointId) => {
+    const response = await fetch(`${API_BASE_URL}/keypoints/${pointId}`, {
+      method: 'DELETE'
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || 'Failed to delete key point');
+    }
+
+    return response.json();
+  },
+
+  // Summary Types CRUD
+  createSummaryType: async (summary) => {
+    const response = await fetch(`${API_BASE_URL}/summarytypes/`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(summary)
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || 'Failed to create summary type');
+    }
+
+    return response.json();
+  },
+
+  getSummaryTypes: async () => {
+    const response = await fetch(`${API_BASE_URL}/summarytypes/`);
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || 'Failed to fetch summary types');
+    }
+
+    return response.json();
+  },
+
+  getSummaryType: async (summaryId) => {
+    const response = await fetch(`${API_BASE_URL}/summarytypes/${summaryId}`);
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || 'Failed to fetch summary type');
+    }
+
+    return response.json();
+  },
+
+  updateSummaryType: async (summaryId, summary) => {
+    const response = await fetch(`${API_BASE_URL}/summarytypes/${summaryId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(summary)
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || 'Failed to update summary type');
+    }
+
+    return response.json();
+  },
+
+  deleteSummaryType: async (summaryId) => {
+    const response = await fetch(`${API_BASE_URL}/summarytypes/${summaryId}`, {
+      method: 'DELETE'
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || 'Failed to delete summary type');
+    }
+
+    return response.json();
+  },
+
+  // Summary CRUD
+  createSummaryRecord: async (summary) => {
+    const response = await fetch(`${API_BASE_URL}/summary`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(summary)
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || 'Failed to create summary');
+    }
+
+    return response.json();
+  },
+
+  getSummaries: async () => {
+    const response = await fetch(`${API_BASE_URL}/summary`);
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || 'Failed to fetch summaries');
+    }
+
+    return response.json();
+  },
+
+  // Analysis Types CRUD
+  createAnalysisType: async (analysis) => {
+    const response = await fetch(`${API_BASE_URL}/analysistypes/`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(analysis)
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || 'Failed to create analysis type');
+    }
+
+    return response.json();
+  },
+
+  getAnalysisTypes: async () => {
+    const response = await fetch(`${API_BASE_URL}/analysistypes/`);
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || 'Failed to fetch analysis types');
+    }
+
+    return response.json();
+  },
+
+  getAnalysisType: async (analysisId) => {
+    const response = await fetch(`${API_BASE_URL}/analysistypes/${analysisId}`);
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || 'Failed to fetch analysis type');
+    }
+
+    return response.json();
+  },
+
+  updateAnalysisType: async (analysisId, analysis) => {
+    const response = await fetch(`${API_BASE_URL}/analysistypes/${analysisId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(analysis)
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || 'Failed to update analysis type');
+    }
+
+    return response.json();
+  },
+
+  deleteAnalysisType: async (analysisId) => {
+    const response = await fetch(`${API_BASE_URL}/analysistypes/${analysisId}`, {
+      method: 'DELETE'
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || 'Failed to delete analysis type');
+    }
+
+    return response.json();
+  },
+
+  // Meeting Context
+  createMeeting: async (meeting) => {
+    const response = await fetch(`${API_BASE_URL}/meeting`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(meeting)
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || 'Failed to create meeting');
+    }
+
+    return response.json();
+  },
+
+  getMeetings: async () => {
+    const response = await fetch(`${API_BASE_URL}/meeting`);
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || 'Failed to fetch meetings');
+    }
+
+    return response.json();
+  },
+
+  // LLAVA Analysis Config
+  createLLAVAConfig: async (config) => {
+    const response = await fetch(`${API_BASE_URL}/llava-config`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(config)
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || 'Failed to create LLAVA config');
+    }
+
+    return response.json();
+  },
+
+  getLLAVAConfigs: async () => {
+    const response = await fetch(`${API_BASE_URL}/llava-config`);
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || 'Failed to fetch LLAVA configs');
+    }
+
+    return response.json();
+  },
+
+  // Real-time Updates
+  createRealtimeUpdate: async (update) => {
+    const response = await fetch(`${API_BASE_URL}/realtime-update`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(update)
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || 'Failed to create realtime update');
+    }
+
+    return response.json();
+  },
+
+  getRealtimeUpdates: async () => {
+    const response = await fetch(`${API_BASE_URL}/realtime-update`);
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || 'Failed to fetch realtime updates');
+    }
+
+    return response.json();
+  }
+};
 
 const MeetingSummarization = () => {
   const [activeTab, setActiveTab] = useState('upload');
@@ -21,7 +672,7 @@ const MeetingSummarization = () => {
   const mediaRecorderRef = useRef(null);
   const recordingIntervalRef = useRef(null);
 
-  // File upload handler
+  // Handle file upload with proper error handling
   const handleFileUpload = useCallback(async (event) => {
     const file = event.target.files[0];
     if (!file) return;
@@ -36,12 +687,20 @@ const MeetingSummarization = () => {
 
     try {
       const uploadResult = await summarizationService.uploadAudio(file);
+      
+      // Set uploaded file with safe property access
       setUploadedFile({
-        ...uploadResult,
         name: file.name,
+        file_path: uploadResult.file_path || uploadResult.audio_file_path,
+        file_size: uploadResult.file_size || file.size,
+        duration: uploadResult.duration,
+        meeting_id: uploadResult.meeting_id,
         file: file
       });
+      
+      console.log('Upload successful:', uploadResult);
     } catch (err) {
+      console.error('Upload error:', err);
       setError('Failed to upload audio file: ' + err.message);
     } finally {
       setIsUploading(false);
@@ -103,9 +762,9 @@ const MeetingSummarization = () => {
     }
   }, [isRecording]);
 
-  // Analyze meeting
+  // Analyze meeting with better error handling and data validation
   const analyzeMeeting = useCallback(async () => {
-    if (!uploadedFile) {
+    if (!uploadedFile || !uploadedFile.file_path) {
       setError('Please upload an audio file first');
       return;
     }
@@ -114,17 +773,17 @@ const MeetingSummarization = () => {
     setError(null);
 
     try {
-      const analysisResult = await summarizationService.analyzeMeeting({
-        audio_file_path: uploadedFile.file_path,
-        meeting_context: meetingContext,
-        analysis_type: 'post_meeting',
-        include_sentiment: true,
-        include_speakers: true
-      });
+      const analysisResult = await summarizationService.analyzeMeeting(
+        uploadedFile.file_path,
+        meetingContext,
+        'post_meeting'
+      );
 
+      console.log('Analysis result:', analysisResult);
       setAnalysisResult(analysisResult);
       setActiveTab('results');
     } catch (err) {
+      console.error('Analysis error:', err);
       setError('Failed to analyze meeting: ' + err.message);
     } finally {
       setIsAnalyzing(false);
@@ -134,12 +793,12 @@ const MeetingSummarization = () => {
   // Generate summary
   const generateSummary = useCallback(async (content) => {
     try {
-      const summaryResult = await summarizationService.generateSummary({
-        content: content,
-        summary_type: summaryType,
-        include_action_items: includeActionItems,
-        meeting_id: uploadedFile?.meeting_id
-      });
+      const summaryResult = await summarizationService.generateSummary(
+        content,
+        summaryType,
+        includeActionItems,
+        uploadedFile?.meeting_id
+      );
 
       setSummaries(prev => [summaryResult, ...prev]);
       return summaryResult;
@@ -148,12 +807,17 @@ const MeetingSummarization = () => {
     }
   }, [summaryType, includeActionItems, uploadedFile]);
 
-  // Load user summaries
+  // Load user summaries with better error handling
   const loadUserSummaries = useCallback(async () => {
     try {
       const userSummaries = await summarizationService.getUserSummaries();
-      setSummaries(userSummaries);
+      console.log('Loaded summaries:', userSummaries);
+      
+      // Handle both array and object responses
+      const summariesArray = Array.isArray(userSummaries) ? userSummaries : [];
+      setSummaries(summariesArray);
     } catch (err) {
+      console.error('Load summaries error:', err);
       setError('Failed to load summaries: ' + err.message);
     }
   }, []);
@@ -327,7 +991,7 @@ const MeetingSummarization = () => {
                         <p className="font-medium" style={{ color: '#F8FAFC' }}>{uploadedFile.name}</p>
                         <p className="text-sm text-gray-400">
                           {uploadedFile.duration && `${formatTime(Math.floor(uploadedFile.duration))} • `}
-                          {formatFileSize(uploadedFile.file_size)}
+                          {uploadedFile.file_size && formatFileSize(uploadedFile.file_size)}
                         </p>
                       </div>
                     </div>
@@ -424,7 +1088,7 @@ const MeetingSummarization = () => {
                     {analysisResult.key_points.map((point, index) => (
                       <li key={index} className="flex items-start space-x-3">
                         <div className="w-2 h-2 bg-purple-400 rounded-full mt-2 flex-shrink-0"></div>
-                        <span className="text-gray-300">{point.point}</span>
+                        <span className="text-gray-300">{typeof point === 'string' ? point : point.point}</span>
                       </li>
                     ))}
                   </ul>
@@ -441,19 +1105,21 @@ const MeetingSummarization = () => {
                         <div className="flex items-center space-x-3">
                           <Target className="w-5 h-5 text-purple-400" />
                           <div>
-                            <p className="font-medium" style={{ color: '#F8FAFC' }}>{item.task}</p>
+                            <p className="font-medium" style={{ color: '#F8FAFC' }}>{typeof item === 'string' ? item : item.task}</p>
                             {item.assignee && (
                               <p className="text-sm text-gray-400">Assigned to: {item.assignee}</p>
                             )}
                           </div>
                         </div>
-                        <span className={`px-2 py-1 rounded text-xs font-medium ${
-                          item.priority === 'high' ? 'bg-red-900 text-red-200' :
-                          item.priority === 'medium' ? 'bg-yellow-900 text-yellow-200' :
-                          'bg-green-900 text-green-200'
-                        }`}>
-                          {item.priority}
-                        </span>
+                        {item.priority && (
+                          <span className={`px-2 py-1 rounded text-xs font-medium ${
+                            item.priority === 'high' ? 'bg-red-900 text-red-200' :
+                            item.priority === 'medium' ? 'bg-yellow-900 text-yellow-200' :
+                            'bg-green-900 text-green-200'
+                          }`}>
+                            {item.priority}
+                          </span>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -509,7 +1175,7 @@ const MeetingSummarization = () => {
                           <div className="flex items-center space-x-4 text-sm text-gray-400 mb-3">
                             <div className="flex items-center space-x-1">
                               <Clock className="w-4 h-4" />
-                              <span>{new Date(summary.created_at).toLocaleDateString()}</span>
+                              <span>{new Date(summary.created_at || Date.now()).toLocaleDateString()}</span>
                             </div>
                             <div className="flex items-center space-x-1">
                               <FileAudio className="w-4 h-4" />
@@ -540,11 +1206,14 @@ const MeetingSummarization = () => {
                             Action Items ({summary.action_items.length})
                           </p>
                           <div className="flex flex-wrap gap-2">
-                            {summary.action_items.slice(0, 3).map((item, index) => (
-                              <span key={index} className="px-2 py-1 bg-gray-700 rounded text-xs text-gray-300">
-                                {item.task.substring(0, 50)}{item.task.length > 50 ? '...' : ''}
-                              </span>
-                            ))}
+                            {summary.action_items.slice(0, 3).map((item, index) => {
+                              const taskText = typeof item === 'string' ? item : item.task;
+                              return (
+                                <span key={index} className="px-2 py-1 bg-gray-700 rounded text-xs text-gray-300">
+                                  {taskText.substring(0, 50)}{taskText.length > 50 ? '...' : ''}
+                                </span>
+                              );
+                            })}
                             {summary.action_items.length > 3 && (
                               <span className="px-2 py-1 bg-gray-700 rounded text-xs text-gray-400">
                                 +{summary.action_items.length - 3} more
