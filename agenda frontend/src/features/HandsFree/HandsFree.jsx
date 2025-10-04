@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Mic, MicOff, Video, VideoOff, Pause, Play, Square, Settings, Activity, Eye, Brain, Heart, Upload } from 'lucide-react';
+import { Mic, MicOff, Video, VideoOff, Pause, Play, Square, Settings, Activity, Eye, Brain, Heart, Upload, RefreshCw, Database } from 'lucide-react';
 
 const HandsFreeInterviewSystem = () => {
+  const [apiMode, setApiMode] = useState('original'); // 'original' or 'handsfree'
   const [sessionId, setSessionId] = useState(null);
   const [sessionStatus, setSessionStatus] = useState('inactive');
   const [handsFreeActive, setHandsFreeActive] = useState(false);
@@ -15,12 +16,15 @@ const HandsFreeInterviewSystem = () => {
   const [confidenceScore, setConfidenceScore] = useState(0);
   const [keyInsights, setKeyInsights] = useState([]);
   const [facialAnalysis, setFacialAnalysis] = useState(null);
-  const [confidenceTips, setConfenceTips] = useState([]);
+  const [confidenceTips, setConfidenceTips] = useState([]);
   const [systemHealth, setSystemHealth] = useState(null);
   const [systemStatus, setSystemStatus] = useState(null);
   const [sessionInsights, setSessionInsights] = useState(null);
+  const [detailedSessionStatus, setDetailedSessionStatus] = useState(null);
   const [activeWebsockets, setActiveWebsockets] = useState(0);
   const [selectedMicId, setSelectedMicId] = useState('0');
+  const [showDataModal, setShowDataModal] = useState(false);
+  const [modalContent, setModalContent] = useState(null);
   const [settings, setSettings] = useState({
     auto_response_enabled: true,
     response_delay: 2.0,
@@ -39,13 +43,13 @@ const HandsFreeInterviewSystem = () => {
   const videoIntervalRef = useRef(null);
 
   const API_BASE = 'http://localhost:8000/api/v1';
+  const API_ROUTER = 'http://localhost:8000';
 
   // ==========================================================================
-  // SESSION MANAGEMENT FUNCTIONS
+  // ORIGINAL API ENDPOINTS
   // ==========================================================================
 
-  // Create new session
-  const createSession = async () => {
+  const createSessionOriginal = async () => {
     try {
       const params = new URLSearchParams({
         user_id: 'user123',
@@ -63,25 +67,21 @@ const HandsFreeInterviewSystem = () => {
       if (response.ok) {
         const data = await response.json();
         setSessionId(data.session_id);
-        console.log('Session created:', data);
+        console.log('✅ [ORIGINAL] POST /sessions/create:', data);
         return data.session_id;
       } else {
         const error = await response.json();
         throw new Error(error.detail || 'Failed to create session');
       }
     } catch (error) {
-      console.error('Failed to create session:', error);
+      console.error('❌ [ORIGINAL] Failed to create session:', error);
       alert('Failed to create session: ' + error.message);
     }
   };
 
-  // Configure audio input
-  const configureAudio = async (sid) => {
+  const configureAudioOriginal = async (sid) => {
     try {
-      const params = new URLSearchParams({
-        mic_id: selectedMicId
-      });
-
+      const params = new URLSearchParams({ mic_id: selectedMicId });
       const response = await fetch(`${API_BASE}/sessions/${sid}/configure-audio?${params.toString()}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' }
@@ -90,18 +90,14 @@ const HandsFreeInterviewSystem = () => {
       if (response.ok) {
         const data = await response.json();
         setMicConfigured(data.success);
-        console.log('Audio configured:', data);
-      } else {
-        const error = await response.json();
-        throw new Error(error.detail || 'Failed to configure audio');
+        console.log('✅ [ORIGINAL] POST /configure-audio:', data);
       }
     } catch (error) {
-      console.error('Failed to configure audio:', error);
+      console.error('❌ [ORIGINAL] Failed to configure audio:', error);
     }
   };
 
-  // Initialize AI systems
-  const initializeAI = async (sid) => {
+  const initializeAIOriginal = async (sid) => {
     try {
       const response = await fetch(`${API_BASE}/sessions/${sid}/initialize-ai`, {
         method: 'POST',
@@ -111,30 +107,15 @@ const HandsFreeInterviewSystem = () => {
       if (response.ok) {
         const data = await response.json();
         setAiReady(data.success);
-        console.log('AI initialized:', data);
-      } else {
-        const error = await response.json();
-        throw new Error(error.detail || 'Failed to initialize AI');
+        console.log('✅ [ORIGINAL] POST /initialize-ai:', data);
       }
     } catch (error) {
-      console.error('Failed to initialize AI:', error);
+      console.error('❌ [ORIGINAL] Failed to initialize AI:', error);
     }
   };
 
-  // Start session - combines create, configure, and initialize
-  const startSession = async () => {
-    const sid = await createSession();
-    if (sid) {
-      await configureAudio(sid);
-      await initializeAI(sid);
-      setSessionStatus('active');
-    }
-  };
-
-  // Activate hands-free mode
-  const activateHandsFree = async () => {
+  const activateHandsFreeOriginal = async () => {
     if (!sessionId) return;
-
     try {
       const response = await fetch(`${API_BASE}/sessions/${sessionId}/activate`, {
         method: 'POST'
@@ -144,21 +125,19 @@ const HandsFreeInterviewSystem = () => {
         const data = await response.json();
         setHandsFreeActive(true);
         setSessionStatus('hands_free_active');
-        console.log('Hands-free activated:', data);
+        console.log('✅ [ORIGINAL] POST /activate:', data);
         
         await initializeWebSockets();
         await startVideoStream();
       }
     } catch (error) {
-      console.error('Failed to activate hands-free mode:', error);
-      alert('Failed to activate hands-free mode: ' + error.message);
+      console.error('❌ [ORIGINAL] Failed to activate:', error);
+      alert('Failed to activate: ' + error.message);
     }
   };
 
-  // Pause session
-  const pauseSession = async () => {
+  const pauseSessionOriginal = async () => {
     if (!sessionId) return;
-
     try {
       const response = await fetch(`${API_BASE}/sessions/${sessionId}/pause`, {
         method: 'POST'
@@ -167,22 +146,19 @@ const HandsFreeInterviewSystem = () => {
       if (response.ok) {
         const data = await response.json();
         setSessionStatus('paused');
-        console.log('Session paused:', data);
+        console.log('✅ [ORIGINAL] POST /pause:', data);
         
-        // Pause media recorder
         if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
           mediaRecorderRef.current.pause();
         }
       }
     } catch (error) {
-      console.error('Failed to pause session:', error);
+      console.error('❌ [ORIGINAL] Failed to pause:', error);
     }
   };
 
-  // Resume session
-  const resumeSession = async () => {
+  const resumeSessionOriginal = async () => {
     if (!sessionId) return;
-
     try {
       const response = await fetch(`${API_BASE}/sessions/${sessionId}/resume`, {
         method: 'POST'
@@ -191,22 +167,19 @@ const HandsFreeInterviewSystem = () => {
       if (response.ok) {
         const data = await response.json();
         setSessionStatus('hands_free_active');
-        console.log('Session resumed:', data);
+        console.log('✅ [ORIGINAL] POST /resume:', data);
         
-        // Resume media recorder
         if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'paused') {
           mediaRecorderRef.current.resume();
         }
       }
     } catch (error) {
-      console.error('Failed to resume session:', error);
+      console.error('❌ [ORIGINAL] Failed to resume:', error);
     }
   };
 
-  // Stop session
-  const stopSession = async () => {
+  const stopSessionOriginal = async () => {
     if (!sessionId) return;
-
     try {
       const response = await fetch(`${API_BASE}/sessions/${sessionId}/stop`, {
         method: 'POST'
@@ -215,25 +188,89 @@ const HandsFreeInterviewSystem = () => {
       if (response.ok) {
         const data = await response.json();
         setSessionInsights(data.summary);
-        console.log('Session stopped:', data);
+        console.log('✅ [ORIGINAL] POST /stop:', data);
       }
-
-      // Cleanup
       cleanupResources();
     } catch (error) {
-      console.error('Failed to stop session:', error);
+      console.error('❌ [ORIGINAL] Failed to stop:', error);
       cleanupResources();
     }
   };
 
-  // ==========================================================================
-  // FACIAL ANALYSIS FUNCTION
-  // ==========================================================================
+  const getSessionStatusOriginal = async () => {
+    if (!sessionId) return;
+    try {
+      const response = await fetch(`${API_BASE}/sessions/${sessionId}/status`);
+      if (response.ok) {
+        const data = await response.json();
+        setDetailedSessionStatus(data);
+        console.log('✅ [ORIGINAL] GET /status:', data);
+        if (data.status) setSessionStatus(data.status);
+      }
+    } catch (error) {
+      console.error('❌ [ORIGINAL] Failed to get status:', error);
+    }
+  };
 
-  // Analyze facial expression (manual upload)
-  const analyzeFacialExpression = async (file) => {
+  const getSessionInsightsOriginal = async () => {
+    if (!sessionId) return;
+    try {
+      const response = await fetch(`${API_BASE}/sessions/${sessionId}/insights`);
+      if (response.ok) {
+        const data = await response.json();
+        console.log('✅ [ORIGINAL] GET /insights:', data);
+        return data;
+      }
+    } catch (error) {
+      console.error('❌ [ORIGINAL] Failed to get insights:', error);
+    }
+  };
+
+  const updateSettingsOriginal = async () => {
+    if (!sessionId) return;
+    try {
+      const response = await fetch(`${API_BASE}/sessions/${sessionId}/settings`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(settings)
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log('✅ [ORIGINAL] PUT /settings:', data);
+      }
+    } catch (error) {
+      console.error('❌ [ORIGINAL] Failed to update settings:', error);
+    }
+  };
+
+  const generateManualResponseOriginal = async () => {
+    if (!sessionId || !currentQuestion) return;
+    try {
+      const params = new URLSearchParams({
+        question: currentQuestion,
+        context: 'Manual generation request'
+      });
+
+      const response = await fetch(`${API_BASE}/sessions/${sessionId}/generate-response?${params.toString()}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setCurrentResponse(data.response_text || data.response);
+        setKeyInsights(data.key_insights || []);
+        setConfidenceScore(data.confidence_score || 0);
+        console.log('✅ [ORIGINAL] POST /generate-response:', data);
+      }
+    } catch (error) {
+      console.error('❌ [ORIGINAL] Failed to generate response:', error);
+    }
+  };
+
+  const analyzeFacialExpressionOriginal = async (file) => {
     if (!sessionId || !file) return;
-
     try {
       const formData = new FormData();
       formData.append('frame', file);
@@ -246,38 +283,446 @@ const HandsFreeInterviewSystem = () => {
       if (response.ok) {
         const data = await response.json();
         setFacialAnalysis(data.analysis);
-        setConfenceTips(data.confidence_tips?.tips || []);
-        console.log('Facial analysis result:', data);
+        setConfidenceTips(data.confidence_tips?.tips || []);
+        console.log('✅ [ORIGINAL] POST /analyze-facial:', data);
       }
     } catch (error) {
-      console.error('Failed to analyze facial expression:', error);
+      console.error('❌ [ORIGINAL] Failed to analyze facial:', error);
     }
   };
 
   // ==========================================================================
-  // WEBSOCKET CONNECTIONS
+  // HANDS-FREE API ENDPOINTS
   // ==========================================================================
 
-  // Initialize WebSocket connections
+  const createSessionHandsFree = async () => {
+    try {
+      const response = await fetch(`${API_BASE}/hands-free/session/start`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: 'user123',
+          default_mic_id: selectedMicId,
+          interview_type: 'general',
+          company_info: 'Tech Company',
+          job_role: 'Software Developer'
+        })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setSessionId(data.session_id);
+        setMicConfigured(data.mic_configured);
+        setAiReady(data.ai_ready);
+        setSessionStatus(data.status);
+        console.log('✅ [HANDS-FREE] POST /session/start:', data);
+        return data.session_id;
+      }
+    } catch (error) {
+      console.error('❌ [HANDS-FREE] Failed to create session:', error);
+      alert('Failed to create session: ' + error.message);
+    }
+  };
+
+  const activateHandsFreeMode = async () => {
+    if (!sessionId) return;
+    try {
+      const response = await fetch(`${API_BASE}/hands-free/session/${sessionId}/activate`, {
+        method: 'POST'
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setHandsFreeActive(true);
+        setSessionStatus(data.status);
+        console.log('✅ [HANDS-FREE] POST /activate:', data);
+        
+        await initializeWebSockets();
+        await startVideoStream();
+      }
+    } catch (error) {
+      console.error('❌ [HANDS-FREE] Failed to activate:', error);
+      alert('Failed to activate: ' + error.message);
+    }
+  };
+
+  const getHandsFreeStatus = async () => {
+    if (!sessionId) return;
+    try {
+      const response = await fetch(`${API_BASE}/hands-free/session/${sessionId}/status`);
+      if (response.ok) {
+        const data = await response.json();
+        console.log('✅ [HANDS-FREE] GET /status:', data);
+        setDetailedSessionStatus(data);
+        if (data.status) setSessionStatus(data.status);
+      }
+    } catch (error) {
+      console.error('❌ [HANDS-FREE] Failed to get status:', error);
+    }
+  };
+
+  const generateHandsFreeManualResponse = async () => {
+    if (!sessionId || !currentQuestion) return;
+    try {
+      const response = await fetch(`${API_BASE}/hands-free/session/${sessionId}/manual-response`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          question: currentQuestion,
+          context: 'Manual generation request',
+          response_type: 'detailed'
+        })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setCurrentResponse(data.response_text || data.response);
+        setKeyInsights(data.key_insights || []);
+        setConfidenceScore(data.confidence_score || 0);
+        console.log('✅ [HANDS-FREE] POST /manual-response:', data);
+      }
+    } catch (error) {
+      console.error('❌ [HANDS-FREE] Failed to generate response:', error);
+    }
+  };
+
+  const updateHandsFreeSettings = async () => {
+    if (!sessionId) return;
+    try {
+      const response = await fetch(`${API_BASE}/hands-free/session/${sessionId}/settings`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(settings)
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log('✅ [HANDS-FREE] PUT /settings:', data);
+      }
+    } catch (error) {
+      console.error('❌ [HANDS-FREE] Failed to update settings:', error);
+    }
+  };
+
+  const getHandsFreeInsights = async () => {
+    if (!sessionId) return;
+    try {
+      const response = await fetch(`${API_BASE}/hands-free/session/${sessionId}/insights`);
+      if (response.ok) {
+        const data = await response.json();
+        console.log('✅ [HANDS-FREE] GET /insights:', data);
+        return data;
+      }
+    } catch (error) {
+      console.error('❌ [HANDS-FREE] Failed to get insights:', error);
+    }
+  };
+
+  const getHandsFreeHealth = async () => {
+    try {
+      const response = await fetch(`${API_BASE}/hands-free/system/health`);
+      if (response.ok) {
+        const data = await response.json();
+        console.log('✅ [HANDS-FREE] GET /system/health:', data);
+        setSystemHealth(data);
+      }
+    } catch (error) {
+      console.error('❌ [HANDS-FREE] Failed to get health:', error);
+    }
+  };
+
+  const stopHandsFreeSession = async () => {
+    if (!sessionId) return;
+    try {
+      const response = await fetch(`${API_BASE}/hands-free/session/${sessionId}/stop`, {
+        method: 'POST'
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setSessionInsights(data.session_summary);
+        console.log('✅ [HANDS-FREE] POST /stop:', data);
+      }
+      cleanupResources();
+    } catch (error) {
+      console.error('❌ [HANDS-FREE] Failed to stop:', error);
+      cleanupResources();
+    }
+  };
+
+  // ==========================================================================
+  // ROUTER/CRUD ENDPOINTS (Independent of API mode)
+  // ==========================================================================
+
+  const saveInterviewResponse = async (responseData) => {
+    try {
+      const response = await fetch(`${API_ROUTER}/interview-response/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(responseData)
+      });
+      if (response.ok) {
+        const data = await response.json();
+        console.log('✅ POST /interview-response/:', data);
+        return data;
+      }
+    } catch (error) {
+      console.error('❌ Failed to save interview response:', error);
+    }
+  };
+
+  const getAllInterviewResponses = async () => {
+    try {
+      const response = await fetch(`${API_ROUTER}/interview-response/`);
+      if (response.ok) {
+        const data = await response.json();
+        console.log('✅ GET /interview-response/:', data);
+        return data;
+      }
+    } catch (error) {
+      console.error('❌ Failed to get interview responses:', error);
+      return [];
+    }
+  };
+
+  const getAllFacialAnalyses = async () => {
+    try {
+      const response = await fetch(`${API_ROUTER}/facial-analysis/`);
+      if (response.ok) {
+        const data = await response.json();
+        console.log('✅ GET /facial-analysis/:', data);
+        return data;
+      }
+    } catch (error) {
+      console.error('❌ Failed to get facial analyses:', error);
+      return [];
+    }
+  };
+
+  const getAllConfidenceTips = async () => {
+    try {
+      const response = await fetch(`${API_ROUTER}/confidence-tip/`);
+      if (response.ok) {
+        const data = await response.json();
+        console.log('✅ GET /confidence-tip/:', data);
+        return data;
+      }
+    } catch (error) {
+      console.error('❌ Failed to get confidence tips:', error);
+      return [];
+    }
+  };
+
+  const getAllAudioStreamResults = async () => {
+    try {
+      const response = await fetch(`${API_ROUTER}/audio-stream-result/`);
+      if (response.ok) {
+        const data = await response.json();
+        console.log('✅ GET /audio-stream-result/:', data);
+        return data;
+      }
+    } catch (error) {
+      console.error('❌ Failed to get audio stream results:', error);
+      return [];
+    }
+  };
+
+  const getAllAudioStreamData = async () => {
+    try {
+      const response = await fetch(`${API_ROUTER}/audio-stream-data/`);
+      if (response.ok) {
+        const data = await response.json();
+        console.log('✅ GET /audio-stream-data/:', data);
+        return data;
+      }
+    } catch (error) {
+      console.error('❌ Failed to get audio stream data:', error);
+      return [];
+    }
+  };
+
+  const getAllSessionSummaries = async () => {
+    try {
+      const response = await fetch(`${API_ROUTER}/session-summary/`);
+      if (response.ok) {
+        const data = await response.json();
+        console.log('✅ GET /session-summary/:', data);
+        return data;
+      }
+    } catch (error) {
+      console.error('❌ Failed to get session summaries:', error);
+      return [];
+    }
+  };
+
+  const getAllWebSocketMessages = async () => {
+    try {
+      const response = await fetch(`${API_ROUTER}/websocket-message/`);
+      if (response.ok) {
+        const data = await response.json();
+        console.log('✅ GET /websocket-message/:', data);
+        return data;
+      }
+    } catch (error) {
+      console.error('❌ Failed to get websocket messages:', error);
+      return [];
+    }
+  };
+
+  const getAllAutomatedResponses = async () => {
+    try {
+      const response = await fetch(`${API_ROUTER}/automated-response/`);
+      if (response.ok) {
+        const data = await response.json();
+        console.log('✅ GET /automated-response/:', data);
+        return data;
+      }
+    } catch (error) {
+      console.error('❌ Failed to get automated responses:', error);
+      return [];
+    }
+  };
+
+  const getAllFacialAnalysisMessages = async () => {
+    try {
+      const response = await fetch(`${API_ROUTER}/facial-analysis-message/`);
+      if (response.ok) {
+        const data = await response.json();
+        console.log('✅ GET /facial-analysis-message/:', data);
+        return data;
+      }
+    } catch (error) {
+      console.error('❌ Failed to get facial analysis messages:', error);
+      return [];
+    }
+  };
+
+  const getAllSystemStatuses = async () => {
+    try {
+      const response = await fetch(`${API_ROUTER}/system-status/`);
+      if (response.ok) {
+        const data = await response.json();
+        console.log('✅ GET /system-status/:', data);
+        return data;
+      }
+    } catch (error) {
+      console.error('❌ Failed to get system statuses:', error);
+      return [];
+    }
+  };
+
+  // ==========================================================================
+  // MODE-AWARE WRAPPER FUNCTIONS
+  // ==========================================================================
+
+  const startSession = async () => {
+    if (apiMode === 'original') {
+      const sid = await createSessionOriginal();
+      if (sid) {
+        await configureAudioOriginal(sid);
+        await initializeAIOriginal(sid);
+        setSessionStatus('active');
+      }
+    } else {
+      await createSessionHandsFree();
+    }
+  };
+
+  const activateHandsFree = async () => {
+    if (apiMode === 'original') {
+      await activateHandsFreeOriginal();
+    } else {
+      await activateHandsFreeMode();
+    }
+  };
+
+  const pauseSession = async () => {
+    if (apiMode === 'original') {
+      await pauseSessionOriginal();
+    } else {
+      // Hands-free API doesn't have pause endpoint, use original
+      await pauseSessionOriginal();
+    }
+  };
+
+  const resumeSession = async () => {
+    if (apiMode === 'original') {
+      await resumeSessionOriginal();
+    } else {
+      // Hands-free API doesn't have resume endpoint, use original
+      await resumeSessionOriginal();
+    }
+  };
+
+  const stopSession = async () => {
+    if (apiMode === 'original') {
+      await stopSessionOriginal();
+    } else {
+      await stopHandsFreeSession();
+    }
+  };
+
+  const getSessionStatus = async () => {
+    if (apiMode === 'original') {
+      await getSessionStatusOriginal();
+    } else {
+      await getHandsFreeStatus();
+    }
+  };
+
+  const getSessionInsights = async () => {
+    if (apiMode === 'original') {
+      return await getSessionInsightsOriginal();
+    } else {
+      return await getHandsFreeInsights();
+    }
+  };
+
+  const updateSettings = async () => {
+    if (apiMode === 'original') {
+      await updateSettingsOriginal();
+    } else {
+      await updateHandsFreeSettings();
+    }
+  };
+
+  const generateManualResponse = async () => {
+    if (apiMode === 'original') {
+      await generateManualResponseOriginal();
+    } else {
+      await generateHandsFreeManualResponse();
+    }
+  };
+
+  const analyzeFacialExpression = async (file) => {
+    if (apiMode === 'original') {
+      await analyzeFacialExpressionOriginal(file);
+    } else {
+      // Use original endpoint as hands-free doesn't have this
+      await analyzeFacialExpressionOriginal(file);
+    }
+  };
+
+  // ==========================================================================
+  // WEBSOCKETS & MEDIA
+  // ==========================================================================
+
   const initializeWebSockets = async () => {
-    // Audio WebSocket - /ws/sessions/{session_id}/audio-stream
     const audioWsUrl = `ws://localhost:8000/ws/sessions/${sessionId}/audio-stream`;
     audioWsRef.current = new WebSocket(audioWsUrl);
     
     audioWsRef.current.onopen = () => {
-      console.log('Audio WebSocket connected');
+      console.log('✅ Audio WebSocket connected');
       setActiveWebsockets(prev => prev + 1);
     };
 
     audioWsRef.current.onmessage = (event) => {
       const data = JSON.parse(event.data);
-      console.log('Audio WebSocket message:', data);
       
       if (data.type === 'audio_stream_result') {
         setIsListening(data.data.listening || false);
         setAudioLevel(data.data.audio_level || 0);
         
-        // Check if question detected
         if (data.data.question_detected) {
           setCurrentQuestion(data.data.detected_question);
           setIsProcessing(true);
@@ -285,13 +730,11 @@ const HandsFreeInterviewSystem = () => {
       } else if (data.type === 'question_detected') {
         setCurrentQuestion(data.question);
         setIsProcessing(true);
-        console.log('Question detected:', data.question);
       } else if (data.type === 'automated_response') {
         setCurrentResponse(data.response.response_text || data.response.response);
         setKeyInsights(data.response.key_insights || []);
         setConfidenceScore(data.response.confidence_score || 0);
         setIsProcessing(false);
-        console.log('Response generated:', data.response);
       } else if (data.type === 'error') {
         console.error('Audio WebSocket error:', data.error);
         setIsProcessing(false);
@@ -299,7 +742,7 @@ const HandsFreeInterviewSystem = () => {
     };
 
     audioWsRef.current.onerror = (error) => {
-      console.error('Audio WebSocket error:', error);
+      console.error('❌ Audio WebSocket error:', error);
     };
 
     audioWsRef.current.onclose = () => {
@@ -307,30 +750,27 @@ const HandsFreeInterviewSystem = () => {
       setActiveWebsockets(prev => Math.max(0, prev - 1));
     };
 
-    // Video WebSocket - /ws/sessions/{session_id}/video-stream
     const videoWsUrl = `ws://localhost:8000/ws/sessions/${sessionId}/video-stream`;
     videoWsRef.current = new WebSocket(videoWsUrl);
     
     videoWsRef.current.onopen = () => {
-      console.log('Video WebSocket connected');
+      console.log('✅ Video WebSocket connected');
       setActiveWebsockets(prev => prev + 1);
     };
 
     videoWsRef.current.onmessage = (event) => {
       const data = JSON.parse(event.data);
-      console.log('Video WebSocket message:', data);
       
       if (data.type === 'facial_analysis_result') {
         setFacialAnalysis(data.analysis);
-        setConfenceTips(data.confidence_tips?.tips || []);
-        console.log('Facial analysis received:', data.analysis);
+        setConfidenceTips(data.confidence_tips?.tips || []);
       } else if (data.type === 'error') {
         console.error('Video WebSocket error:', data.error);
       }
     };
 
     videoWsRef.current.onerror = (error) => {
-      console.error('Video WebSocket error:', error);
+      console.error('❌ Video WebSocket error:', error);
     };
 
     videoWsRef.current.onclose = () => {
@@ -338,11 +778,9 @@ const HandsFreeInterviewSystem = () => {
       setActiveWebsockets(prev => Math.max(0, prev - 1));
     };
 
-    // Start audio capture
     await startAudioCapture();
   };
 
-  // Start audio capture
   const startAudioCapture = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ 
@@ -363,7 +801,7 @@ const HandsFreeInterviewSystem = () => {
         }
       };
 
-      mediaRecorder.start(100); // Send data every 100ms
+      mediaRecorder.start(100);
       mediaRecorderRef.current = mediaRecorder;
       console.log('Audio capture started');
     } catch (error) {
@@ -372,7 +810,6 @@ const HandsFreeInterviewSystem = () => {
     }
   };
 
-  // Start video stream
   const startVideoStream = async () => {
     if (!settings.facial_analysis_enabled) return;
 
@@ -391,9 +828,6 @@ const HandsFreeInterviewSystem = () => {
         videoRef.current.srcObject = stream;
       }
 
-      console.log('Video stream started');
-
-      // Send video frames for analysis
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d');
       
@@ -414,33 +848,25 @@ const HandsFreeInterviewSystem = () => {
         }
       };
 
-      // Send frame every 1 second for analysis
       videoIntervalRef.current = setInterval(sendFrame, 1000);
     } catch (error) {
       console.error('Failed to access camera:', error);
-      alert('Failed to access camera. Facial analysis will be disabled.');
     }
   };
 
-  // ==========================================================================
-  // SYSTEM STATUS FUNCTIONS
-  // ==========================================================================
-
-  // Get system status
-  const getSystemStatus = async () => {
+  const getSystemStatusData = async () => {
     try {
       const response = await fetch(`${API_BASE}/status`);
       if (response.ok) {
         const data = await response.json();
         setSystemStatus(data);
-        console.log('System status:', data);
+        console.log('✅ GET /status:', data);
       }
     } catch (error) {
-      console.error('Failed to get system status:', error);
+      console.error('❌ Failed to get system status:', error);
     }
   };
 
-  // Check system health (using status endpoint)
   const checkSystemHealth = async () => {
     try {
       const response = await fetch(`${API_BASE}/status`);
@@ -453,7 +879,7 @@ const HandsFreeInterviewSystem = () => {
         });
       }
     } catch (error) {
-      console.error('Health check failed:', error);
+      console.error('❌ Health check failed:', error);
       setSystemHealth({
         overall_status: 'degraded',
         active_sessions: 0,
@@ -462,11 +888,6 @@ const HandsFreeInterviewSystem = () => {
     }
   };
 
-  // ==========================================================================
-  // UTILITY FUNCTIONS
-  // ==========================================================================
-
-  // Cleanup resources
   const cleanupResources = () => {
     if (audioWsRef.current) {
       audioWsRef.current.close();
@@ -499,13 +920,12 @@ const HandsFreeInterviewSystem = () => {
     setCurrentResponse('');
     setKeyInsights([]);
     setFacialAnalysis(null);
-    setConfenceTips([]);
+    setConfidenceTips([]);
     setIsListening(false);
     setIsProcessing(false);
     setAudioLevel(0);
   };
 
-  // Handle file upload for manual facial analysis
   const handleFileUpload = (event) => {
     const file = event.target.files[0];
     if (file) {
@@ -513,33 +933,32 @@ const HandsFreeInterviewSystem = () => {
     }
   };
 
-  // ==========================================================================
-  // EFFECTS
-  // ==========================================================================
-
-  // Initial system check
   useEffect(() => {
     checkSystemHealth();
-    getSystemStatus();
+    getSystemStatusData();
     
     const interval = setInterval(() => {
       checkSystemHealth();
-      getSystemStatus();
-    }, 30000); // Check every 30 seconds
+      getSystemStatusData();
+      if (sessionId) {
+        getSessionStatus();
+      }
+    }, 30000);
     
     return () => clearInterval(interval);
-  }, []);
+  }, [sessionId]);
 
-  // Cleanup on unmount
   useEffect(() => {
     return () => {
       cleanupResources();
     };
   }, []);
 
-  // ==========================================================================
-  // UI HELPER FUNCTIONS
-  // ==========================================================================
+  useEffect(() => {
+    if (sessionId && handsFreeActive) {
+      updateSettings();
+    }
+  }, [settings.auto_response_enabled, settings.facial_analysis_enabled]);
 
   const getStatusColor = (status) => {
     switch (status) {
@@ -557,17 +976,35 @@ const HandsFreeInterviewSystem = () => {
     return 'text-red-400';
   };
 
-  // ==========================================================================
-  // RENDER
-  // ==========================================================================
-
   return (
     <div className="min-h-screen bg-gray-900 text-gray-100">
       <div className="container mx-auto px-6 py-8">
-        {/* Header */}
         <div className="flex justify-between items-center mb-8">
           <h1 className="text-3xl font-bold text-white">Hands-Free Interview System</h1>
           <div className="flex items-center space-x-4">
+            <div className="flex items-center space-x-2 bg-gray-800 rounded-lg px-4 py-2 border border-gray-700">
+              <span className="text-sm text-gray-400">API Mode:</span>
+              <button
+                onClick={() => setApiMode('original')}
+                className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
+                  apiMode === 'original' 
+                    ? 'bg-purple-600 text-white' 
+                    : 'bg-gray-700 text-gray-400 hover:bg-gray-600'
+                }`}
+              >
+                Original
+              </button>
+              <button
+                onClick={() => setApiMode('handsfree')}
+                className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
+                  apiMode === 'handsfree' 
+                    ? 'bg-purple-600 text-white' 
+                    : 'bg-gray-700 text-gray-400 hover:bg-gray-600'
+                }`}
+              >
+                Hands-Free
+              </button>
+            </div>
             <div className={`flex items-center space-x-2 ${getStatusColor(sessionStatus)}`}>
               <Activity className="w-5 h-5" />
               <span className="font-medium">{sessionStatus.replace('_', ' ').toUpperCase()}</span>
@@ -586,13 +1023,22 @@ const HandsFreeInterviewSystem = () => {
                 <span>{systemStatus.active_sessions || 0} sessions</span>
               </div>
             )}
+            <button
+              onClick={() => {
+                checkSystemHealth();
+                getSystemStatusData();
+                if (sessionId) getSessionStatus();
+              }}
+              className="text-purple-400 hover:text-purple-300"
+              title="Refresh status"
+            >
+              <RefreshCw className="w-5 h-5" />
+            </button>
           </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Control Panel */}
           <div className="lg:col-span-1 space-y-6">
-            {/* Session Controls */}
             <div className="bg-gray-800 rounded-2xl p-6 border border-gray-700">
               <h2 className="text-xl font-semibold mb-4 text-white">Session Control</h2>
               <div className="space-y-4">
@@ -613,7 +1059,7 @@ const HandsFreeInterviewSystem = () => {
                       className="w-full bg-purple-600 hover:bg-purple-700 text-white py-3 px-6 rounded-xl font-medium transition-colors duration-200 flex items-center justify-center space-x-2"
                     >
                       <Play className="w-5 h-5" />
-                      <span>Start Session</span>
+                      <span>Start Session ({apiMode === 'original' ? 'Original API' : 'Hands-Free API'})</span>
                     </button>
                   </>
                 ) : !handsFreeActive ? (
@@ -655,10 +1101,15 @@ const HandsFreeInterviewSystem = () => {
               </div>
             </div>
 
-            {/* System Status */}
             <div className="bg-gray-800 rounded-2xl p-6 border border-gray-700">
               <h2 className="text-xl font-semibold mb-4 text-white">System Status</h2>
               <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-400">API Mode</span>
+                  <span className={`text-sm font-medium ${apiMode === 'original' ? 'text-blue-400' : 'text-purple-400'}`}>
+                    {apiMode === 'original' ? 'ORIGINAL' : 'HANDS-FREE'}
+                  </span>
+                </div>
                 <div className="flex items-center justify-between">
                   <span className="text-gray-400">Session ID</span>
                   <span className="text-sm text-gray-300 font-mono">
@@ -707,7 +1158,6 @@ const HandsFreeInterviewSystem = () => {
               </div>
             </div>
 
-            {/* Audio Level */}
             {handsFreeActive && (
               <div className="bg-gray-800 rounded-2xl p-6 border border-gray-700">
                 <h2 className="text-xl font-semibold mb-4 text-white">Audio Level</h2>
@@ -721,7 +1171,6 @@ const HandsFreeInterviewSystem = () => {
               </div>
             )}
 
-            {/* Settings Toggle */}
             <div className="bg-gray-800 rounded-2xl p-6 border border-gray-700">
               <h2 className="text-xl font-semibold mb-4 text-white">Settings</h2>
               <div className="space-y-3">
@@ -743,13 +1192,95 @@ const HandsFreeInterviewSystem = () => {
                     className="w-5 h-5 text-purple-600 rounded focus:ring-purple-500"
                   />
                 </label>
+                <label className="flex items-center justify-between cursor-pointer">
+                  <span className="text-gray-400">Confidence Coaching</span>
+                  <input
+                    type="checkbox"
+                    checked={settings.confidence_coaching_enabled}
+                    onChange={(e) => setSettings({...settings, confidence_coaching_enabled: e.target.checked})}
+                    className="w-5 h-5 text-purple-600 rounded focus:ring-purple-500"
+                  />
+                </label>
+              </div>
+            </div>
+
+            <div className="bg-gray-800 rounded-2xl p-6 border border-gray-700">
+              <div className="flex items-center space-x-2 mb-4">
+                <Database className="w-5 h-5 text-purple-400" />
+                <h2 className="text-xl font-semibold text-white">Data Viewer</h2>
+              </div>
+              <div className="space-y-2">
+                <button
+                  onClick={async () => {
+                    const data = await getAllInterviewResponses();
+                    setModalContent({ title: 'Interview Responses', data });
+                    setShowDataModal(true);
+                  }}
+                  className="w-full bg-gray-700 hover:bg-gray-600 text-white py-2 px-4 rounded-lg text-sm"
+                >
+                  Interview Responses
+                </button>
+                <button
+                  onClick={async () => {
+                    const data = await getAllFacialAnalyses();
+                    setModalContent({ title: 'Facial Analyses', data });
+                    setShowDataModal(true);
+                  }}
+                  className="w-full bg-gray-700 hover:bg-gray-600 text-white py-2 px-4 rounded-lg text-sm"
+                >
+                  Facial Analyses
+                </button>
+                <button
+                  onClick={async () => {
+                    const data = await getAllAudioStreamResults();
+                    setModalContent({ title: 'Audio Stream Results', data });
+                    setShowDataModal(true);
+                  }}
+                  className="w-full bg-gray-700 hover:bg-gray-600 text-white py-2 px-4 rounded-lg text-sm"
+                >
+                  Audio Results
+                </button>
+                <button
+                  onClick={async () => {
+                    const data = await getAllSessionSummaries();
+                    setModalContent({ title: 'Session Summaries', data });
+                    setShowDataModal(true);
+                  }}
+                  className="w-full bg-gray-700 hover:bg-gray-600 text-white py-2 px-4 rounded-lg text-sm"
+                >
+                  Session Summaries
+                </button>
+                <button
+                  onClick={async () => {
+                    const data = await getAllWebSocketMessages();
+                    setModalContent({ title: 'WebSocket Messages', data });
+                    setShowDataModal(true);
+                  }}
+                  className="w-full bg-gray-700 hover:bg-gray-600 text-white py-2 px-4 rounded-lg text-sm"
+                >
+                  WS Messages
+                </button>
+                <button
+                  onClick={async () => {
+                    const data = await getAllAutomatedResponses();
+                    setModalContent({ title: 'Automated Responses', data });
+                    setShowDataModal(true);
+                  }}
+                  className="w-full bg-gray-700 hover:bg-gray-600 text-white py-2 px-4 rounded-lg text-sm"
+                >
+                  Auto Responses
+                </button>
+                <button
+                  onClick={apiMode === 'handsfree' ? getHandsFreeHealth : checkSystemHealth}
+                  className="w-full bg-purple-700 hover:bg-purple-600 text-white py-2 px-4 rounded-lg text-sm font-medium"
+                >
+                  Check System Health
+                </button>
               </div>
             </div>
           </div>
 
-          {/* Main Content */}
           <div className="lg:col-span-2 space-y-6">
-            {/* Video Feed */}
             {handsFreeActive && settings.facial_analysis_enabled && (
               <div className="bg-gray-800 rounded-2xl p-6 border border-gray-700">
                 <div className="flex items-center justify-between mb-4">
@@ -797,7 +1328,6 @@ const HandsFreeInterviewSystem = () => {
               </div>
             )}
 
-            {/* Current Interview */}
             {handsFreeActive && (
               <div className="bg-gray-800 rounded-2xl p-6 border border-gray-700">
                 <h2 className="text-xl font-semibold mb-4 text-white">Current Interview</h2>
@@ -841,6 +1371,16 @@ const HandsFreeInterviewSystem = () => {
                         </ul>
                       </div>
                     )}
+
+                    {currentQuestion && (
+                      <button
+                        onClick={generateManualResponse}
+                        className="mt-4 bg-purple-600 hover:bg-purple-700 text-white py-2 px-4 rounded-lg text-sm flex items-center space-x-2"
+                      >
+                        <RefreshCw className="w-4 h-4" />
+                        <span>Regenerate ({apiMode === 'original' ? 'Original' : 'Hands-Free'})</span>
+                      </button>
+                    )}
                   </div>
                 )}
 
@@ -854,7 +1394,6 @@ const HandsFreeInterviewSystem = () => {
               </div>
             )}
 
-            {/* Confidence Tips */}
             {confidenceTips.length > 0 && (
               <div className="bg-gray-800 rounded-2xl p-6 border border-gray-700">
                 <h2 className="text-xl font-semibold mb-4 text-white">Confidence Tips</h2>
@@ -895,10 +1434,21 @@ const HandsFreeInterviewSystem = () => {
               </div>
             )}
 
-            {/* Session Info */}
             {sessionId && !sessionInsights && (
               <div className="bg-gray-800 rounded-2xl p-6 border border-gray-700">
-                <h2 className="text-xl font-semibold mb-4 text-white">Session Information</h2>
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-xl font-semibold text-white">Session Information</h2>
+                  <button
+                    onClick={async () => {
+                      await getSessionStatus();
+                      await getSessionInsights();
+                    }}
+                    className="text-purple-400 hover:text-purple-300 text-sm flex items-center space-x-1"
+                  >
+                    <RefreshCw className="w-4 h-4" />
+                    <span>Refresh</span>
+                  </button>
+                </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="bg-gray-700 rounded-lg p-4">
                     <div className="text-sm text-gray-400">Session ID</div>
@@ -929,12 +1479,44 @@ const HandsFreeInterviewSystem = () => {
                     </>
                   )}
                 </div>
+                {detailedSessionStatus && (
+                  <div className="mt-4 bg-gray-700 rounded-lg p-4">
+                    <div className="text-sm text-gray-400 mb-2">Detailed Status</div>
+                    <pre className="text-xs text-gray-300 overflow-auto max-h-40">
+                      {JSON.stringify(detailedSessionStatus, null, 2)}
+                    </pre>
+                  </div>
+                )}
               </div>
             )}
           </div>
         </div>
 
-        {/* Session Insights Modal */}
+        {showDataModal && modalContent && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <div className="bg-gray-800 rounded-2xl p-6 max-w-4xl w-full max-h-96 overflow-y-auto border border-gray-700">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-2xl font-bold text-white">{modalContent.title}</h2>
+                <button
+                  onClick={() => setShowDataModal(false)}
+                  className="text-gray-400 hover:text-white text-2xl"
+                >
+                  ✕
+                </button>
+              </div>
+              <pre className="text-sm text-gray-300 bg-gray-900 rounded-lg p-4 overflow-auto">
+                {JSON.stringify(modalContent.data, null, 2)}
+              </pre>
+              <button
+                onClick={() => setShowDataModal(false)}
+                className="mt-4 w-full bg-purple-600 hover:bg-purple-700 text-white py-2 px-4 rounded-xl font-medium"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        )}
+
         {sessionInsights && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
             <div className="bg-gray-800 rounded-2xl p-6 max-w-2xl w-full max-h-96 overflow-y-auto border border-gray-700">
