@@ -1,7 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Upload, Play, Square, Settings, Users, BarChart3, Clock, AlertTriangle, CheckCircle, XCircle, Camera, Mic, FileText, Download, RefreshCw } from 'lucide-react';
+import { Upload, Play, Square, Settings, Users, BarChart3, Clock, AlertTriangle, CheckCircle, XCircle, Camera, Mic, FileText, Download, RefreshCw, Trash2, Plus } from 'lucide-react';
 
-// Main Dashboard Component
 const MeetingAnalysisDashboard = () => {
   const [activeTab, setActiveTab] = useState('analyze');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -9,135 +8,68 @@ const MeetingAnalysisDashboard = () => {
   const [healthStatus, setHealthStatus] = useState(null);
   const [meetingContext, setMeetingContext] = useState('');
   const [audioTranscript, setAudioTranscript] = useState('');
-  const [batchResults, setBatchResults] = useState([]);
-  const [configs, setConfigs] = useState({
-    ollama: [],
-    quickRespond: [],
-    modelPrompts: []
-  });
-  const [urgencyLevels, setUrgencyLevels] = useState([]);
-  const [paginatedData, setPaginatedData] = useState(null);
   const [streamingData, setStreamingData] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
+  const [sessionInsights, setSessionInsights] = useState([]);
+  const [simplifiedResult, setSimplifiedResult] = useState(null);
+  
+  // CRUD States
+  const [meetingStatuses, setMeetingStatuses] = useState([]);
+  const [participants, setParticipants] = useState([]);
+  const [screenContents, setScreenContents] = useState([]);
+  const [meetingMetrics, setMeetingMetrics] = useState([]);
+  const [urgencyLevels, setUrgencyLevels] = useState([]);
+  const [paginatedData, setPaginatedData] = useState(null);
   
   const fileInputRef = useRef(null);
-  const batchFileInputRef = useRef(null);
 
-  // Initialize component
+  const BASE_URL = 'http://localhost:8000';
+
   useEffect(() => {
     checkHealth();
+    fetchSessionInsights();
     fetchUrgencyLevels();
-    fetchConfigs();
+    fetchAllData();
   }, []);
 
-  // API Service Functions
-  const apiService = {
-    baseUrl: 'http://localhost:8000/api/quick-respond',
-    
-    async request(endpoint, options = {}) {
-      const url = `${this.baseUrl}${endpoint}`;
-      const config = {
-        headers: {
-          'Content-Type': 'application/json',
-          ...options.headers
-        },
-        ...options
-      };
-      
-      try {
-        const response = await fetch(url, config);
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        return await response.json();
-      } catch (error) {
-        console.error('API request failed:', error);
-        throw error;
-      }
-    },
+  // ============================================================================
+  // CORE API FUNCTIONS
+  // ============================================================================
 
-    async uploadFile(endpoint, file, additionalData = {}) {
-      const formData = new FormData();
-      formData.append('screenshot', file);
-      
-      Object.keys(additionalData).forEach(key => {
-        if (additionalData[key] !== null && additionalData[key] !== undefined) {
-          formData.append(key, additionalData[key]);
-        }
-      });
-
-      const response = await fetch(`${this.baseUrl}${endpoint}`, {
-        method: 'POST',
-        body: formData
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      
-      return await response.json();
-    },
-
-    async streamAnalysis(file, additionalData = {}) {
-      const formData = new FormData();
-      formData.append('screenshot', file);
-      
-      Object.keys(additionalData).forEach(key => {
-        if (additionalData[key] !== null && additionalData[key] !== undefined) {
-          formData.append(key, additionalData[key]);
-        }
-      });
-
-      const response = await fetch(`${this.baseUrl}/analyze-screenshot/stream`, {
-        method: 'POST',
-        body: formData
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      return response;
-    }
-  };
-
-  // Handler Functions
   const checkHealth = async () => {
     try {
-      const health = await apiService.request('/health');
-      setHealthStatus(health);
+      const response = await fetch(`${BASE_URL}/health`);
+      const data = await response.json();
+      setHealthStatus(data);
     } catch (error) {
       console.error('Health check failed:', error);
       setHealthStatus({ status: 'error', error: error.message });
     }
   };
 
+  const fetchSessionInsights = async () => {
+    try {
+      const response = await fetch(`${BASE_URL}/api/v1/session/insights`);
+      const data = await response.json();
+      setSessionInsights(data.insights || []);
+    } catch (error) {
+      console.error('Failed to fetch session insights:', error);
+    }
+  };
+
   const fetchUrgencyLevels = async () => {
     try {
-      const levels = await apiService.request('/urgency-levels');
-      setUrgencyLevels(levels);
+      const response = await fetch(`${BASE_URL}/api/urgency-levels`);
+      const data = await response.json();
+      setUrgencyLevels(data);
     } catch (error) {
       console.error('Failed to fetch urgency levels:', error);
     }
   };
 
-  const fetchConfigs = async () => {
-    try {
-      const [ollama, quickRespond, modelPrompts] = await Promise.all([
-        apiService.request('/ollama-config'),
-        apiService.request('/quick-respond-config'),
-        apiService.request('/model-prompts')
-      ]);
-      
-      setConfigs({
-        ollama,
-        quickRespond,
-        modelPrompts
-      });
-    } catch (error) {
-      console.error('Failed to fetch configs:', error);
-    }
-  };
+  // ============================================================================
+  // ANALYSIS ENDPOINTS
+  // ============================================================================
 
   const handleFileAnalysis = async (file) => {
     if (!file) return;
@@ -146,12 +78,30 @@ const MeetingAnalysisDashboard = () => {
     setAnalysisResult(null);
 
     try {
-      const result = await apiService.uploadFile('/analyze-screenshot', file, {
-        meeting_context: meetingContext,
-        audio_transcript: audioTranscript
-      });
+      const formData = new FormData();
+      formData.append('screenshot', file);
       
+      if (meetingContext) {
+        formData.append('meeting_context', meetingContext);
+      }
+      
+      if (audioTranscript) {
+        formData.append('audio_transcript', audioTranscript);
+      }
+
+      const response = await fetch(`${BASE_URL}/api/v1/quick-respond/analyze-screenshot`, {
+        method: 'POST',
+        body: formData
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const result = await response.json();
       setAnalysisResult(result);
+      
+      await fetchSessionInsights();
     } catch (error) {
       console.error('Analysis failed:', error);
       setAnalysisResult({ error: error.message });
@@ -167,10 +117,25 @@ const MeetingAnalysisDashboard = () => {
     setStreamingData('');
 
     try {
-      const response = await apiService.streamAnalysis(file, {
-        meeting_context: meetingContext,
-        audio_transcript: audioTranscript
+      const formData = new FormData();
+      formData.append('screenshot', file);
+      
+      if (meetingContext) {
+        formData.append('meeting_context', meetingContext);
+      }
+      
+      if (audioTranscript) {
+        formData.append('audio_transcript', audioTranscript);
+      }
+
+      const response = await fetch(`${BASE_URL}/api/v1/quick-respond/analyze-screenshot/stream`, {
+        method: 'POST',
+        body: formData
       });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
@@ -188,7 +153,7 @@ const MeetingAnalysisDashboard = () => {
               const data = JSON.parse(line.slice(6));
               setStreamingData(prev => prev + JSON.stringify(data, null, 2) + '\n');
             } catch (e) {
-              // Skip invalid JSON
+              console.error('Failed to parse streaming data:', e);
             }
           }
         }
@@ -201,25 +166,17 @@ const MeetingAnalysisDashboard = () => {
     }
   };
 
-  const handleBatchAnalysis = async (files) => {
-    if (!files || files.length === 0) return;
-
-    setIsAnalyzing(true);
-    setBatchResults([]);
-
+  const handleSimplify = async (analysisText) => {
     try {
-      const formData = new FormData();
-      Array.from(files).forEach(file => {
-        formData.append('screenshots', file);
-      });
-      
-      if (meetingContext) {
-        formData.append('meeting_context', meetingContext);
-      }
-
-      const response = await fetch(`${apiService.baseUrl}/batch-analyze`, {
+      const response = await fetch(`${BASE_URL}/api/v1/simplify`, {
         method: 'POST',
-        body: formData
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          original_analysis: analysisText,
+          simplification_level: 1
+        })
       });
 
       if (!response.ok) {
@@ -227,81 +184,312 @@ const MeetingAnalysisDashboard = () => {
       }
 
       const result = await response.json();
-      setBatchResults(result.batch_results || []);
-    } catch (error) {
-      console.error('Batch analysis failed:', error);
-      setBatchResults([{ error: error.message }]);
-    } finally {
-      setIsAnalyzing(false);
-    }
-  };
-
-  const handleSimplify = async (analysisText) => {
-    try {
-      const result = await apiService.request('/simplify', {
-        method: 'POST',
-        body: JSON.stringify({
-          original_analysis: analysisText,
-          simplification_level: 1
-        })
-      });
-      
-      return result;
+      setSimplifiedResult(result);
     } catch (error) {
       console.error('Simplification failed:', error);
-      return { error: error.message };
+      alert('Failed to simplify analysis: ' + error.message);
     }
   };
 
-  const updateMeetingContext = async (context) => {
+  // ============================================================================
+  // MEETING CONTEXT ENDPOINTS
+  // ============================================================================
+
+  const updateMeetingContext = async () => {
     try {
-      await apiService.request('/context/update', {
+      const contextData = {
+        meeting_title: "Current Meeting",
+        participants: [],
+        agenda: meetingContext,
+        meeting_type: "general",
+        expected_duration: 60
+      };
+
+      const response = await fetch(`${BASE_URL}/api/v1/meeting/context`, {
         method: 'POST',
-        body: JSON.stringify(context)
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(contextData)
       });
-      
-      alert('Meeting context updated successfully!');
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const result = await response.json();
+      alert(result.message || 'Meeting context updated successfully!');
     } catch (error) {
       console.error('Failed to update context:', error);
-      alert('Failed to update meeting context');
+      alert('Failed to update meeting context: ' + error.message);
+    }
+  };
+
+  const getMeetingContext = async () => {
+    try {
+      const response = await fetch(`${BASE_URL}/api/v1/meeting/context`);
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const result = await response.json();
+      console.log('Current meeting context:', result);
+      
+      if (result.meeting_context) {
+        setMeetingContext(result.meeting_context.agenda || '');
+      }
+      
+      if (result.session_insights) {
+        setSessionInsights(result.session_insights);
+      }
+    } catch (error) {
+      console.error('Failed to get context:', error);
+      alert('Failed to get meeting context: ' + error.message);
     }
   };
 
   const clearMeetingContext = async () => {
     try {
-      await apiService.request('/context/clear', {
+      const response = await fetch(`${BASE_URL}/api/v1/meeting/context`, {
         method: 'DELETE'
       });
-      
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const result = await response.json();
       setMeetingContext('');
       setAudioTranscript('');
-      alert('Meeting context cleared successfully!');
+      setSessionInsights([]);
+      alert(result.message || 'Meeting context cleared successfully!');
     } catch (error) {
       console.error('Failed to clear context:', error);
-      alert('Failed to clear meeting context');
+      alert('Failed to clear meeting context: ' + error.message);
     }
   };
 
+  // ============================================================================
+  // CRUD OPERATIONS - MEETING STATUS
+  // ============================================================================
+
+  const fetchMeetingStatuses = async () => {
+    try {
+      const response = await fetch(`${BASE_URL}/api/meeting_status/`);
+      const data = await response.json();
+      setMeetingStatuses(data);
+    } catch (error) {
+      console.error('Failed to fetch meeting statuses:', error);
+    }
+  };
+
+  const createMeetingStatus = async (statusData) => {
+    try {
+      const response = await fetch(`${BASE_URL}/api/meeting_status/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(statusData)
+      });
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      await fetchMeetingStatuses();
+      alert('Meeting status created successfully!');
+    } catch (error) {
+      console.error('Failed to create meeting status:', error);
+      alert('Failed to create meeting status');
+    }
+  };
+
+  const deleteMeetingStatus = async (id) => {
+    try {
+      const response = await fetch(`${BASE_URL}/api/meeting_status/${id}`, {
+        method: 'DELETE'
+      });
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      await fetchMeetingStatuses();
+      alert('Meeting status deleted successfully!');
+    } catch (error) {
+      console.error('Failed to delete meeting status:', error);
+      alert('Failed to delete meeting status');
+    }
+  };
+
+  // ============================================================================
+  // CRUD OPERATIONS - PARTICIPANTS
+  // ============================================================================
+
+  const fetchParticipants = async () => {
+    try {
+      const response = await fetch(`${BASE_URL}/api/participant_info/`);
+      const data = await response.json();
+      setParticipants(data);
+    } catch (error) {
+      console.error('Failed to fetch participants:', error);
+    }
+  };
+
+  const createParticipant = async (participantData) => {
+    try {
+      const response = await fetch(`${BASE_URL}/api/participant_info/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(participantData)
+      });
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      await fetchParticipants();
+      alert('Participant created successfully!');
+    } catch (error) {
+      console.error('Failed to create participant:', error);
+      alert('Failed to create participant');
+    }
+  };
+
+  const deleteParticipant = async (id) => {
+    try {
+      const response = await fetch(`${BASE_URL}/api/participant_info/${id}`, {
+        method: 'DELETE'
+      });
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      await fetchParticipants();
+      alert('Participant deleted successfully!');
+    } catch (error) {
+      console.error('Failed to delete participant:', error);
+      alert('Failed to delete participant');
+    }
+  };
+
+  // ============================================================================
+  // CRUD OPERATIONS - SCREEN CONTENT
+  // ============================================================================
+
+  const fetchScreenContents = async () => {
+    try {
+      const response = await fetch(`${BASE_URL}/api/screen_content/`);
+      const data = await response.json();
+      setScreenContents(data);
+    } catch (error) {
+      console.error('Failed to fetch screen contents:', error);
+    }
+  };
+
+  const createScreenContent = async (contentData) => {
+    try {
+      const response = await fetch(`${BASE_URL}/api/screen_content/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(contentData)
+      });
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      await fetchScreenContents();
+      alert('Screen content created successfully!');
+    } catch (error) {
+      console.error('Failed to create screen content:', error);
+      alert('Failed to create screen content');
+    }
+  };
+
+  const deleteScreenContent = async (id) => {
+    try {
+      const response = await fetch(`${BASE_URL}/api/screen_content/${id}`, {
+        method: 'DELETE'
+      });
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      await fetchScreenContents();
+      alert('Screen content deleted successfully!');
+    } catch (error) {
+      console.error('Failed to delete screen content:', error);
+      alert('Failed to delete screen content');
+    }
+  };
+
+  // ============================================================================
+  // CRUD OPERATIONS - MEETING METRICS
+  // ============================================================================
+
+  const fetchMeetingMetrics = async () => {
+    try {
+      const response = await fetch(`${BASE_URL}/api/meeting_metrics/`);
+      const data = await response.json();
+      setMeetingMetrics(data);
+    } catch (error) {
+      console.error('Failed to fetch meeting metrics:', error);
+    }
+  };
+
+  const createMeetingMetrics = async (metricsData) => {
+    try {
+      const response = await fetch(`${BASE_URL}/api/meeting_metrics/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(metricsData)
+      });
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      await fetchMeetingMetrics();
+      alert('Meeting metrics created successfully!');
+    } catch (error) {
+      console.error('Failed to create meeting metrics:', error);
+      alert('Failed to create meeting metrics');
+    }
+  };
+
+  const deleteMeetingMetrics = async (id) => {
+    try {
+      const response = await fetch(`${BASE_URL}/api/meeting_metrics/${id}`, {
+        method: 'DELETE'
+      });
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      await fetchMeetingMetrics();
+      alert('Meeting metrics deleted successfully!');
+    } catch (error) {
+      console.error('Failed to delete meeting metrics:', error);
+      alert('Failed to delete meeting metrics');
+    }
+  };
+
+  // ============================================================================
+  // PAGINATION
+  // ============================================================================
+
   const fetchPaginatedItems = async (page = 1, pageSize = 10) => {
     try {
-      const result = await apiService.request(`/items?page=${page}&page_size=${pageSize}`);
-      setPaginatedData(result);
+      const response = await fetch(`${BASE_URL}/api/items?page=${page}&page_size=${pageSize}`);
+      const data = await response.json();
+      setPaginatedData(data);
     } catch (error) {
       console.error('Failed to fetch paginated data:', error);
     }
   };
 
-  // Utility function to get urgency color
+  // ============================================================================
+  // FETCH ALL DATA
+  // ============================================================================
+
+  const fetchAllData = async () => {
+    await Promise.all([
+      fetchMeetingStatuses(),
+      fetchParticipants(),
+      fetchScreenContents(),
+      fetchMeetingMetrics()
+    ]);
+  };
+
+  // ============================================================================
+  // UTILITY FUNCTIONS
+  // ============================================================================
+
   const getUrgencyColor = (urgency) => {
-    switch (urgency) {
-      case 'HIGH': return 'text-red-500';
-      case 'MEDIUM': return 'text-yellow-500';
-      case 'LOW': return 'text-green-500';
-      default: return 'text-gray-500';
+    switch (urgency?.toUpperCase()) {
+      case 'HIGH': return 'bg-red-500 text-white';
+      case 'MEDIUM': return 'bg-yellow-500 text-black';
+      case 'LOW': return 'bg-green-500 text-white';
+      default: return 'bg-gray-500 text-white';
     }
   };
 
-  // Render Health Status
+  // ============================================================================
+  // RENDER FUNCTIONS
+  // ============================================================================
+
   const renderHealthStatus = () => (
     <div className="bg-gray-800 rounded-lg p-4 mb-6">
       <div className="flex items-center justify-between">
@@ -324,41 +512,25 @@ const MeetingAnalysisDashboard = () => {
               <CheckCircle className="w-5 h-5 text-green-500 mr-2" /> :
               <XCircle className="w-5 h-5 text-red-500 mr-2" />
             }
-            <span className="text-sm text-gray-300">Overall</span>
+            <span className="text-sm text-gray-300">Overall: {healthStatus.status}</span>
           </div>
           
-          <div className="flex items-center">
-            {healthStatus.ollama ? 
-              <CheckCircle className="w-5 h-5 text-green-500 mr-2" /> :
-              <XCircle className="w-5 h-5 text-red-500 mr-2" />
-            }
-            <span className="text-sm text-gray-300">Ollama</span>
-          </div>
-          
-          <div className="flex items-center">
-            {healthStatus.llava_model ? 
-              <CheckCircle className="w-5 h-5 text-green-500 mr-2" /> :
-              <XCircle className="w-5 h-5 text-red-500 mr-2" />
-            }
-            <span className="text-sm text-gray-300">LLAVA</span>
-          </div>
-          
-          <div className="flex items-center">
-            {healthStatus.llama_model ? 
-              <CheckCircle className="w-5 h-5 text-green-500 mr-2" /> :
-              <XCircle className="w-5 h-5 text-red-500 mr-2" />
-            }
-            <span className="text-sm text-gray-300">Llama</span>
-          </div>
+          {healthStatus.services && Object.entries(healthStatus.services).map(([service, status]) => (
+            <div key={service} className="flex items-center">
+              {status === 'available' ? 
+                <CheckCircle className="w-5 h-5 text-green-500 mr-2" /> :
+                <XCircle className="w-5 h-5 text-red-500 mr-2" />
+              }
+              <span className="text-sm text-gray-300">{service}</span>
+            </div>
+          ))}
         </div>
       )}
     </div>
   );
 
-  // Render Analysis Tab
   const renderAnalysisTab = () => (
     <div className="space-y-6">
-      {/* Context Inputs */}
       <div className="bg-gray-800 rounded-lg p-6">
         <h3 className="text-lg font-semibold text-gray-200 mb-4">Meeting Context</h3>
         
@@ -392,15 +564,17 @@ const MeetingAnalysisDashboard = () => {
         
         <div className="flex gap-2 mt-4">
           <button
-            onClick={() => updateMeetingContext({
-              meeting_title: "Current Meeting",
-              participants: [],
-              agenda: meetingContext,
-              meeting_type: "general"
-            })}
+            onClick={updateMeetingContext}
             className="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg text-white transition-colors"
           >
             Update Context
+          </button>
+          
+          <button
+            onClick={getMeetingContext}
+            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-white transition-colors"
+          >
+            Get Context
           </button>
           
           <button
@@ -412,7 +586,6 @@ const MeetingAnalysisDashboard = () => {
         </div>
       </div>
 
-      {/* Single Screenshot Analysis */}
       <div className="bg-gray-800 rounded-lg p-6">
         <h3 className="text-lg font-semibold text-gray-200 mb-4 flex items-center">
           <Camera className="w-5 h-5 mr-2" />
@@ -441,8 +614,9 @@ const MeetingAnalysisDashboard = () => {
             onClick={() => {
               const file = fileInputRef.current?.files[0];
               if (file) handleStreamingAnalysis(file);
+              else alert('Please select a file first');
             }}
-            disabled={isStreaming || !fileInputRef.current?.files[0]}
+            disabled={isStreaming}
             className="flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-white transition-colors"
           >
             <Play className="w-4 h-4 mr-2" />
@@ -460,7 +634,6 @@ const MeetingAnalysisDashboard = () => {
               </div>
             ) : (
               <div className="space-y-4">
-                {/* Key Insights */}
                 {analysisResult.key_insights && analysisResult.key_insights.length > 0 && (
                   <div>
                     <h5 className="font-medium text-gray-300 mb-2">Key Insights:</h5>
@@ -482,7 +655,6 @@ const MeetingAnalysisDashboard = () => {
                   </div>
                 )}
                 
-                {/* Full Analysis */}
                 {analysisResult.full_analysis && (
                   <div>
                     <div className="flex justify-between items-center mb-2">
@@ -500,9 +672,17 @@ const MeetingAnalysisDashboard = () => {
                   </div>
                 )}
                 
-                {/* Metadata */}
+                {simplifiedResult && (
+                  <div>
+                    <h5 className="font-medium text-gray-300 mb-2">Simplified Analysis:</h5>
+                    <div className="bg-gray-600 rounded p-3">
+                      <p className="text-gray-200 whitespace-pre-wrap">{simplifiedResult.simplified_text}</p>
+                    </div>
+                  </div>
+                )}
+                
                 <div className="text-sm text-gray-400 flex justify-between">
-                  <span>Confidence: {(analysisResult.confidence_score * 100).toFixed(1)}%</span>
+                  <span>Confidence: {((analysisResult.confidence_score || 0) * 100).toFixed(1)}%</span>
                   <span>Session: {analysisResult.session_id}</span>
                 </div>
               </div>
@@ -510,7 +690,6 @@ const MeetingAnalysisDashboard = () => {
           </div>
         )}
         
-        {/* Streaming Results */}
         {streamingData && (
           <div className="mt-4 bg-gray-700 rounded-lg p-4">
             <h4 className="text-md font-semibold text-gray-200 mb-3">Streaming Results</h4>
@@ -521,57 +700,39 @@ const MeetingAnalysisDashboard = () => {
         )}
       </div>
 
-      {/* Batch Analysis */}
       <div className="bg-gray-800 rounded-lg p-6">
-        <h3 className="text-lg font-semibold text-gray-200 mb-4 flex items-center">
-          <FileText className="w-5 h-5 mr-2" />
-          Batch Analysis
-        </h3>
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="text-lg font-semibold text-gray-200 flex items-center">
+            <FileText className="w-5 h-5 mr-2" />
+            Session Insights ({sessionInsights.length})
+          </h3>
+          <button
+            onClick={fetchSessionInsights}
+            className="p-2 bg-purple-600 hover:bg-purple-700 rounded-lg transition-colors"
+          >
+            <RefreshCw className="w-4 h-4" />
+          </button>
+        </div>
         
-        <input
-          type="file"
-          ref={batchFileInputRef}
-          className="hidden"
-          accept="image/*"
-          multiple
-          onChange={(e) => e.target.files.length > 0 && handleBatchAnalysis(e.target.files)}
-        />
-        
-        <button
-          onClick={() => batchFileInputRef.current?.click()}
-          disabled={isAnalyzing}
-          className="flex items-center px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-white transition-colors"
-        >
-          <Upload className="w-4 h-4 mr-2" />
-          {isAnalyzing ? 'Processing...' : 'Upload Multiple Screenshots'}
-        </button>
-        
-        {batchResults.length > 0 && (
-          <div className="mt-4 space-y-3">
-            <h4 className="text-md font-semibold text-gray-200">Batch Results</h4>
-            {batchResults.map((result, index) => (
-              <div key={index} className="bg-gray-700 rounded-lg p-3">
-                <div className="flex justify-between items-center mb-2">
-                  <span className="text-gray-300 font-medium">
-                    {result.filename || `Screenshot ${index + 1}`}
+        {sessionInsights.length === 0 ? (
+          <p className="text-gray-400">No insights collected yet</p>
+        ) : (
+          <div className="space-y-2 max-h-96 overflow-y-auto">
+            {sessionInsights.map((insight, index) => (
+              <div key={index} className="bg-gray-700 rounded p-3">
+                <div className="flex items-start justify-between">
+                  <p className="text-gray-200 flex-1">{insight.insight}</p>
+                  <span className={`ml-2 px-2 py-1 rounded text-xs font-medium ${getUrgencyColor(insight.urgency)}`}>
+                    {insight.urgency}
                   </span>
                 </div>
-                
-                {result.error ? (
-                  <p className="text-red-400">Error: {result.error}</p>
-                ) : result.analysis && (
-                  <div className="text-gray-200 text-sm">
-                    <p className="mb-2">{result.analysis.full_analysis}</p>
-                    {result.analysis.key_insights && result.analysis.key_insights.length > 0 && (
-                      <div className="flex flex-wrap gap-1">
-                        {result.analysis.key_insights.map((insight, i) => (
-                          <span key={i} className="px-2 py-1 bg-gray-600 rounded text-xs">
-                            {insight.insight}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                  </div>
+                {insight.context && (
+                  <p className="text-gray-400 text-sm mt-1">{insight.context}</p>
+                )}
+                {insight.timestamp && (
+                  <p className="text-gray-500 text-xs mt-1">
+                    {new Date(insight.timestamp).toLocaleString()}
+                  </p>
                 )}
               </div>
             ))}
@@ -581,75 +742,131 @@ const MeetingAnalysisDashboard = () => {
     </div>
   );
 
-  // Render Configuration Tab
-  const renderConfigTab = () => (
+  const renderDataTab = () => (
     <div className="space-y-6">
       <div className="bg-gray-800 rounded-lg p-6">
-        <h3 className="text-lg font-semibold text-gray-200 mb-4">Configuration Management</h3>
-        
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div>
-            <h4 className="font-medium text-gray-300 mb-2">Ollama Configs</h4>
-            <div className="bg-gray-700 rounded p-3 min-h-[100px]">
-              {configs.ollama.length === 0 ? (
-                <p className="text-gray-400 text-sm">No configurations found</p>
-              ) : (
-                configs.ollama.map((config, index) => (
-                  <div key={index} className="text-gray-300 text-sm mb-1">
-                    {config.base_url || 'Default Config'}
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-          
-          <div>
-            <h4 className="font-medium text-gray-300 mb-2">Quick Respond Configs</h4>
-            <div className="bg-gray-700 rounded p-3 min-h-[100px]">
-              {configs.quickRespond.length === 0 ? (
-                <p className="text-gray-400 text-sm">No configurations found</p>
-              ) : (
-                configs.quickRespond.map((config, index) => (
-                  <div key={index} className="text-gray-300 text-sm mb-1">
-                    Config {index + 1}
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-          
-          <div>
-            <h4 className="font-medium text-gray-300 mb-2">Model Prompts</h4>
-            <div className="bg-gray-700 rounded p-3 min-h-[100px]">
-              {configs.modelPrompts.length === 0 ? (
-                <p className="text-gray-400 text-sm">No prompts found</p>
-              ) : (
-                configs.modelPrompts.map((prompt, index) => (
-                  <div key={index} className="text-gray-300 text-sm mb-1">
-                    Prompt {index + 1}
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="text-lg font-semibold text-gray-200">Meeting Statuses</h3>
+          <button
+            onClick={fetchMeetingStatuses}
+            className="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg text-white transition-colors"
+          >
+            Refresh
+          </button>
         </div>
-        
-        <button
-          onClick={fetchConfigs}
-          className="mt-4 px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg text-white transition-colors"
-        >
-          Refresh Configs
-        </button>
+        <div className="space-y-2">
+          {meetingStatuses.length === 0 ? (
+            <p className="text-gray-400">No meeting statuses found</p>
+          ) : (
+            meetingStatuses.map((status, index) => (
+              <div key={index} className="bg-gray-700 rounded p-3 flex justify-between items-center">
+                <span className="text-gray-200">{status.status || `Status ${status.id}`}</span>
+                <button
+                  onClick={() => deleteMeetingStatus(status.id)}
+                  className="p-2 bg-red-600 hover:bg-red-700 rounded transition-colors"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            ))
+          )}
+        </div>
       </div>
 
-      {/* Urgency Levels */}
+      <div className="bg-gray-800 rounded-lg p-6">
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="text-lg font-semibold text-gray-200">Participants</h3>
+          <button
+            onClick={fetchParticipants}
+            className="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg text-white transition-colors"
+          >
+            Refresh
+          </button>
+        </div>
+        <div className="space-y-2">
+          {participants.length === 0 ? (
+            <p className="text-gray-400">No participants found</p>
+          ) : (
+            participants.map((participant, index) => (
+              <div key={index} className="bg-gray-700 rounded p-3 flex justify-between items-center">
+                <span className="text-gray-200">{participant.name || `Participant ${participant.id}`}</span>
+                <button
+                  onClick={() => deleteParticipant(participant.id)}
+                  className="p-2 bg-red-600 hover:bg-red-700 rounded transition-colors"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+
+      <div className="bg-gray-800 rounded-lg p-6">
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="text-lg font-semibold text-gray-200">Screen Contents</h3>
+          <button
+            onClick={fetchScreenContents}
+            className="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg text-white transition-colors"
+          >
+            Refresh
+          </button>
+        </div>
+        <div className="space-y-2">
+          {screenContents.length === 0 ? (
+            <p className="text-gray-400">No screen contents found</p>
+          ) : (
+            screenContents.map((content, index) => (
+              <div key={index} className="bg-gray-700 rounded p-3 flex justify-between items-center">
+                <span className="text-gray-200">{content.content || `Content ${content.id}`}</span>
+                <button
+                  onClick={() => deleteScreenContent(content.id)}
+                  className="p-2 bg-red-600 hover:bg-red-700 rounded transition-colors"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+
+      <div className="bg-gray-800 rounded-lg p-6">
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="text-lg font-semibold text-gray-200">Meeting Metrics</h3>
+          <button
+            onClick={fetchMeetingMetrics}
+            className="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg text-white transition-colors"
+          >
+            Refresh
+          </button>
+        </div>
+        <div className="space-y-2">
+          {meetingMetrics.length === 0 ? (
+            <p className="text-gray-400">No meeting metrics found</p>
+          ) : (
+            meetingMetrics.map((metric, index) => (
+              <div key={index} className="bg-gray-700 rounded p-3 flex justify-between items-center">
+                <span className="text-gray-200">Metrics {metric.id}</span>
+                <button
+                  onClick={() => deleteMeetingMetrics(metric.id)}
+                  className="p-2 bg-red-600 hover:bg-red-700 rounded transition-colors"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+
       <div className="bg-gray-800 rounded-lg p-6">
         <h3 className="text-lg font-semibold text-gray-200 mb-4">Urgency Levels</h3>
         <div className="flex flex-wrap gap-2">
           {urgencyLevels.map((level, index) => (
             <span
               key={index}
-              className={`px-3 py-1 rounded-full text-sm font-medium ${getUrgencyColor(level)}`}
+              className={`px-3 py-2 rounded-full text-sm font-medium ${getUrgencyColor(level)}`}
             >
               {level}
             </span>
@@ -657,16 +874,16 @@ const MeetingAnalysisDashboard = () => {
         </div>
       </div>
 
-      {/* Paginated Data Demo */}
       <div className="bg-gray-800 rounded-lg p-6">
-        <h3 className="text-lg font-semibold text-gray-200 mb-4">Paginated Items Demo</h3>
-        
-        <button
-          onClick={() => fetchPaginatedItems()}
-          className="mb-4 px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg text-white transition-colors"
-        >
-          Fetch Items
-        </button>
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="text-lg font-semibold text-gray-200">Paginated Items</h3>
+          <button
+            onClick={() => fetchPaginatedItems()}
+            className="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg text-white transition-colors"
+          >
+            Load Items
+          </button>
+        </div>
         
         {paginatedData && (
           <div>
@@ -677,15 +894,15 @@ const MeetingAnalysisDashboard = () => {
               </p>
             </div>
             
-            <div className="bg-gray-700 rounded p-3 max-h-40 overflow-y-auto">
+            <div className="bg-gray-700 rounded p-3 max-h-60 overflow-y-auto mb-4">
               {paginatedData.items.map((item, index) => (
-                <div key={index} className="text-gray-300 text-sm py-1">
+                <div key={index} className="text-gray-300 text-sm py-1 border-b border-gray-600 last:border-b-0">
                   {typeof item === 'string' ? item : JSON.stringify(item)}
                 </div>
               ))}
             </div>
             
-            <div className="flex gap-2 mt-4">
+            <div className="flex gap-2">
               <button
                 onClick={() => fetchPaginatedItems(paginatedData.page - 1)}
                 disabled={paginatedData.page <= 1}
@@ -709,18 +926,15 @@ const MeetingAnalysisDashboard = () => {
   );
 
   return (
-    <div style={{ fontFamily: 'Roboto, sans-serif', backgroundColor: '#1E1E2F', minHeight: '100vh', color: '#F8FAFC' }}>
-      <div className="container mx-auto px-4 py-8">
-        {/* Header */}
+    <div style={{ fontFamily: 'system-ui, -apple-system, sans-serif', backgroundColor: '#1E1E2F', minHeight: '100vh', color: '#F8FAFC' }}>
+      <div className="container mx-auto px-4 py-8" style={{ maxWidth: '1400px' }}>
         <div className="text-center mb-8">
           <h1 className="text-3xl font-bold text-white mb-2">Meeting Analysis Dashboard</h1>
           <p className="text-gray-400">AI-powered meeting screenshot analysis and insights</p>
         </div>
 
-        {/* Health Status */}
         {renderHealthStatus()}
 
-        {/* Navigation Tabs */}
         <div className="flex justify-center mb-8">
           <div className="bg-gray-800 rounded-lg p-1 flex space-x-1">
             <button
@@ -735,22 +949,21 @@ const MeetingAnalysisDashboard = () => {
             </button>
             
             <button
-              onClick={() => setActiveTab('config')}
+              onClick={() => setActiveTab('data')}
               className={`px-6 py-2 rounded-lg font-medium transition-colors ${
-                activeTab === 'config'
+                activeTab === 'data'
                   ? 'bg-purple-600 text-white'
                   : 'text-gray-400 hover:text-white'
               }`}
             >
-              Configuration
+              Data Management
             </button>
           </div>
         </div>
 
-        {/* Tab Content */}
         <div className="max-w-6xl mx-auto">
           {activeTab === 'analyze' && renderAnalysisTab()}
-          {activeTab === 'config' && renderConfigTab()}
+          {activeTab === 'data' && renderDataTab()}
         </div>
       </div>
     </div>
