@@ -13,7 +13,7 @@ const ScreenRecordingApp = () => {
   const [backendStatus, setBackendStatus] = useState('disconnected');
 
   // API Base URL - adjust based on your backend
-  const API_BASE = 'http://localhost:61683';
+  const API_BASE = 'http://localhost:8000';
 
   // API Helper Function
   const apiCall = async (endpoint, method = 'GET', body = null) => {
