@@ -3,7 +3,7 @@ import { Play, Square, Eye, EyeOff, Settings, Shield, Activity, Download, Trash2
 import { InvisibilityService, SessionManager, ConfigurationValidator, UIStateManager } from './invisibilityService.js';
 import { HiddenAnswers } from '../../services/mainFeature.js';
 import { pollHiddenSuggestions } from '../../services/mainFeature.js';
-import {InvisibilityService} from './invisibilityService.js'
+import {InvisibilityService} from './invisibilityService.js';
 
 invisibility.enableInvisibilityMode({
   recording: { screenRecording: true, voiceRecording: true },

@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Upload, Play, Square, Settings, Users, BarChart3, Clock, AlertTriangle, CheckCircle, XCircle, Camera, Mic, FileText, Download, RefreshCw, Trash2, Plus } from 'lucide-react';
 import { QuickRespond } from '../../services/aiService';
-import {MeetingAnalysisService } from './quickRespondUtils.js'
+import {MeetingAnalysisService } from './quickRespondUtils.js';
 
 const meetingService = new MeetingAnalysisService();
 

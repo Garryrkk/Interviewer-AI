@@ -3,9 +3,20 @@ import { Mic, MicOff, Play, Square, Volume2, Settings, Loader, CheckCircle, Aler
 import { startLiveVoiceRecognition } from '../../services/voiceService';
 import { VoiceProcessing } from '../../services/voiceService';
 import { VoiceRecognition } from '../../services/voiceService';
+import { VoiceProcessingService } from './VoiceProcessingUtils';
 
 VoiceProcessing();
 VoiceRecognition();
+
+const voiceService = new VoiceProcessingService({ baseUrl: 'http://localhost:8000' });
+
+voiceService.initializeSession('user_123', 'meeting_456')
+  .then(response => {
+    console.log('Session started:', response);
+  })
+  .catch(err => {
+    console.error('Error starting session:', err);
+  });
 
 const recognition = startLiveVoiceRecognition((text) => {
   console.log("Live Transcript:", text);

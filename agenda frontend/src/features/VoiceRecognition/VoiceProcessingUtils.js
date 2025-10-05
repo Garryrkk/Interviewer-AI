@@ -1,3 +1,8 @@
+import { VoiceProcessing } from '../../services/voiceService';
+import { VoiceRecognition } from '../../services/voiceService';
+
+VoiceProcessing();
+VoiceRecognition();
 
 // API Configuration
 const API_CONFIG = {
