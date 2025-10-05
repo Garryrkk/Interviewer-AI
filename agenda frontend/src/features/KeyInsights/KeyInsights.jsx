@@ -1,6 +1,27 @@
 import React, { useState, useEffect } from 'react';
 import { Upload, FileText, Brain, Clock, History, Trash2, Eye, BarChart3, RefreshCw, CheckCircle, AlertCircle } from 'lucide-react';
-import { KeyInsights } from '../../services/aiService';
+import { keyInsightsAPI } from '../../services/aiService';
+
+const keyInsightsAPI = new KeyInsightsAPIService();
+
+// Get all insight types
+keyInsightsAPI.getInsightTypes()
+  .then(types => {
+    console.log("Insight Types:", types);
+  })
+  .catch(err => {
+    console.error("API Error:", err);
+  });
+
+// Get a sample insight
+keyInsightsAPI.getSampleInsight()
+  .then(sample => {
+    console.log("Sample Insight:", sample);
+  })
+  .catch(err => {
+    console.error("API Error:", err);
+  });
+
 
 KeyInsights("This is the text I want insights for")
   .then(response => {

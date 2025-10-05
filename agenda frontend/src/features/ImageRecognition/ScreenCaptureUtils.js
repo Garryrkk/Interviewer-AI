@@ -3,21 +3,26 @@
  * Handles all API calls, data processing, and business logic
  * for the Meeting Summarization Application
  */
-import { analyzeImage } from "../../services/imageService";
-import { CameraCapture } from "../../services/imageService";
+import { ScreenCapture } from '../../services/imageService';
+import { captureScreenAndAnalyze } from '../../services/imageService';
 
-CameraCapture()
-  .then((imageBlob) => {
-    console.log("Captured image Blob:", imageBlob);
 
-    // Analyze the captured image
-    return analyzeImage(imageBlob);
+// Directly capture screen and get Blob
+ScreenCapture()
+  .then(blob => {
+    console.log("Screen captured Blob:", blob);
   })
-  .then((analysis) => {
-    console.log("Image Analysis:", analysis);
+  .catch(err => {
+    console.error("Screen capture error:", err);
+  });
+
+// Directly capture screen and analyze it
+captureScreenAndAnalyze()
+  .then(result => {
+    console.log("Analysis result:", result);
   })
-  .catch((err) => {
-    console.error("Camera or Analysis Error:", err);
+  .catch(err => {
+    console.error("Analysis error:", err);
   });
   
 class MeetingSummarizationService {

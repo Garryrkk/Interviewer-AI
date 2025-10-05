@@ -3,6 +3,48 @@ import { Play, Square, Eye, EyeOff, Settings, Shield, Activity, Download, Trash2
 import { InvisibilityService, SessionManager, ConfigurationValidator, UIStateManager } from './invisibilityService.js';
 import { HiddenAnswers } from '../../services/mainFeature.js';
 import { pollHiddenSuggestions } from '../../services/mainFeature.js';
+import {InvisibilityService} from './invisibilityService.js'
+
+invisibility.enableInvisibilityMode({
+  recording: { screenRecording: true, voiceRecording: true },
+  ui: { theme: 'dark' },
+  security: { encrypt: true },
+  sessionName: 'MySession',
+  metadata: { project: 'Test' }
+})
+.then(response => {
+  console.log("Invisibility Mode Enabled:", response);
+})
+.catch(err => {
+  console.error("Enable Error:", err);
+});
+
+// Start recording
+invisibility.startRecording({ realTimeInsights: true })
+.then(response => {
+  console.log("Recording Started:", response);
+})
+.catch(err => {
+  console.error("Start Recording Error:", err);
+});
+
+// Stop recording
+invisibility.stopRecording()
+.then(response => {
+  console.log("Recording Stopped:", response);
+})
+.catch(err => {
+  console.error("Stop Recording Error:", err);
+});
+
+// Disable invisibility mode
+invisibility.disableInvisibilityMode()
+.then(response => {
+  console.log("Invisibility Mode Disabled:", response);
+})
+.catch(err => {
+  console.error("Disable Error:", err);
+});
 
 HiddenAnswers({ question: "What's the AI insight?", context: "meeting-notes" })
   .then(response => {

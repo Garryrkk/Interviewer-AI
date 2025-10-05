@@ -3,6 +3,16 @@
 /**
  * Configuration object for API endpoints
  */
+import { KeyInsights } from '../../services/aiService';
+
+KeyInsights("This is the text I want insights for")
+  .then(response => {
+    console.log("API Response:", response);
+  })
+  .catch(err => {
+    console.error("API Error:", err);
+  });
+  
 const API_CONFIG = {
   BASE_URL: process.env.REACT_APP_API_URL || 'http://localhost:8000',
   ENDPOINTS: {

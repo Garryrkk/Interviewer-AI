@@ -1,6 +1,36 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Mic, MicOff, Video, VideoOff, Pause, Play, Square, Settings, Activity, Eye, Brain, Heart, Upload, RefreshCw, Database } from 'lucide-react';
 import { HandsFreeMode } from '../../services/aiService';
+import {HandsFreeInterviewService} from './HandsFreeUtils'
+
+const interviewService = new HandsFreeInterviewService('http://127.0.0.1:8000');
+
+// Start a session
+interviewService.startSession({ user_id: 'user_123' })
+  .then(data => {
+    console.log('Session started:', data);
+  })
+  .catch(err => {
+    console.error('Session start error:', err);
+  });
+
+// Activate hands-free mode
+interviewService.activateHandsFreeMode()
+  .then(data => {
+    console.log('Hands-free activated:', data);
+  })
+  .catch(err => {
+    console.error('Hands-free activation error:', err);
+  });
+
+// Get session insights
+interviewService.getSessionInsights()
+  .then(insights => {
+    console.log('Insights:', insights);
+  })
+  .catch(err => {
+    console.error('Insights error:', err);
+  });
 
 const HandsFreeInterviewSystem = () => {
   const [apiMode, setApiMode] = useState('original'); // 'original' or 'handsfree'
@@ -43,8 +73,6 @@ const HandsFreeInterviewSystem = () => {
   const mediaRecorderRef = useRef(null);
   const videoIntervalRef = useRef(null);
 
-  const API_BASE = 'http://localhost:8000/api/v1';
-  const API_ROUTER = 'http://localhost:8000';
 
   // ==========================================================================
   // ORIGINAL API ENDPOINTS

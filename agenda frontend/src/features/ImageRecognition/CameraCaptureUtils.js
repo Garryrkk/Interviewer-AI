@@ -2,6 +2,51 @@
  * Utils for camera-based expression detection
  */
 
+import { CameraCapture } from "../../services/imageService";
+import { ScreenCapture } from "../../services/imageService";
+import { captureScreenAndAnalyze } from "../../services/imageService";
+import { captureCameraAndAnalyze } from "../../services/imageService";
+
+analyzeImage(file)
+  .then(response => {
+    console.log("Image Analysis Response:", response);
+  })
+  .catch(err => {
+    console.error("Image Analysis Error:", err);
+  });
+
+  CameraCapture()
+  .then(blob => {
+    console.log("Captured Camera Image Blob:", blob);
+  })
+  .catch(err => {
+    console.error("Camera Capture Error:", err);
+  });
+
+  ScreenCapture()
+  .then(blob => {
+    console.log("Captured Screen Blob:", blob);
+  })
+  .catch(err => {
+    console.error("Screen Capture Error:", err);
+  });
+
+  captureScreenAndAnalyze()
+  .then(result => {
+    console.log("Screen Analysis Result:", result);
+  })
+  .catch(err => {
+    console.error("Screen + Analyze Error:", err);
+  });
+
+  captureCameraAndAnalyze()
+  .then(result => {
+    console.log("Camera Analysis Result:", result);
+  })
+  .catch(err => {
+    console.error("Camera + Analyze Error:", err);
+  });
+
 export async function captureCameraFrame(videoEl) {
   if (!videoEl) return null;
 

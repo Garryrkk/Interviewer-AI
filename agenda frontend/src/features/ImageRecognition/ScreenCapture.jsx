@@ -2,8 +2,38 @@ import React, { useState, useEffect } from 'react';
 import { Play, Pause, Square, Eye, CheckCircle, XCircle, AlertTriangle, Monitor, Circle, Activity, Wifi, WifiOff, Camera, Zap } from 'lucide-react';
 import { ScreenCapture } from '../../services/imageService';
 import { captureScreenAndAnalyze } from '../../services/imageService';
+import { ScreenCapture } from './ScreenCaptureUtils';
+import { captureScreenAndAnalyze } from './ScreenCaptureUtils';
+import { meetingService } from './ScreenCaptureUtils';
 
-import { ScreenCapture, captureScreenAndAnalyze } from './api';
+
+// Screen capture only
+ScreenCapture()
+  .then(blob => {
+    console.log("Screen captured Blob:", blob);
+  })
+  .catch(err => {
+    console.error("Screen capture error:", err);
+  });
+
+// Screen capture + analyze
+captureScreenAndAnalyze()
+  .then(result => {
+    console.log("Analysis result:", result);
+  })
+  .catch(err => {
+    console.error("Analysis error:", err);
+  });
+
+// Using meetingService instance methods
+meetingService.getUserSummaries()
+  .then(summaries => {
+    console.log("User summaries:", summaries);
+  })
+  .catch(err => {
+    console.error("Failed to get summaries:", err);
+  });
+
 
 // Directly capture screen and get Blob
 ScreenCapture()

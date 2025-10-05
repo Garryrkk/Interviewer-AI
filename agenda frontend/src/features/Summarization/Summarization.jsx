@@ -9,6 +9,7 @@ Summarization("This is the full transcript or meeting notes")
   .catch(err => {
     console.error("API Error:", err);
   });
+  
 const summarizationService = {
   // Audio Upload Endpoints
   uploadAudio: async (file, meetingId = null) => {

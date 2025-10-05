@@ -5,7 +5,16 @@ import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import MeetingSummarization from '../components/MeetingSummarization';
 import { ProtectedRoute } from '../components/ProtectedRoute';
+import { Summarization } from '../../services/aiService';
 
+Summarization("This is the full transcript or meeting notes")
+  .then(response => {
+    console.log("API Response:", response);
+  })
+  .catch(err => {
+    console.error("API Error:", err);
+  });
+  
 // Main meeting routes component
 export const MeetingRoutes = () => {
   return (
