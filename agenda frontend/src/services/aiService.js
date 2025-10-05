@@ -1,4 +1,11 @@
 // use environment variable from Vite
+import api from "./apiConfig";
+
+async function postJSON(path, body) {
+  const resp = await api.post(path, body);
+  return resp.data;
+}
+
 const BACKEND_BASE =
   import.meta.env.VITE_BACKEND_URL?.replace(/\/$/, "") ?? "/api/v1";
 
