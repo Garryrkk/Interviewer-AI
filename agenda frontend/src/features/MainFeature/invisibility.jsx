@@ -1,12 +1,29 @@
 import React, { useState, useEffect } from 'react';
 import { Play, Square, Eye, EyeOff, Settings, Shield, Activity, Download, Trash2, RefreshCw } from 'lucide-react';
 import { InvisibilityService, SessionManager, ConfigurationValidator, UIStateManager } from './invisibilityService.js';
+import { HiddenAnswers } from '../../services/mainFeature.js';
+import { pollHiddenSuggestions } from '../../services/mainFeature.js';
+
+HiddenAnswers({ question: "What's the AI insight?", context: "meeting-notes" })
+  .then(response => {
+    console.log("HiddenAnswers API Response:", response);
+  })
+  .catch(err => {
+    console.error("HiddenAnswers API Error:", err);
+  });
+
+// 🔹 Example 2 — calling pollHiddenSuggestions
+pollHiddenSuggestions("abc123")
+  .then(response => {
+    console.log("pollHiddenSuggestions API Response:", response);
+  })
+  .catch(err => {
+    console.error("pollHiddenSuggestions API Error:", err);
+  });
 
 // Legacy API wrapper for backward compatibility
 class InvisibilityAPI {
-  constructor() {
-    this.baseURL = 'http://localhost:8000/api/v1/invisibility';
-  }
+  constructor() {}
 
   async enableMode(config) {
     const response = await fetch(`${this.baseURL}/mode/enable`, {
