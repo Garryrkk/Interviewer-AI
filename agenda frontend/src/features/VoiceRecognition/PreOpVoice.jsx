@@ -1,10 +1,22 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { AudioService } from './VoicePreoputils';
+import { transcribeAudio } from '../../services/voiceService';
 import { PreOpVoice } from '../../services/voiceService';
+
+PreOpVoice();
+
 // For demo purposes, we'll include the AudioService inline
+
+transcribeAudio(audioBlob)
+  .then(response => {
+    console.log("API Response:", response);
+  })
+  .catch(err => {
+    console.error("API Error:", err);
+  });
+
 class AudioService {
   constructor() {
-    this.baseURL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
     this.apiPrefix = '/api/v1/audio';
     this.defaultTimeout = 10000;
     this.transcriptionTimeout = 30000;

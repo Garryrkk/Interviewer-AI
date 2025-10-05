@@ -1,5 +1,18 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Mic, MicOff, Play, Square, Volume2, Settings, Loader, CheckCircle, AlertCircle, TestTube, Gauge, Upload, FileAudio } from 'lucide-react';
+import { startLiveVoiceRecognition } from '../../services/voiceService';
+import { VoiceProcessing } from '../../services/voiceService';
+import { VoiceRecognition } from '../../services/voiceService';
+
+VoiceProcessing();
+VoiceRecognition();
+
+const recognition = startLiveVoiceRecognition((text) => {
+  console.log("Live Transcript:", text);
+});
+
+// stop when you want
+recognition.stop();
 
 // API Service Class with ALL endpoints
 class VoiceProcessingAPI {
