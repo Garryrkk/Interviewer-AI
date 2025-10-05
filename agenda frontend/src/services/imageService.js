@@ -17,7 +17,7 @@ export async function analyzeImage(imageFile) {
   });
   return data;
 }
-
+          
 /**
  * ===========================
  * 2️⃣  CAMERA CAPTURE (Webcam)
