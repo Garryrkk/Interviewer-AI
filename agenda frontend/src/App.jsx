@@ -8,7 +8,7 @@ import ImageRecognition from "./features/ImageRecognition/ImageRecognition";
 import KeyInsights from "./features/KeyInsights/KeyInsights";
 import HandsFree from "./features/HandsFree/HandsFree";
 import Overlay from "./features/MainFeature/Overlay";
-import HiddenTest from "./HiddenTest";
+import HiddenTest from "./HiddenTest.jsx";
 
 function App() {
   return (
