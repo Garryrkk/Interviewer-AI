@@ -1,5 +1,27 @@
 import React, { useState, useEffect } from 'react';
 import { Play, Pause, Square, Eye, CheckCircle, XCircle, AlertTriangle, Monitor, Circle, Activity, Wifi, WifiOff, Camera, Zap } from 'lucide-react';
+import { ScreenCapture } from '../../services/imageService';
+import { captureScreenAndAnalyze } from '../../services/imageService';
+
+import { ScreenCapture, captureScreenAndAnalyze } from './api';
+
+// Directly capture screen and get Blob
+ScreenCapture()
+  .then(blob => {
+    console.log("Screen captured Blob:", blob);
+  })
+  .catch(err => {
+    console.error("Screen capture error:", err);
+  });
+
+// Directly capture screen and analyze it
+captureScreenAndAnalyze()
+  .then(result => {
+    console.log("Analysis result:", result);
+  })
+  .catch(err => {
+    console.error("Analysis error:", err);
+  });
 
 const ScreenRecordingApp = () => {
   const [userId, setUserId] = useState('user_001');
@@ -13,7 +35,7 @@ const ScreenRecordingApp = () => {
   const [backendStatus, setBackendStatus] = useState('disconnected');
 
   // API Base URL - adjust based on your backend
-  const API_BASE = 'http://localhost:8000';
+
 
   // API Helper Function
   const apiCall = async (endpoint, method = 'GET', body = null) => {

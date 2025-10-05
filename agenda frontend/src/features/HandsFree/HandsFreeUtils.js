@@ -1,7 +1,7 @@
 // handsFreeService.js - Service layer for Hands-Free Interview System
 
 class HandsFreeInterviewService {
-  constructor(baseUrl = 'http://localhost:8000/hands-free') {
+  constructor(baseUrl = 'http://127.0.0.1:8000/ping') {
     this.baseUrl = baseUrl;
     this.audioWs = null;
     this.videoWs = null;

@@ -3,7 +3,23 @@
  * Handles all API calls, data processing, and business logic
  * for the Meeting Summarization Application
  */
+import { analyzeImage } from "../../services/imageService";
+import { CameraCapture } from "../../services/imageService";
 
+CameraCapture()
+  .then((imageBlob) => {
+    console.log("Captured image Blob:", imageBlob);
+
+    // Analyze the captured image
+    return analyzeImage(imageBlob);
+  })
+  .then((analysis) => {
+    console.log("Image Analysis:", analysis);
+  })
+  .catch((err) => {
+    console.error("Camera or Analysis Error:", err);
+  });
+  
 class MeetingSummarizationService {
   constructor() {
     this.API_BASE_URL = process.env.REACT_APP_API_BASE_URL || '/api/v1/summarization';
