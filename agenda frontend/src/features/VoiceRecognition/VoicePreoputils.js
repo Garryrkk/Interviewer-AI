@@ -4,6 +4,20 @@
  */
 
 /////PREOP FETURES////
+import { transcribeAudio } from '../../services/voiceService';
+import { PreOpVoice } from '../../services/voiceService';
+
+PreOpVoice();
+
+// For demo purposes, we'll include the AudioService inline
+
+transcribeAudio(audioBlob)
+  .then(response => {
+    console.log("API Response:", response);
+  })
+  .catch(err => {
+    console.error("API Error:", err);
+  });
 
 class AudioService {
   constructor() {

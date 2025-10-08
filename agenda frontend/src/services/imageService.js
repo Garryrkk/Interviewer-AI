@@ -1,6 +1,10 @@
 // src/services/imageService.js
 import api from "./apiConfig";
 
+async function postJSON(path, body) {
+  const resp = await api.post(path, body);
+  return resp.data;
+}
 /**
  * ===========================
  * 1️⃣  API: Send an image to backend for analysis
@@ -17,7 +21,7 @@ export async function analyzeImage(imageFile) {
   });
   return data;
 }
-
+          
 /**
  * ===========================
  * 2️⃣  CAMERA CAPTURE (Webcam)

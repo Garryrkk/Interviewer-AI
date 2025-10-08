@@ -1,7 +1,16 @@
 // handsFreeService.js - Service layer for Hands-Free Interview System
+import { HandsFreeMode } from '../../services/aiService';
+
+HandsFreeMode(context)
+  .then(response => {
+    console.log("API Response:", response);
+  })
+  .catch(err => {
+    console.error("API Error:", err);
+  });
 
 class HandsFreeInterviewService {
-  constructor(baseUrl = 'http://localhost:8000/hands-free') {
+  constructor(baseUrl = 'http://127.0.0.1:8000/ping') {
     this.baseUrl = baseUrl;
     this.audioWs = null;
     this.videoWs = null;

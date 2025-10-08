@@ -1,6 +1,25 @@
+import { HiddenAnswers } from '../../services/mainFeature.js';
+import { pollHiddenSuggestions } from '../../services/mainFeature.js';
+
+HiddenAnswers({ question: "What's the AI insight?", context: "meeting-notes" })
+  .then(response => {
+    console.log("HiddenAnswers API Response:", response);
+  })
+  .catch(err => {
+    console.error("HiddenAnswers API Error:", err);
+  });
+
+// 🔹 Example 2 — calling pollHiddenSuggestions
+pollHiddenSuggestions("abc123")
+  .then(response => {
+    console.log("pollHiddenSuggestions API Response:", response);
+  })
+  .catch(err => {
+    console.error("pollHiddenSuggestions API Error:", err);
+  });
 
 export class InvisibilityService {
-  constructor(baseURL = 'http://localhost:8000/api/v1/invisibility') {
+  constructor(baseURL = 'http://127.0.0.1:8000/api/v1/invisibility') {
     this.baseURL = baseURL;
     this.sessionId = null;
     this.wsConnection = null;

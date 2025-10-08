@@ -1,8 +1,17 @@
 // meetingAnalysisService.js
 // Complete API service layer for Meeting Analysis Dashboard
+import { QuickRespond } from '../../services/aiService';
 
+QuickRespond("This is my user prompt")
+  .then(response => {
+    console.log("API Response:", response);
+  })
+  .catch(err => {
+    console.error("API Error:", err);
+  });
+  
 class MeetingAnalysisService {
-  constructor(baseUrl = 'http://localhost:8000/api/quick-respond') {
+  constructor(baseUrl = 'http://127.0.0.1:8000/api/quick-respond') {
     this.baseUrl = baseUrl;
     this.defaultHeaders = {
       'Content-Type': 'application/json',

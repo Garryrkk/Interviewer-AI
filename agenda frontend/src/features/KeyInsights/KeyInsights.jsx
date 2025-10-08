@@ -1,5 +1,120 @@
 import React, { useState, useEffect } from 'react';
-import { Upload, FileText, Brain, TrendingUp, Clock, Trash2, RefreshCw, Users, AlertCircle, CheckCircle } from 'lucide-react';
+import { Upload, FileText, Brain, Clock, History, Trash2, Eye, BarChart3, RefreshCw, CheckCircle, AlertCircle } from 'lucide-react';
+
+// API Service Class
+class KeyInsightsAPI {
+  constructor(baseURL = 'http://localhost:8000') {
+    this.baseURL = baseURL;
+  }
+
+  async request(endpoint, options = {}) {
+    const url = `${this.baseURL}${endpoint}`;
+    const config = {
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      ...options,
+    };
+
+    if (options.body && options.body instanceof FormData) {
+      delete config.headers['Content-Type'];
+    }
+
+    try {
+      const response = await fetch(url, config);
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.detail || `HTTP error! status: ${response.status}`);
+      }
+      
+      return data;
+    } catch (error) {
+      console.error(`API Error (${endpoint}):`, error);
+      throw error;
+    }
+  }
+
+  // Get all insight types
+  async getInsightTypes() {
+    return this.request('/api/v1/key-insights/types');
+  }
+
+  // Get sample insight
+  async getSampleInsight() {
+    return this.request('/api/v1/key-insights/sample');
+  }
+
+  // Generate insights from transcript
+  async generateInsights(transcript, meetingId = null, imageFile = null, extractTypes = null, maxInsights = 10) {
+    const formData = new FormData();
+    
+    const requestData = {
+      transcript,
+      meeting_id: meetingId,
+      extract_types: extractTypes,
+      max_insights: maxInsights
+    };
+
+    formData.append('request', JSON.stringify(requestData));
+    
+    if (imageFile) {
+      formData.append('image_file', imageFile);
+    }
+
+    return this.request('/api/v1/key-insights/analyze', {
+      method: 'POST',
+      body: formData
+    });
+  }
+
+  // Simplify insights
+  async simplifyInsights(originalInsights, originalTips, simplificationLevel = 'moderate', originalInsightId = null) {
+    return this.request('/api/v1/key-insights/simplify', {
+      method: 'POST',
+      body: JSON.stringify({
+        original_insights: originalInsights,
+        original_tips: originalTips,
+        simplification_level: simplificationLevel,
+        original_insight_id: originalInsightId
+      })
+    });
+  }
+
+  // Get analysis status
+  async getAnalysisStatus(insightId) {
+    return this.request(`/api/v1/key-insights/status/${insightId}`);
+  }
+
+  // Get insights history
+  async getInsightsHistory(meetingId) {
+    return this.request(`/api/v1/key-insights/history/${meetingId}`);
+  }
+
+  // Delete insights
+  async deleteInsights(insightId) {
+    return this.request(`/api/v1/key-insights/insights/${insightId}`, {
+      method: 'DELETE'
+    });
+  }
+
+  // Batch analyze
+  async batchAnalyze(meetingContexts, meetingIds, imageFiles = null) {
+    const formData = new FormData();
+    
+    meetingContexts.forEach(context => formData.append('meeting_contexts', context));
+    meetingIds.forEach(id => formData.append('meeting_ids', id));
+    
+    if (imageFiles) {
+      imageFiles.forEach(file => formData.append('image_files', file));
+    }
+
+    return this.request('/api/v1/key-insights/batch-analyze', {
+      method: 'POST',
+      body: formData
+    });
+  }
+}
 
 const KeyInsightsDashboard = () => {
   const [api] = useState(new KeyInsightsAPI());

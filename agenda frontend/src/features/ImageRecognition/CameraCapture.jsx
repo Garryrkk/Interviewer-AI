@@ -1,13 +1,96 @@
 import React, { useEffect, useRef, useState } from "react";
-import {
-  captureCameraFrame,
-  blobToBase64,
-  detectExpression,
-} from "./cameraCaptureUtils";
-import { sendQuickReply } from "../QuickRespond/quickRespondUtils";
-import { summarizeText } from "../Summarization/summarizationUtils";
 import { Camera, Play, Square, Activity, MessageSquare, Eye, Brain, Zap } from 'lucide-react';
+import { analyzeImage, captureCameraAndAnalyze, captureScreenAndAnalyze } from "../../services/imageService";
 import { CameraCapture } from "../../services/imageService";
+import { ScreenCapture } from "../../services/imageService";
+import { captureScreenAndAnalyze } from "../../services/imageService";
+import { captureCameraAndAnalyze } from "../../services/imageService";
+import { captureCameraFrame } from "./CameraCaptureUtils";
+import { blobToBase64 } from "./CameraCaptureUtils";
+import { detectExpression } from "./CameraCaptureUtils";
+
+analyzeImage(file)
+  .then(response => {
+    console.log("Image Analysis Response:", response);
+  })
+  .catch(err => {
+    console.error("Image Analysis Error:", err);
+  });
+
+  CameraCapture()
+  .then(blob => {
+    console.log("Captured Camera Image Blob:", blob);
+  })
+  .catch(err => {
+    console.error("Camera Capture Error:", err);
+  });
+
+  ScreenCapture()
+  .then(blob => {
+    console.log("Captured Screen Blob:", blob);
+  })
+  .catch(err => {
+    console.error("Screen Capture Error:", err);
+  });
+
+  captureScreenAndAnalyze()
+  .then(result => {
+    console.log("Screen Analysis Result:", result);
+  })
+  .catch(err => {
+    console.error("Screen + Analyze Error:", err);
+  });
+
+  captureCameraAndAnalyze()
+  .then(result => {
+    console.log("Camera Analysis Result:", result);
+  })
+  .catch(err => {
+    console.error("Camera + Analyze Error:", err);
+  });
+
+  
+export async function captureCameraFrame(videoEl) {
+  if (!videoEl) return null;
+
+  const canvas = document.createElement("canvas");
+  canvas.width = videoEl.videoWidth || 640;
+  canvas.height = videoEl.videoHeight || 480;
+  const ctx = canvas.getContext("2d");
+  ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
+
+  const blob = await new Promise((res) => canvas.toBlob(res, "image/jpeg", 0.8));
+  return blob;
+}
+
+export async function blobToBase64(blob) {
+  return new Promise((resolve, reject) => {
+    if (!blob) return resolve(null);
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(reader.result.split(",")[1]);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+
+/**
+ * detectExpression
+ * Mock detection: randomly returns "happy", "confused", or "stressed"
+ * Replace this with a real ML/vision API.
+ */
+export async function detectExpression(base64Image) {
+  await new Promise((r) => setTimeout(r, 500)); // simulate processing
+
+  const labels = [
+    { label: "happy", confidence: Math.random().toFixed(2) },
+    { label: "confused", confidence: Math.random().toFixed(2) },
+    { label: "stressed", confidence: Math.random().toFixed(2) },
+  ];
+
+  // Pick max
+  const expr = labels.reduce((a, b) => (parseFloat(a.confidence) > parseFloat(b.confidence) ? a : b));
+  return expr;
+}
 
 export default function CameraCapture() {
   const videoRef = useRef(null);
@@ -16,37 +99,55 @@ export default function CameraCapture() {
   const [processing, setProcessing] = useState(false);
   const [expression, setExpression] = useState(null);
   const [messages, setMessages] = useState([]);
+  const [sessionId, setSessionId] = useState(null);
+  const [monitoringId, setMonitoringId] = useState(null);
+  const [devices, setDevices] = useState([]);
+  const [sessionStatus, setSessionStatus] = useState(null);
   const detectorLockRef = useRef(false);
   const intervalRef = useRef(null);
+  const statusCheckInterval = useRef(null);
 
   useEffect(() => {
-    return () => stopStream();
+    // Load available camera devices on mount
+    loadCameraDevices();
+    return () => {
+      stopStream();
+      if (statusCheckInterval.current) {
+        clearInterval(statusCheckInterval.current);
+      }
+    };
   }, []);
+
+  async function loadCameraDevices() {
+    try {
+      const response = await fetch('/camera/devices');
+      if (!response.ok) {
+        throw new Error('Failed to fetch camera devices');
+      }
+      const data = await response.json();
+      setDevices(data.devices || []);
+      console.log(`Loaded ${data.count} camera devices`);
+    } catch (err) {
+      console.error("Failed to load camera devices:", err);
+      // Set a default device if API fails
+      setDevices([{ id: '0', name: 'Default Camera' }]);
+    }
+  }
 
   async function startStream() {
     try {
       // First, send request to backend
-      const backendResponse = await fetch("http://localhost:8000/camera/session/start", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          device_id: "default",
-          resolution: { width: 640, height: 480 },
-          fps: 30
-        }),
+      const backendResponse = await fetch('/start_stream', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: 'someId' })
       });
-
-      const data = await backendResponse.json();
-      if (!backendResponse.ok) throw new Error(data.detail || "Camera start failed");
-
-      // save session_id for later stop
-      localStorage.setItem("cameraSessionId", data.session_id);
-
-
+      
       if (!backendResponse.ok) {
         throw new Error('Backend denied camera access');
       }
 
+      // Start local media stream
       const mediaStream = await navigator.mediaDevices.getUserMedia({
         video: { width: 640, height: 480 },
         audio: false,
@@ -57,6 +158,33 @@ export default function CameraCapture() {
         videoRef.current.play().catch(() => { });
       }
       setRunning(true);
+
+      // Start expression monitoring - using query parameters
+      const monitorResponse = await fetch(`/expression/monitoring/start?session_id=${encodeURIComponent(sessionData.session_id)}&interval_seconds=2`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+
+      if (monitorResponse.ok) {
+        const monitorData = await monitorResponse.json();
+        setMonitoringId(monitorData.monitoring_id);
+        console.log('Started monitoring:', monitorData.monitoring_id);
+      } else {
+        console.warn('Failed to start monitoring, but continuing...');
+      }
+
+      // Check session status periodically
+      statusCheckInterval.current = setInterval(async () => {
+        try {
+          const statusResponse = await fetch(`/camera/session/${sessionData.session_id}/status`);
+          if (statusResponse.ok) {
+            const status = await statusResponse.json();
+            setSessionStatus(status);
+          }
+        } catch (err) {
+          console.error('Status check failed:', err);
+        }
+      }, 5000);
 
       // Run expression detection every 2s
       intervalRef.current = setInterval(() => {
@@ -71,13 +199,11 @@ export default function CameraCapture() {
   async function stopStream() {
     try {
       // Send request to backend to stop camera
-      const sessionId = localStorage.getItem("cameraSessionId");
-      if (sessionId) {
-        await fetch(`http://localhost:8000/camera/session/stop/${sessionId}`, {
-          method: "POST",
-        });
-      }
-
+      await fetch('/stopStream', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: 'someId' })
+      });
     } catch (err) {
       console.error("Backend stop request failed:", err);
     }
@@ -87,11 +213,33 @@ export default function CameraCapture() {
     }
     setStream(null);
     setRunning(false);
+    setSessionStatus(null);
     clearInterval(intervalRef.current);
+    if (statusCheckInterval.current) {
+      clearInterval(statusCheckInterval.current);
+    }
+  }
+
+  async function captureCameraFrame(video) {
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(video, 0, 0);
+    return new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg'));
+  }
+
+  async function blobToBase64(blob) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result.split(',')[1]);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
   }
 
   async function detectFromCamera() {
-    if (detectorLockRef.current) return;
+    if (detectorLockRef.current || !sessionId) return;
     detectorLockRef.current = true;
     setProcessing(true);
 
@@ -100,40 +248,27 @@ export default function CameraCapture() {
       const b64 = await blobToBase64(frameBlob);
 
       // Expression detection (mock for now)
-      // Expression detection using backend
-      const sessionId = localStorage.getItem("cameraSessionId");
-
-      const response = await fetch("http://localhost:8000/expression/detect", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          session_id: sessionId,
-          frame_data: b64,
-          confidence_threshold: 0.6,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error("Expression detection failed");
-      }
-
-      const expr = await response.json();
+      const expr = await detectExpression(b64);
       setExpression(expr);
 
 
       // Add to chat log
       setMessages((m) => [
         ...m,
-        { id: crypto.randomUUID(), from: "system", text: `Expression detected: ${expr.label} (${expr.confidence})` },
+        { 
+          id: crypto.randomUUID(), 
+          from: "system", 
+          text: `Expression detected: ${expr.label} (${expr.confidence})` 
+        },
       ]);
 
       // If confused → simplify answer
-      if (expr.label === "confused" && expr.confidence > 0.6) {
+      if (expr.label === "confused" && parseFloat(expr.confidence) > 0.6) {
         const latestAI = messages.filter((x) => x.from === "ai").slice(-1)[0];
         if (latestAI) {
-          const simpler = await summarizeText(latestAI.text, { simplify: true });
-          const reply = await sendQuickReply(simpler);
-
+          // Simulate AI response based on confusion detection
+          const reply = `Let me simplify that: ${latestAI.text.substring(0, 50)}...`;
+          
           setMessages((m) => [
             ...m,
             { id: crypto.randomUUID(), from: "ai", text: reply },
@@ -250,7 +385,39 @@ export default function CameraCapture() {
                     </>
                   )}
                 </button>
+                
+                {sessionId && (
+                  <a 
+                    href={`/camera/stream/${sessionId}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center justify-center space-x-2 py-2 px-4 bg-slate-700 hover:bg-slate-600 text-white rounded-lg font-medium transition-all text-sm"
+                  >
+                    <Eye size={16} />
+                    <span>View Stream</span>
+                  </a>
+                )}
               </div>
+              
+              {/* Session Status Info */}
+              {sessionStatus && (
+                <div className="mt-4 p-3 bg-slate-900/60 rounded-lg">
+                  <div className="text-xs space-y-1">
+                    <div className="flex justify-between text-slate-400">
+                      <span>Resolution:</span>
+                      <span className="text-slate-300">{sessionStatus.resolution || 'N/A'}</span>
+                    </div>
+                    <div className="flex justify-between text-slate-400">
+                      <span>FPS:</span>
+                      <span className="text-slate-300">{sessionStatus.fps || 'N/A'}</span>
+                    </div>
+                    <div className="flex justify-between text-slate-400">
+                      <span>Status:</span>
+                      <span className="text-green-400">{sessionStatus.status || 'active'}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Expression Analysis */}
@@ -366,7 +533,7 @@ export default function CameraCapture() {
               </div>
             </div>
             <div className="text-slate-400 text-sm">
-              Detection Interval: 2.0s
+              Detection Interval: 2.0s | Session: {sessionId ? sessionId.substring(0, 8) + '...' : 'None'}
             </div>
           </div>
         </div>

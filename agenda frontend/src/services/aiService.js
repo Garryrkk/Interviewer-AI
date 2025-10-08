@@ -1,4 +1,11 @@
 // use environment variable from Vite
+import api from "./apiConfig";
+
+async function postJSON(path, body) {
+  const resp = await api.post(path, body);
+  return resp.data;
+}
+
 const BACKEND_BASE =
   import.meta.env.VITE_BACKEND_URL?.replace(/\/$/, "") ?? "/api/v1";
 
@@ -35,7 +42,7 @@ export async function QuickRespond(prompt) {
   return postJSON("/ai/quick-respond", { prompt });
 }
 
-/**
+/**   
  * Summarization
  * @param {string} text - full transcript or meeting notes
  */
@@ -51,7 +58,7 @@ export async function KeyInsights(text) {
   return postJSON("/ai/key-insights", { text });
 }
 
-/**
+/** 
  * Hands Free   
  * @param {Object} context - { meetingId, action, ... }
  * Designed for triggering hands-free AI actions

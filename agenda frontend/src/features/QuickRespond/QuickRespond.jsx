@@ -1,210 +1,449 @@
-import { useState } from "react";
-import { sendQuickReply } from "./quickRespondUtils";
-import { Activity, Send, MessageCircle, Sparkles } from 'lucide-react';
-import { QuickRespond } from "../../services/aiService";
+import React, { useState, useRef, useEffect } from 'react';
+import { Upload, Play, Square, Settings, Users, BarChart3, Clock, AlertTriangle, CheckCircle, XCircle, Camera, Mic, FileText, Download, RefreshCw } from 'lucide-react';
 
-export default function QuickRespond() {
-  const [input, setInput] = useState("");
-  const [response, setResponse] = useState("");
-  const [loading, setLoading] = useState(false);
+// Main Dashboard Component
+const MeetingAnalysisDashboard = () => {
+  const [activeTab, setActiveTab] = useState('analyze');
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [analysisResult, setAnalysisResult] = useState(null);
+  const [healthStatus, setHealthStatus] = useState(null);
+  const [meetingContext, setMeetingContext] = useState('');
+  const [audioTranscript, setAudioTranscript] = useState('');
+  const [batchResults, setBatchResults] = useState([]);
+  const [configs, setConfigs] = useState({
+    ollama: [],
+    quickRespond: [],
+    modelPrompts: []
+  });
+  const [urgencyLevels, setUrgencyLevels] = useState([]);
+  const [paginatedData, setPaginatedData] = useState(null);
+  const [streamingData, setStreamingData] = useState('');
+  const [isStreaming, setIsStreaming] = useState(false);
+  
+  const fileInputRef = useRef(null);
+  const batchFileInputRef = useRef(null);
 
-  async function handleSend() {
-    if (!input.trim()) return;
-    setLoading(true);
-    const reply = await sendQuickReply(input);
-    setResponse(reply);
-    setLoading(false);
-  }
+  // Initialize component
+  useEffect(() => {
+    checkHealth();
+    fetchUrgencyLevels();
+    fetchConfigs();
+  }, []);
 
-  const handleKeyPress = (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
+  // API Service Functions
+  const apiService = {
+    baseUrl: 'http://localhost:8000/api/quick-respond',
+    
+    async request(endpoint, options = {}) {
+      const url = `${this.baseUrl}${endpoint}`;
+      const config = {
+        headers: {
+          'Content-Type': 'application/json',
+          ...options.headers
+        },
+        ...options
+      };
+      
+      try {
+        const response = await fetch(url, config);
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        return await response.json();
+      } catch (error) {
+        console.error('API request failed:', error);
+        throw error;
+      }
+    },
+
+    async uploadFile(endpoint, file, additionalData = {}) {
+      const formData = new FormData();
+      formData.append('screenshot', file);
+      
+      Object.keys(additionalData).forEach(key => {
+        if (additionalData[key] !== null && additionalData[key] !== undefined) {
+          formData.append(key, additionalData[key]);
+        }
+      });
+
+      const response = await fetch(`${this.baseUrl}${endpoint}`, {
+        method: 'POST',
+        body: formData
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      return await response.json();
+    },
+
+    async streamAnalysis(file, additionalData = {}) {
+      const formData = new FormData();
+      formData.append('screenshot', file);
+      
+      Object.keys(additionalData).forEach(key => {
+        if (additionalData[key] !== null && additionalData[key] !== undefined) {
+          formData.append(key, additionalData[key]);
+        }
+      });
+
+      const response = await fetch(`${this.baseUrl}/analyze-screenshot/stream`, {
+        method: 'POST',
+        body: formData
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      return response;
     }
   };
 
-  // Simplify a response
-  async function handleSimplify() {
-    if (!response) return;
-    setLoading(true);
+  // Handler Functions
+  const checkHealth = async () => {
     try {
-      const res = await fetch(`${BASE_URL}/simplify`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ original_analysis: response })
+      const health = await apiService.request('/health');
+      setHealthStatus(health);
+    } catch (error) {
+      console.error('Health check failed:', error);
+      setHealthStatus({ status: 'error', error: error.message });
+    }
+  };
+
+  const fetchUrgencyLevels = async () => {
+    try {
+      const levels = await apiService.request('/urgency-levels');
+      setUrgencyLevels(levels);
+    } catch (error) {
+      console.error('Failed to fetch urgency levels:', error);
+    }
+  };
+
+  const fetchConfigs = async () => {
+    try {
+      const [ollama, quickRespond, modelPrompts] = await Promise.all([
+        apiService.request('/ollama-config'),
+        apiService.request('/quick-respond-config'),
+        apiService.request('/model-prompts')
+      ]);
+      
+      setConfigs({
+        ollama,
+        quickRespond,
+        modelPrompts
       });
-      const data = await res.json();
-      setResponse(data.simplified_text);
-    } catch (err) {
-      console.error("Simplify failed:", err);
-    } finally {
-      setLoading(false);
+    } catch (error) {
+      console.error('Failed to fetch configs:', error);
     }
-  }
+  };
 
-  // Run advanced analysis
-  async function handleAdvancedAnalysis() {
-    setLoading(true);
+  const handleFileAnalysis = async (file) => {
+    if (!file) return;
+
+    setIsAnalyzing(true);
+    setAnalysisResult(null);
+
     try {
-      const res = await fetch(`${BASE_URL}/advanced`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: input })
-      });
-      const data = await res.json();
-      setResponse(data.full_analysis);
-    } catch (err) {
-      console.error("Advanced analysis failed:", err);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  // Health check
-  async function checkHealth() {
-    try {
-      const res = await fetch(`${BASE_URL}/health`);
-      const data = await res.json();
-      alert(`Service status: ${data.status}, response time: ${data.response_time_ms}ms`);
-    } catch (err) {
-      console.error("Health check failed:", err);
-    }
-  }
-
-  // ================= Extra Routes =================
-
-  // Batch analysis
-  async function handleBatchAnalysis(files) {
-    setLoading(true);
-    try {
-      const formData = new FormData();
-      files.forEach((file) => formData.append("screenshots", file));
-      const res = await fetch(`${BASE_URL}/batch-analyze`, {
-        method: "POST",
-        body: formData,
-      });
-      const data = await res.json();
-      setResponse(JSON.stringify(data.batch_results, null, 2));
-    } catch (err) {
-      console.error("Batch analysis failed:", err);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  // Analyze screenshot
-  async function handleAnalyzeScreenshot(file) {
-    setLoading(true);
-    try {
-      const formData = new FormData();
-      formData.append("screenshot", file);
-      const res = await fetch(`${BASE_URL}/analyze-screenshot`, {
-        method: "POST",
-        body: formData,
-      });
-      const data = await res.json();
-      setResponse(data.full_analysis || JSON.stringify(data));
-    } catch (err) {
-      console.error("Screenshot analysis failed:", err);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  // Update meeting context
-  async function handleUpdateContext(contextText) {
-    try {
-      const res = await fetch(`${BASE_URL}/context/update`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ context: contextText }),
-      });
-      const data = await res.json();
-      alert(data.message);
-    } catch (err) {
-      console.error("Update context failed:", err);
-    }
-  }
-
-  // Clear meeting context
-  async function handleClearContext() {
-    try {
-      const res = await fetch(`${BASE_URL}/context/clear`, { method: "DELETE" });
-      const data = await res.json();
-      alert(data.message);
-    } catch (err) {
-      console.error("Clear context failed:", err);
-    }
-  }
-
-
-
-  const handleSimplify = async (analysisText) => {
-    try {
-      const result = await apiService.request('/simplify', {
-        method: 'POST',
-        body: JSON.stringify({
-          original_analysis: analysisText,
-          simplification_level: 1
-        })
+      const result = await apiService.uploadFile('/analyze-screenshot', file, {
+        meeting_context: meetingContext,
+        audio_transcript: audioTranscript
       });
       
-      return result;
+      setAnalysisResult(result);
     } catch (error) {
-      console.error('Simplification failed:', error);
-      return { error: error.message };
+      console.error('Analysis failed:', error);
+      setAnalysisResult({ error: error.message });
+    } finally {
+      setIsAnalyzing(false);
     }
   };
 
-  const updateMeetingContext = async (context) => {
+  const handleStreamingAnalysis = async (file) => {
+    if (!file) return;
+
+    setIsStreaming(true);
+    setStreamingData('');
+
     try {
-      await apiService.request('/context/update', {
-        method: 'POST',
-        body: JSON.stringify(context)
+      const response = await apiService.streamAnalysis(file, {
+        meeting_context: meetingContext,
+        audio_transcript: audioTranscript
+      });
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+
+        const chunk = decoder.decode(value);
+        const lines = chunk.split('\n');
+        
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6));
+              setStreamingData(prev => prev + JSON.stringify(data, null, 2) + '\n');
+            } catch (e) {
+              // Skip invalid JSON
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Streaming failed:', error);
+      setStreamingData(`Error: ${error.message}`);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const handleBatchAnalysis = async (files) => {
+    if (!files || files.length === 0) return;
+
+    setIsAnalyzing(true);
+    setBatchResults([]);
+
+    try {
+      const formData = new FormData();
+      Array.from(files).forEach(file => {
+        formData.append('screenshots', file);
       });
       
-      alert('Meeting context updated successfully!');
+      if (meetingContext) {
+        formData.append('meeting_context', meetingContext);
+      }
+
+      const response = await fetch(`${apiService.baseUrl}/batch-analyze`, {
+        method: 'POST',
+        body: formData
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const result = await response.json();
+      setBatchResults(result.batch_results || []);
     } catch (error) {
-      console.error('Failed to update context:', error);
-      alert('Failed to update meeting context');
+      console.error('Batch analysis failed:', error);
+      setBatchResults([{ error: error.message }]);
+    } finally {
+      setIsAnalyzing(false);
+    }
+  }
+
+
+
+  const createMeetingStatus = async (statusData) => {
+    try {
+      const response = await fetch(`${BASE_URL}/api/meeting_status/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(statusData)
+      });
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      await fetchMeetingStatuses();
+      alert('Meeting status created successfully!');
+    } catch (error) {
+      console.error('Failed to create meeting status:', error);
+      alert('Failed to create meeting status');
     }
   };
 
-  const clearMeetingContext = async () => {
+  const deleteMeetingStatus = async (id) => {
     try {
-      await apiService.request('/context/clear', {
+      const response = await fetch(`${BASE_URL}/api/meeting_status/${id}`, {
         method: 'DELETE'
       });
-      
-      setMeetingContext('');
-      setAudioTranscript('');
-      alert('Meeting context cleared successfully!');
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      await fetchMeetingStatuses();
+      alert('Meeting status deleted successfully!');
     } catch (error) {
-      console.error('Failed to clear context:', error);
-      alert('Failed to clear meeting context');
+      console.error('Failed to delete meeting status:', error);
+      alert('Failed to delete meeting status');
     }
   };
+
+  // ============================================================================
+  // CRUD OPERATIONS - PARTICIPANTS
+  // ============================================================================
+
+  const fetchParticipants = async () => {
+    try {
+      const response = await fetch(`${BASE_URL}/api/participant_info/`);
+      const data = await response.json();
+      setParticipants(data);
+    } catch (error) {
+      console.error('Failed to fetch participants:', error);
+    }
+  };
+
+  const createParticipant = async (participantData) => {
+    try {
+      const response = await fetch(`${BASE_URL}/api/participant_info/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(participantData)
+      });
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      await fetchParticipants();
+      alert('Participant created successfully!');
+    } catch (error) {
+      console.error('Failed to create participant:', error);
+      alert('Failed to create participant');
+    }
+  };
+
+  const deleteParticipant = async (id) => {
+    try {
+      const response = await fetch(`${BASE_URL}/api/participant_info/${id}`, {
+        method: 'DELETE'
+      });
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      await fetchParticipants();
+      alert('Participant deleted successfully!');
+    } catch (error) {
+      console.error('Failed to delete participant:', error);
+      alert('Failed to delete participant');
+    }
+  };
+
+  // ============================================================================
+  // CRUD OPERATIONS - SCREEN CONTENT
+  // ============================================================================
+
+  const fetchScreenContents = async () => {
+    try {
+      const response = await fetch(`${BASE_URL}/api/screen_content/`);
+      const data = await response.json();
+      setScreenContents(data);
+    } catch (error) {
+      console.error('Failed to fetch screen contents:', error);
+    }
+  };
+
+  const createScreenContent = async (contentData) => {
+    try {
+      const response = await fetch(`${BASE_URL}/api/screen_content/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(contentData)
+      });
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      await fetchScreenContents();
+      alert('Screen content created successfully!');
+    } catch (error) {
+      console.error('Failed to create screen content:', error);
+      alert('Failed to create screen content');
+    }
+  };
+
+  const deleteScreenContent = async (id) => {
+    try {
+      const response = await fetch(`${BASE_URL}/api/screen_content/${id}`, {
+        method: 'DELETE'
+      });
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      await fetchScreenContents();
+      alert('Screen content deleted successfully!');
+    } catch (error) {
+      console.error('Failed to delete screen content:', error);
+      alert('Failed to delete screen content');
+    }
+  };
+
+  // ============================================================================
+  // CRUD OPERATIONS - MEETING METRICS
+  // ============================================================================
+
+  const fetchMeetingMetrics = async () => {
+    try {
+      const response = await fetch(`${BASE_URL}/api/meeting_metrics/`);
+      const data = await response.json();
+      setMeetingMetrics(data);
+    } catch (error) {
+      console.error('Failed to fetch meeting metrics:', error);
+    }
+  };
+
+  const createMeetingMetrics = async (metricsData) => {
+    try {
+      const response = await fetch(`${BASE_URL}/api/meeting_metrics/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(metricsData)
+      });
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      await fetchMeetingMetrics();
+      alert('Meeting metrics created successfully!');
+    } catch (error) {
+      console.error('Failed to create meeting metrics:', error);
+      alert('Failed to create meeting metrics');
+    }
+  };
+
+  const deleteMeetingMetrics = async (id) => {
+    try {
+      const response = await fetch(`${BASE_URL}/api/meeting_metrics/${id}`, {
+        method: 'DELETE'
+      });
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      await fetchMeetingMetrics();
+      alert('Meeting metrics deleted successfully!');
+    } catch (error) {
+      console.error('Failed to delete meeting metrics:', error);
+      alert('Failed to delete meeting metrics');
+    }
+  };
+
+  // ============================================================================
+  // PAGINATION
+  // ============================================================================
 
   const fetchPaginatedItems = async (page = 1, pageSize = 10) => {
     try {
-      const result = await apiService.request(`/items?page=${page}&page_size=${pageSize}`);
-      setPaginatedData(result);
+      const response = await fetch(`${BASE_URL}/api/items?page=${page}&page_size=${pageSize}`);
+      const data = await response.json();
+      setPaginatedData(data);
     } catch (error) {
       console.error('Failed to fetch paginated data:', error);
     }
   };
 
-  // Utility function to get urgency color
+  // ============================================================================
+  // FETCH ALL DATA
+  // ============================================================================
+
+  const fetchAllData = async () => {
+    await Promise.all([
+      fetchMeetingStatuses(),
+      fetchParticipants(),
+      fetchScreenContents(),
+      fetchMeetingMetrics()
+    ]);
+  };
+
+  // ============================================================================
+  // UTILITY FUNCTIONS
+  // ============================================================================
+
   const getUrgencyColor = (urgency) => {
-    switch (urgency) {
-      case 'HIGH': return 'text-red-500';
-      case 'MEDIUM': return 'text-yellow-500';
-      case 'LOW': return 'text-green-500';
-      default: return 'text-gray-500';
+    switch (urgency?.toUpperCase()) {
+      case 'HIGH': return 'bg-red-500 text-white';
+      case 'MEDIUM': return 'bg-yellow-500 text-black';
+      case 'LOW': return 'bg-green-500 text-white';
+      default: return 'bg-gray-500 text-white';
     }
   };
 
-  // Render Health Status
+  // ============================================================================
+  // RENDER FUNCTIONS
+  // ============================================================================
+
   const renderHealthStatus = () => (
     <div className="bg-gray-800 rounded-lg p-4 mb-6">
       <div className="flex items-center justify-between">
@@ -227,129 +466,150 @@ export default function QuickRespond() {
               <CheckCircle className="w-5 h-5 text-green-500 mr-2" /> :
               <XCircle className="w-5 h-5 text-red-500 mr-2" />
             }
-            <span className="text-sm text-gray-300">Overall</span>
+            <span className="text-sm text-gray-300">Overall: {healthStatus.status}</span>
           </div>
           
-          <div className="flex items-center">
-            {healthStatus.ollama ? 
-              <CheckCircle className="w-5 h-5 text-green-500 mr-2" /> :
-              <XCircle className="w-5 h-5 text-red-500 mr-2" />
-            }
-            <span className="text-sm text-gray-300">Ollama</span>
+          {healthStatus.services && Object.entries(healthStatus.services).map(([service, status]) => (
+            <div key={service} className="flex items-center">
+              {status === 'available' ? 
+                <CheckCircle className="w-5 h-5 text-green-500 mr-2" /> :
+                <XCircle className="w-5 h-5 text-red-500 mr-2" />
+              }
+              <span className="text-sm text-gray-300">{service}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+
+  // Render Analysis Tab
+  const renderAnalysisTab = () => (
+    <div className="space-y-6">
+      {/* Context Inputs */}
+      <div className="bg-gray-800 rounded-lg p-6">
+        <h3 className="text-lg font-semibold text-gray-200 mb-4">Meeting Context</h3>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-2">
+              Meeting Context
+            </label>
+            <textarea
+              value={meetingContext}
+              onChange={(e) => setMeetingContext(e.target.value)}
+              className="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+              rows="3"
+              placeholder="Enter meeting context, agenda, or relevant information..."
+            />
           </div>
           
-          <div className="flex items-center">
-            {healthStatus.llava_model ? 
-              <CheckCircle className="w-5 h-5 text-green-500 mr-2" /> :
-              <XCircle className="w-5 h-5 text-red-500 mr-2" />
-            }
-            <span className="text-sm text-gray-300">LLAVA</span>
-          </div>
-          
-          <div className="flex items-center">
-            {healthStatus.llama_model ? 
-              <CheckCircle className="w-5 h-5 text-green-500 mr-2" /> :
-              <XCircle className="w-5 h-5 text-red-500 mr-2" />
-            }
-            <span className="text-sm text-gray-300">Llama</span>
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-2">
+              Audio Transcript
+            </label>
+            <textarea
+              value={audioTranscript}
+              onChange={(e) => setAudioTranscript(e.target.value)}
+              className="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+              rows="3"
+              placeholder="Enter recent audio transcript..."
+            />
           </div>
         </div>
+        
+        <div className="flex gap-2 mt-4">
+          <button
+            onClick={() => updateMeetingContext({
+              meeting_title: "Current Meeting",
+              participants: [],
+              agenda: meetingContext,
+              meeting_type: "general"
+            })}
+            className="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg text-white transition-colors"
+          >
+            Update Context
+          </button>
+          
+          <button
+            onClick={clearMeetingContext}
+            className="px-4 py-2 bg-gray-600 hover:bg-gray-700 rounded-lg text-white transition-colors"
+          >
+            Clear Context
+          </button>
+        </div>
+      </div>
 
-        {/* Main Content Grid */}
-        <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-          {/* Input Section */}
-          <div className="xl:col-span-2 space-y-6">
-            <div className="bg-slate-800/50 backdrop-blur p-6 rounded-xl border border-slate-700">
-              <h3 className="text-xl font-semibold mb-4 text-slate-200 flex items-center">
-                <MessageCircle className="mr-3" size={20} />
-                Compose Response
-              </h3>
-              
+      {/* Single Screenshot Analysis */}
+      <div className="bg-gray-800 rounded-lg p-6">
+        <h3 className="text-lg font-semibold text-gray-200 mb-4 flex items-center">
+          <Camera className="w-5 h-5 mr-2" />
+          Screenshot Analysis
+        </h3>
+        
+        <div className="flex gap-4 mb-4">
+          <input
+            type="file"
+            ref={fileInputRef}
+            className="hidden"
+            accept="image/*"
+            onChange={(e) => e.target.files[0] && handleFileAnalysis(e.target.files[0])}
+          />
+          
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isAnalyzing}
+            className="flex items-center px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-white transition-colors"
+          >
+            <Upload className="w-4 h-4 mr-2" />
+            {isAnalyzing ? 'Analyzing...' : 'Upload & Analyze'}
+          </button>
+          
+          <button
+            onClick={() => {
+              const file = fileInputRef.current?.files[0];
+              if (file) handleStreamingAnalysis(file);
+            }}
+            disabled={isStreaming || !fileInputRef.current?.files[0]}
+            className="flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-white transition-colors"
+          >
+            <Play className="w-4 h-4 mr-2" />
+            {isStreaming ? 'Streaming...' : 'Stream Analysis'}
+          </button>
+        </div>
+        
+        {analysisResult && (
+          <div className="mt-4 bg-gray-700 rounded-lg p-4">
+            <h4 className="text-md font-semibold text-gray-200 mb-3">Analysis Results</h4>
+            
+            {analysisResult.error ? (
+              <div className="text-red-400">
+                Error: {analysisResult.error}
+              </div>
+            ) : (
               <div className="space-y-4">
-                <div>
-                  <label className="text-slate-300 text-sm mb-2 block">Your Message</label>
-                  <textarea
-                    placeholder="Type your answer or response here..."
-                    value={input}
-                    onChange={(e) => setInput(e.target.value)}
-                    onKeyPress={handleKeyPress}
-                    rows={8}
-                    className="w-full bg-slate-900/80 border border-slate-600 rounded-lg px-4 py-3 text-slate-100 placeholder-slate-500 focus:border-green-500 focus:ring-2 focus:ring-green-500/20 focus:outline-none transition-colors resize-none"
-                  />
-                  <div className="flex justify-between mt-2">
-                    <span className="text-slate-500 text-xs">Press Enter to send, Shift+Enter for new line</span>
-                    <span className="text-slate-500 text-xs">{input.length} characters</span>
-                  </div>
-                </div>
-
-                <div className="flex space-x-3">
-                  <button 
-                    onClick={handleSend} 
-                    disabled={loading || !input.trim()}
-                    className="flex-1 bg-gradient-to-r from-green-600 to-green-700 text-white py-3 px-6 rounded-lg hover:from-green-700 hover:to-green-800 transition-all flex items-center justify-center space-x-2 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {loading ? (
-                      <>
-                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                        <span>Processing...</span>
-                      </>
-                    ) : (
-                      <>
-                        <Send size={18} />
-                        <span>Send Response</span>
-                      </>
-                    )}
-                  </button>
-                  
-                  <button 
-                    onClick={() => {setInput(""); setResponse("");}}
-                    className="bg-slate-700 text-slate-300 py-3 px-6 rounded-lg hover:bg-slate-600 transition-colors font-medium"
-                  >
-                    Clear
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* Quick Actions */}
-            <div className="bg-slate-800/50 backdrop-blur p-6 rounded-xl border border-slate-700">
-              <h3 className="text-lg font-semibold mb-4 text-slate-200">Quick Templates</h3>
-              <div className="grid grid-cols-2 gap-3">
-                {[
-                  "Thank you for your question...",
-                  "I understand your concern...",
-                  "Let me clarify that point...",
-                  "That's an excellent observation..."
-                ].map((template, index) => (
-                  <button
-                    key={index}
-                    onClick={() => setInput(template)}
-                    className="text-left p-3 bg-slate-900/50 hover:bg-slate-700/50 rounded-lg transition-colors text-slate-300 text-sm border border-slate-700 hover:border-slate-600"
-                  >
-                    {template}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {/* Response Section */}
-          <div className="space-y-6">
-            <div className="bg-slate-800/50 backdrop-blur p-6 rounded-xl border border-slate-700">
-              <h3 className="text-lg font-semibold mb-4 text-slate-200 flex items-center">
-                <Sparkles className="mr-2" size={20} />
-                AI Response
-              </h3>
-              
-              <div className="bg-slate-900/80 p-4 rounded-lg min-h-64 max-h-96 overflow-y-auto border border-slate-700">
-                {loading ? (
-                  <div className="flex flex-col items-center justify-center py-8">
-                    <div className="w-8 h-8 border-4 border-green-600/30 border-t-green-600 rounded-full animate-spin mb-4"></div>
-                    <p className="text-slate-400 text-sm">AI is generating your response...</p>
+                {/* Key Insights */}
+                {analysisResult.key_insights && analysisResult.key_insights.length > 0 && (
+                  <div>
+                    <h5 className="font-medium text-gray-300 mb-2">Key Insights:</h5>
+                    <div className="space-y-2">
+                      {analysisResult.key_insights.map((insight, index) => (
+                        <div key={index} className="bg-gray-600 rounded p-3">
+                          <div className="flex items-start justify-between">
+                            <p className="text-gray-200 flex-1">{insight.insight}</p>
+                            <span className={`ml-2 px-2 py-1 rounded text-xs font-medium ${getUrgencyColor(insight.urgency)}`}>
+                              {insight.urgency}
+                            </span>
+                          </div>
+                          {insight.context && (
+                            <p className="text-gray-400 text-sm mt-1">{insight.context}</p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
                 
-                {/* Full Analysis */}
                 {analysisResult.full_analysis && (
                   <div>
                     <div className="flex justify-between items-center mb-2">
@@ -367,27 +627,69 @@ export default function QuickRespond() {
                   </div>
                 )}
                 
-                {/* Metadata */}
+                {simplifiedResult && (
+                  <div>
+                    <h5 className="font-medium text-gray-300 mb-2">Simplified Analysis:</h5>
+                    <div className="bg-gray-600 rounded p-3">
+                      <p className="text-gray-200 whitespace-pre-wrap">{simplifiedResult.simplified_text}</p>
+                    </div>
+                  </div>
+                )}
+                
                 <div className="text-sm text-gray-400 flex justify-between">
-                  <span>Confidence: {(analysisResult.confidence_score * 100).toFixed(1)}%</span>
+                  <span>Confidence: {((analysisResult.confidence_score || 0) * 100).toFixed(1)}%</span>
                   <span>Session: {analysisResult.session_id}</span>
                 </div>
               </div>
-              
-              {response && (
-                <div className="mt-4 flex space-x-2">
-                  <button 
-                    onClick={() => navigator.clipboard.writeText(response)}
-                    className="bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
-                  >
-                    Copy Response
-                  </button>
-                  <button 
-                    onClick={() => setResponse("")}
-                    className="bg-slate-700 text-slate-300 py-2 px-4 rounded-lg hover:bg-slate-600 transition-colors text-sm font-medium"
-                  >
-                    Clear Response
-                  </button>
+            )}
+          </div>
+        )}
+        
+        {/* Streaming Results */}
+        {streamingData && (
+          <div className="mt-4 bg-gray-700 rounded-lg p-4">
+            <h4 className="text-md font-semibold text-gray-200 mb-3">Streaming Results</h4>
+            <pre className="text-gray-300 text-sm whitespace-pre-wrap max-h-64 overflow-y-auto">
+              {streamingData}
+            </pre>
+          </div>
+        )}
+      </div>
+
+      {/* Batch Analysis */}
+      <div className="bg-gray-800 rounded-lg p-6">
+        <h3 className="text-lg font-semibold text-gray-200 mb-4 flex items-center">
+          <FileText className="w-5 h-5 mr-2" />
+          Batch Analysis
+        </h3>
+        
+        <input
+          type="file"
+          ref={batchFileInputRef}
+          className="hidden"
+          accept="image/*"
+          multiple
+          onChange={(e) => e.target.files.length > 0 && handleBatchAnalysis(e.target.files)}
+        />
+        
+        <button
+          onClick={() => batchFileInputRef.current?.click()}
+          disabled={isAnalyzing}
+          className="flex items-center px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-white transition-colors"
+        >
+          <Upload className="w-4 h-4 mr-2" />
+          {isAnalyzing ? 'Processing...' : 'Upload Multiple Screenshots'}
+        </button>
+        
+        {batchResults.length > 0 && (
+          <div className="mt-4 space-y-3">
+            <h4 className="text-md font-semibold text-gray-200">Batch Results</h4>
+            {batchResults.map((result, index) => (
+              <div key={index} className="bg-gray-700 rounded-lg p-3">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-gray-300 font-medium">
+                    {result.filename || `Screenshot ${index + 1}`}
+                  </span>
                 </div>
                 
                 {result.error ? (
@@ -414,75 +716,131 @@ export default function QuickRespond() {
     </div>
   );
 
-  // Render Configuration Tab
-  const renderConfigTab = () => (
+  const renderDataTab = () => (
     <div className="space-y-6">
       <div className="bg-gray-800 rounded-lg p-6">
-        <h3 className="text-lg font-semibold text-gray-200 mb-4">Configuration Management</h3>
-        
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div>
-            <h4 className="font-medium text-gray-300 mb-2">Ollama Configs</h4>
-            <div className="bg-gray-700 rounded p-3 min-h-[100px]">
-              {configs.ollama.length === 0 ? (
-                <p className="text-gray-400 text-sm">No configurations found</p>
-              ) : (
-                configs.ollama.map((config, index) => (
-                  <div key={index} className="text-gray-300 text-sm mb-1">
-                    {config.base_url || 'Default Config'}
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-          
-          <div>
-            <h4 className="font-medium text-gray-300 mb-2">Quick Respond Configs</h4>
-            <div className="bg-gray-700 rounded p-3 min-h-[100px]">
-              {configs.quickRespond.length === 0 ? (
-                <p className="text-gray-400 text-sm">No configurations found</p>
-              ) : (
-                configs.quickRespond.map((config, index) => (
-                  <div key={index} className="text-gray-300 text-sm mb-1">
-                    Config {index + 1}
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-          
-          <div>
-            <h4 className="font-medium text-gray-300 mb-2">Model Prompts</h4>
-            <div className="bg-gray-700 rounded p-3 min-h-[100px]">
-              {configs.modelPrompts.length === 0 ? (
-                <p className="text-gray-400 text-sm">No prompts found</p>
-              ) : (
-                configs.modelPrompts.map((prompt, index) => (
-                  <div key={index} className="text-gray-300 text-sm mb-1">
-                    Prompt {index + 1}
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="text-lg font-semibold text-gray-200">Meeting Statuses</h3>
+          <button
+            onClick={fetchMeetingStatuses}
+            className="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg text-white transition-colors"
+          >
+            Refresh
+          </button>
         </div>
-        
-        <button
-          onClick={fetchConfigs}
-          className="mt-4 px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg text-white transition-colors"
-        >
-          Refresh Configs
-        </button>
+        <div className="space-y-2">
+          {meetingStatuses.length === 0 ? (
+            <p className="text-gray-400">No meeting statuses found</p>
+          ) : (
+            meetingStatuses.map((status, index) => (
+              <div key={index} className="bg-gray-700 rounded p-3 flex justify-between items-center">
+                <span className="text-gray-200">{status.status || `Status ${status.id}`}</span>
+                <button
+                  onClick={() => deleteMeetingStatus(status.id)}
+                  className="p-2 bg-red-600 hover:bg-red-700 rounded transition-colors"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            ))
+          )}
+        </div>
       </div>
 
-      {/* Urgency Levels */}
+      <div className="bg-gray-800 rounded-lg p-6">
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="text-lg font-semibold text-gray-200">Participants</h3>
+          <button
+            onClick={fetchParticipants}
+            className="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg text-white transition-colors"
+          >
+            Refresh
+          </button>
+        </div>
+        <div className="space-y-2">
+          {participants.length === 0 ? (
+            <p className="text-gray-400">No participants found</p>
+          ) : (
+            participants.map((participant, index) => (
+              <div key={index} className="bg-gray-700 rounded p-3 flex justify-between items-center">
+                <span className="text-gray-200">{participant.name || `Participant ${participant.id}`}</span>
+                <button
+                  onClick={() => deleteParticipant(participant.id)}
+                  className="p-2 bg-red-600 hover:bg-red-700 rounded transition-colors"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+
+      <div className="bg-gray-800 rounded-lg p-6">
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="text-lg font-semibold text-gray-200">Screen Contents</h3>
+          <button
+            onClick={fetchScreenContents}
+            className="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg text-white transition-colors"
+          >
+            Refresh
+          </button>
+        </div>
+        <div className="space-y-2">
+          {screenContents.length === 0 ? (
+            <p className="text-gray-400">No screen contents found</p>
+          ) : (
+            screenContents.map((content, index) => (
+              <div key={index} className="bg-gray-700 rounded p-3 flex justify-between items-center">
+                <span className="text-gray-200">{content.content || `Content ${content.id}`}</span>
+                <button
+                  onClick={() => deleteScreenContent(content.id)}
+                  className="p-2 bg-red-600 hover:bg-red-700 rounded transition-colors"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+
+      <div className="bg-gray-800 rounded-lg p-6">
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="text-lg font-semibold text-gray-200">Meeting Metrics</h3>
+          <button
+            onClick={fetchMeetingMetrics}
+            className="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg text-white transition-colors"
+          >
+            Refresh
+          </button>
+        </div>
+        <div className="space-y-2">
+          {meetingMetrics.length === 0 ? (
+            <p className="text-gray-400">No meeting metrics found</p>
+          ) : (
+            meetingMetrics.map((metric, index) => (
+              <div key={index} className="bg-gray-700 rounded p-3 flex justify-between items-center">
+                <span className="text-gray-200">Metrics {metric.id}</span>
+                <button
+                  onClick={() => deleteMeetingMetrics(metric.id)}
+                  className="p-2 bg-red-600 hover:bg-red-700 rounded transition-colors"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+
       <div className="bg-gray-800 rounded-lg p-6">
         <h3 className="text-lg font-semibold text-gray-200 mb-4">Urgency Levels</h3>
         <div className="flex flex-wrap gap-2">
           {urgencyLevels.map((level, index) => (
             <span
               key={index}
-              className={`px-3 py-1 rounded-full text-sm font-medium ${getUrgencyColor(level)}`}
+              className={`px-3 py-2 rounded-full text-sm font-medium ${getUrgencyColor(level)}`}
             >
               {level}
             </span>
@@ -490,16 +848,16 @@ export default function QuickRespond() {
         </div>
       </div>
 
-      {/* Paginated Data Demo */}
       <div className="bg-gray-800 rounded-lg p-6">
-        <h3 className="text-lg font-semibold text-gray-200 mb-4">Paginated Items Demo</h3>
-        
-        <button
-          onClick={() => fetchPaginatedItems()}
-          className="mb-4 px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg text-white transition-colors"
-        >
-          Fetch Items
-        </button>
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="text-lg font-semibold text-gray-200">Paginated Items</h3>
+          <button
+            onClick={() => fetchPaginatedItems()}
+            className="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg text-white transition-colors"
+          >
+            Load Items
+          </button>
+        </div>
         
         {paginatedData && (
           <div>
@@ -510,15 +868,15 @@ export default function QuickRespond() {
               </p>
             </div>
             
-            <div className="bg-gray-700 rounded p-3 max-h-40 overflow-y-auto">
+            <div className="bg-gray-700 rounded p-3 max-h-60 overflow-y-auto mb-4">
               {paginatedData.items.map((item, index) => (
-                <div key={index} className="text-gray-300 text-sm py-1">
+                <div key={index} className="text-gray-300 text-sm py-1 border-b border-gray-600 last:border-b-0">
                   {typeof item === 'string' ? item : JSON.stringify(item)}
                 </div>
               ))}
             </div>
             
-            <div className="flex gap-2 mt-4">
+            <div className="flex gap-2">
               <button
                 onClick={() => fetchPaginatedItems(paginatedData.page - 1)}
                 disabled={paginatedData.page <= 1}
@@ -542,18 +900,15 @@ export default function QuickRespond() {
   );
 
   return (
-    <div style={{ fontFamily: 'Roboto, sans-serif', backgroundColor: '#1E1E2F', minHeight: '100vh', color: '#F8FAFC' }}>
-      <div className="container mx-auto px-4 py-8">
-        {/* Header */}
+    <div style={{ fontFamily: 'system-ui, -apple-system, sans-serif', backgroundColor: '#1E1E2F', minHeight: '100vh', color: '#F8FAFC' }}>
+      <div className="container mx-auto px-4 py-8" style={{ maxWidth: '1400px' }}>
         <div className="text-center mb-8">
           <h1 className="text-3xl font-bold text-white mb-2">Meeting Analysis Dashboard</h1>
           <p className="text-gray-400">AI-powered meeting screenshot analysis and insights</p>
         </div>
 
-        {/* Health Status */}
         {renderHealthStatus()}
 
-        {/* Navigation Tabs */}
         <div className="flex justify-center mb-8">
           <div className="bg-gray-800 rounded-lg p-1 flex space-x-1">
             <button
@@ -568,22 +923,21 @@ export default function QuickRespond() {
             </button>
             
             <button
-              onClick={() => setActiveTab('config')}
+              onClick={() => setActiveTab('data')}
               className={`px-6 py-2 rounded-lg font-medium transition-colors ${
-                activeTab === 'config'
+                activeTab === 'data'
                   ? 'bg-purple-600 text-white'
                   : 'text-gray-400 hover:text-white'
               }`}
             >
-              Configuration
+              Data Management
             </button>
           </div>
         </div>
 
-        {/* Tab Content */}
         <div className="max-w-6xl mx-auto">
           {activeTab === 'analyze' && renderAnalysisTab()}
-          {activeTab === 'config' && renderConfigTab()}
+          {activeTab === 'data' && renderDataTab()}
         </div>
       </div>
     </div>

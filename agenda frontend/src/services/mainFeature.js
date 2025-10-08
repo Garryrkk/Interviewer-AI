@@ -17,4 +17,4 @@ export async function pollHiddenSuggestions(meetingId) {
   const { data } = await api.get(`/main/hidden-suggestions/${meetingId}`);
   return data; // { suggestions: [...] }
 }
-   
+       

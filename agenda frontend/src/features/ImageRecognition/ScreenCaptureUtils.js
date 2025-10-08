@@ -3,7 +3,28 @@
  * Handles all API calls, data processing, and business logic
  * for the Meeting Summarization Application
  */
+import { ScreenCapture } from '../../services/imageService';
+import { captureScreenAndAnalyze } from '../../services/imageService';
 
+
+// Directly capture screen and get Blob
+ScreenCapture()
+  .then(blob => {
+    console.log("Screen captured Blob:", blob);
+  })
+  .catch(err => {
+    console.error("Screen capture error:", err);
+  });
+
+// Directly capture screen and analyze it
+captureScreenAndAnalyze()
+  .then(result => {
+    console.log("Analysis result:", result);
+  })
+  .catch(err => {
+    console.error("Analysis error:", err);
+  });
+  
 class MeetingSummarizationService {
   constructor() {
     this.API_BASE_URL = process.env.REACT_APP_API_BASE_URL || '/api/v1/summarization';

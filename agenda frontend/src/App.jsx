@@ -1,5 +1,6 @@
 import { BrowserRouter as Router, Route, Routes } from "react-router-dom";
 
+// ✅ Import all features
 import QuickRespond from "./features/QuickRespond/QuickRespond";
 import Summarization from "./features/Summarization/Summarization";
 import VoiceRecognition from "./features/VoiceRecognition/VoiceRecognition";
@@ -9,6 +10,20 @@ import KeyInsights from "./features/KeyInsights/KeyInsights";
 import HandsFree from "./features/HandsFree/HandsFree";
 import Overlay from "./features/MainFeature/Overlay";
 import HiddenTest from "./HiddenTest";
+
+// ✅ Minimal test component to verify backend connection
+function TestBackend() {
+  const [msg, setMsg] = React.useState("");
+
+  React.useEffect(() => {
+    fetch("http://127.0.0.1:8000/ping")
+      .then(res => res.json())
+      .then(data => setMsg(data.message))
+      .catch(err => console.error("TestBackend API error:", err));
+  }, []);
+
+  return <div className="text-center mt-4">Backend says: {msg}</div>;
+}
 
 function App() {
   return (
@@ -27,6 +42,10 @@ function App() {
             <Route path="/overlay" element={<Overlay />} />
             <Route path="/hidden-test" element={<HiddenTest />} />
 
+            {/* ✅ Test backend */}
+            <Route path="/test-backend" element={<TestBackend />} />
+
+            {/* Home */}
             <Route
               path="/"
               element={
