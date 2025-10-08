@@ -20,7 +20,7 @@ import chromadb
 # ---------------------------
 # 1️⃣ SQL Database
 # ---------------------------
-async def create_database_connection() -> Any:
+async def create_database_connection() -> Any:   
     db_type = os.getenv("DB_TYPE", "postgresql").lower()
 
     if db_type == "postgresql":

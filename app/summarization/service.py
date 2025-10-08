@@ -8,14 +8,18 @@ from typing import List, Dict, Optional, Any
 from pathlib import Path
 import aiofiles
 import speech_recognition as sr
-from pydub import AudioSegment
+import cv2
+import mediapipe as mp
+import numpy as np
+import wave
+import subprocess
 import requests
 import openai
 from transformers import pipeline
 import torch
 
-from ..database import get_db
-from ..config import settings
+from database import get_db
+from config import settings
 from .schemas import (
     ActionItem, 
     KeyPoint, 
@@ -41,6 +45,9 @@ class SummarizationService:
         # Initialize speech recognition
         self.recognizer = sr.Recognizer()
         
+        # Initialize MediaPipe for audio processing
+        self.mp_audio = mp.solutions.audio
+        
         # Initialize sentiment analysis pipeline
         self.sentiment_analyzer = pipeline(
             "sentiment-analysis",
@@ -51,6 +58,49 @@ class SummarizationService:
         # LLAVA API configuration
         self.llava_api_url = settings.LLAVA_API_URL
         self.llava_api_key = settings.LLAVA_API_KEY
+
+    def _get_audio_duration_cv2(self, audio_file_path: str) -> float:
+        """Get audio duration using OpenCV and subprocess"""
+        try:
+            # Use ffprobe to get audio duration
+            result = subprocess.run([
+                'ffprobe', '-v', 'quiet', '-show_entries', 
+                'format=duration', '-of', 'csv=p=0', audio_file_path
+            ], capture_output=True, text=True)
+            
+            if result.returncode == 0:
+                return float(result.stdout.strip())
+            else:
+                # Fallback: try to read as wave file
+                try:
+                    with wave.open(audio_file_path, 'rb') as wav_file:
+                        frames = wav_file.getnframes()
+                        sample_rate = wav_file.getframerate()
+                        return frames / sample_rate
+                except:
+                    # Last resort: estimate based on file size (rough approximation)
+                    file_size = os.path.getsize(audio_file_path)
+                    # Assuming average bitrate of 128 kbps
+                    return file_size * 8 / (128 * 1024)
+                    
+        except Exception as e:
+            logger.warning(f"Could not determine audio duration: {str(e)}")
+            return 0.0
+
+    def _convert_audio_to_wav_cv2(self, input_path: str, output_path: str) -> bool:
+        """Convert audio file to WAV format using subprocess/ffmpeg"""
+        try:
+            # Use ffmpeg for audio conversion
+            result = subprocess.run([
+                'ffmpeg', '-i', input_path, '-acodec', 'pcm_s16le', 
+                '-ar', '44100', '-ac', '1', '-y', output_path
+            ], capture_output=True, stderr=subprocess.PIPE)
+            
+            return result.returncode == 0
+            
+        except Exception as e:
+            logger.error(f"Error converting audio: {str(e)}")
+            return False
 
     async def process_audio_upload(
         self, 
@@ -72,9 +122,8 @@ class SummarizationService:
                 content = await audio_file.read()
                 await f.write(content)
             
-            # Get audio duration
-            audio = AudioSegment.from_file(str(file_path))
-            duration = len(audio) / 1000.0  # Convert to seconds
+            # Get audio duration using CV2-based method
+            duration = self._get_audio_duration_cv2(str(file_path))
             
             # Store metadata in database
             async with get_db() as conn:
@@ -249,21 +298,98 @@ class SummarizationService:
             logger.error(f"Error in real-time analysis: {str(e)}")
             raise
 
+    async def create_summarization_response(
+        self,
+        summary_id: str,
+        meeting_id: Optional[str],
+        summary_type: SummaryType,
+        summary_text: str,
+        key_points: List[str] = None,
+        action_items: List[ActionItem] = None,
+        next_steps: List[str] = None,
+        participants: Optional[List[str]] = None,
+        topics_discussed: List[str] = None,
+        decisions_made: List[str] = None,
+        questions_raised: List[str] = None,
+        meeting_effectiveness_score: Optional[float] = None,
+        word_count: int = 0,
+        summary_ratio: Optional[float] = None
+    ) -> SummarizationResponse:
+        """Create a SummarizationResponse object"""
+        try:
+            return SummarizationResponse(
+                summary_id=summary_id,
+                meeting_id=meeting_id,
+                summary_type=summary_type,
+                summary_text=summary_text,
+                key_points=key_points or [],
+                action_items=action_items or [],
+                next_steps=next_steps or [],
+                participants=participants,
+                topics_discussed=topics_discussed or [],
+                decisions_made=decisions_made or [],
+                questions_raised=questions_raised or [],
+                meeting_effectiveness_score=meeting_effectiveness_score,
+                created_at=datetime.utcnow(),
+                updated_at=None,
+                word_count=word_count,
+                summary_ratio=summary_ratio
+            )
+        except Exception as e:
+            logger.error(f"Error creating SummarizationResponse: {str(e)}")
+            raise
+
+    async def create_meeting_analysis_response(
+        self,
+        analysis_id: str,
+        meeting_id: Optional[str],
+        summary: str,
+        key_points: List[KeyPoint] = None,
+        action_items: List[ActionItem] = None,
+        sentiment_analysis: Optional[Dict[str, Any]] = None,
+        speaker_insights: Optional[Dict[str, Any]] = None,
+        recommendations: List[str] = None,
+        confidence_score: float = 0.0,
+        processing_time: Optional[float] = None
+    ) -> MeetingAnalysisResponse:
+        """Create a MeetingAnalysisResponse object"""
+        try:
+            return MeetingAnalysisResponse(
+                analysis_id=analysis_id,
+                meeting_id=meeting_id,
+                summary=summary,
+                key_points=key_points or [],
+                action_items=action_items or [],
+                sentiment_analysis=sentiment_analysis,
+                speaker_insights=speaker_insights,
+                recommendations=recommendations or [],
+                confidence_score=confidence_score,
+                analysis_timestamp=datetime.utcnow(),
+                processing_time=processing_time
+            )
+        except Exception as e:
+            logger.error(f"Error creating MeetingAnalysisResponse: {str(e)}")
+            raise
+
     async def _transcribe_audio(self, audio_file_path: str) -> str:
         """Transcribe audio file to text"""
         try:
-            # Convert audio to wav format for better compatibility
-            audio = AudioSegment.from_file(audio_file_path)
+            # Convert audio to wav format for better compatibility using CV2-based method
             wav_path = audio_file_path.replace(Path(audio_file_path).suffix, '.wav')
-            audio.export(wav_path, format="wav")
+            
+            # Convert using subprocess/ffmpeg instead of pydub
+            if not self._convert_audio_to_wav_cv2(audio_file_path, wav_path):
+                # If conversion fails, try to use the original file
+                wav_path = audio_file_path
             
             # Transcribe using speech recognition
             with sr.AudioFile(wav_path) as source:
                 audio_data = self.recognizer.record(source)
                 transcript = self.recognizer.recognize_google(audio_data)
             
-            # Clean up temporary file
-            os.remove(wav_path)
+            # Clean up temporary file if it was created
+            if wav_path != audio_file_path and os.path.exists(wav_path):
+                os.remove(wav_path)
             
             return transcript
             
@@ -598,24 +724,47 @@ class SummarizationService:
         
         return formatted_items
 
+    def _trim_audio_chunk_cv2(self, audio_file_path: str, max_duration: int = 30) -> str:
+        """Trim audio chunk to specified duration using subprocess/ffmpeg"""
+        try:
+            output_path = audio_file_path.replace('.', f'_trimmed.')
+            
+            result = subprocess.run([
+                'ffmpeg', '-i', audio_file_path, '-t', str(max_duration),
+                '-acodec', 'copy', '-y', output_path
+            ], capture_output=True, stderr=subprocess.PIPE)
+            
+            if result.returncode == 0:
+                return output_path
+            else:
+                return audio_file_path
+                
+        except Exception as e:
+            logger.warning(f"Error trimming audio chunk: {str(e)}")
+            return audio_file_path
+
     async def _transcribe_audio_chunk(self, audio_chunk_path: str) -> str:
         """Transcribe smaller audio chunk for real-time analysis"""
         try:
-            # Similar to full transcription but optimized for speed
-            audio = AudioSegment.from_file(audio_chunk_path)
+            # Trim chunk for faster processing using CV2-based method
+            trimmed_path = self._trim_audio_chunk_cv2(audio_chunk_path, 30)  # 30 seconds max
             
-            # Limit chunk size for faster processing
-            if len(audio) > 30000:  # 30 seconds
-                audio = audio[:30000]
+            # Convert to wav if needed
+            wav_path = trimmed_path.replace(Path(trimmed_path).suffix, '_chunk.wav')
             
-            wav_path = audio_chunk_path.replace(Path(audio_chunk_path).suffix, '_chunk.wav')
-            audio.export(wav_path, format="wav")
+            if not self._convert_audio_to_wav_cv2(trimmed_path, wav_path):
+                wav_path = trimmed_path
             
             with sr.AudioFile(wav_path) as source:
                 audio_data = self.recognizer.record(source)
                 transcript = self.recognizer.recognize_google(audio_data)
             
-            os.remove(wav_path)
+            # Clean up temporary files
+            if wav_path != trimmed_path and os.path.exists(wav_path):
+                os.remove(wav_path)
+            if trimmed_path != audio_chunk_path and os.path.exists(trimmed_path):
+                os.remove(trimmed_path)
+                
             return transcript
             
         except Exception as e:
