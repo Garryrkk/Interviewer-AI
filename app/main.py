@@ -1,888 +1,33 @@
 import logging
 import asyncio
-<<<<<<< HEAD
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.exception_handlers import http_exception_handler
-from fastapi.exceptions import RequestValidationError, ResponseValidationError
+from fastapi.exceptions import RequestValidationError, ResponseValidationError 
 import uvicorn
-from typing import Dict, Any, List
-=======
-import json
-from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException, Depends, Request, File, UploadFile, BackgroundTasks, WebSocket, WebSocketDisconnect
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.middleware.trustedhost import TrustedHostMiddleware
-from fastapi.responses import JSONResponse, StreamingResponse
-from fastapi.exception_handlers import http_exception_handler
-from fastapi.exceptions import RequestValidationError, ResponseValidationError
-from langchain_community.vectorstores import FAISS
-from langchain_community.embeddings import OpenAIEmbeddings
-import uvicorn
-from fastapi import Query
-from typing import Dict, Any, List, Optional
->>>>>>> 91363704a1edbd3248250121ce7a4b90fac292f9
+from typing import Dict, Any, List 
 import time
 from starlette.exceptions import HTTPException as StarletteHTTPException
 import traceback
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
-<<<<<<< HEAD
-=======
-import uuid
-from datetime import datetime
-import requests
-import os
-import redis
-import asyncpg
-from redis import asyncio as redis
-from redis.asyncio.client import Redis
-from db.connection import (
-    create_database_connection,
-    create_redis_connection,
-    create_file_storage_connection,
-    create_vector_database_connection
-)
-from typing import Any
-from motor.motor_asyncio import AsyncIOMotorClient
-from chromadb import Client
-import functools
-  
+from app.service_manager import service_manager
+from app.storage import storage_manager
 
-from fastapi import APIRouter  # <-- this imports APIRouter
-router = APIRouter(prefix="/camera", tags=["Camera"],)
-router = APIRouter(prefix="/expression", tags=["Expression"])
-
-
-import os
-
-# Import all schemas - now properly utilized
-from app.handFree.schemas import (
-    HandsFreeSessionRequest,
-    InterviewResponseRequest,
-    FacialAnalysisRequest,
-    SessionSettings,
-    HandsFreeSessionResponse,
-    InterviewResponse,
-    FacialAnalysis,
-    ConfidenceTipResponse,
-    AudioStreamResult,
-    RealTimeAnalysisResponse,
-    SessionStatus,
-    AudioStreamData,
-    SystemHealthCheck,
-    SessionInsights,
-    SessionSummary,
-    WebSocketMessage,
-    AutomatedResponseMessage,
-    FacialAnalysisMessage,
-    SystemStatusMessage
-)
-
-from summarization.schemas import(
-    SummaryType,
-    AnalysisType,
-    AudioUploadResponse,
-    MeetingAnalysisRequest,
-    MeetingAnalysisResponse,
-    ActionItem,
-    KeyPoint,
-    SummarizationRequest,
-    SummarizationResponse,
-    SummaryUpdateRequest,
-    MeetingContext,
-    LLAVAAnalysisConfig,
-    RealTimeAnalysisUpdate,
-    BatchSummarizationRequest
->>>>>>> 91363704a1edbd3248250121ce7a4b90fac292f9
-)
 
 from key_insights.schemas import (
     KeyInsight,
     KeyInsightRequest,
-<<<<<<< HEAD
     KeyInsightResponse
-=======
-    KeyInsightResponse,
-    ErrorResponse as KeyInsightErrorResponse,
-    InsightType
-)
-
-from voice_recognition.schemas import (
-    VoiceSessionRequest,
-    MicrophoneStatusRequest,
-    DeviceSelectionRequest,
-    AudioProcessingRequest,
-    AIResponseRequest,
-    SimplifiedAnswerRequest,
-    VoiceSessionResponse,
-    MicrophoneStatusResponse,
-    DeviceListResponse,
-    TranscriptionResponse,
-    AudioProcessingResponse,
-    VoiceAnalysisResponse,
-    AIResponseResponse,
-    CalibrationRequest,
-    CalibrationResponse,
-    AudioTestRequest,
-    AudioTestResponse,
-    ErrorResponse as VoiceErrorResponse,
-    ServiceHealth,
-    ResponseFormat,
-    SimplificationLevel
-)
-
-from image_recognition.schemas import(
-    CameraStatus,
-    ExpressionConfig,
-    ExpressionType,
-    MessageSender,
-    CameraResolution,
-    CameraDevice,
-    CameraSessionRequest,
-    CameraSessionResponse,
-    CameraFrameMessage,
-    CameraStatusResponse,
-    CameraTestResult,
-    ExpressionDetectionRequest,
-    ExpressionDetectedMessage,
-    ExpressionDetectionResponse,
-    ExpressionMonitoringConfig,
-    ChatMessage,
-    SimplifyMessageRequest,
-    ChatSessionSummary,
-    MonitoringSession,
-    SystemHealthStatus,
-    APIResponse,
-    WebSocketMessage as ImageWebSocketMessage,
-    CameraConfig,
-    ChatConfig,
-    RecordingQuality,
-    AnalysisType as ImageAnalysisType,
-    RecordingInfo,
-    RecordingStatus,
-    ConnectionStatus,
-    AnalysisFocus,
-    StartRecordingRequest,
-    HealthCheckResponse,
-    PermissionStatusResponse,
-    RecordingStatusResponse,
-    StartRecordingResponse,
-    StopRecordingResponse,
-    AnalysisRequest,
-    AnalysisResponse,
-    ScreenshotAnalysisRequest,
-    ScreenshotAnalysisResponse
-)
-
-from MainFeature.schemas import(
-    HideModeEnum,
-    RecordingTypeEnum,
-    RecordingConfig,
-    UIComponentEnum,
-    InsightTypeEnum,
-    UIConfig,
-    SecurityConfig,
-    InvisibilityModeRequest,
-    InvisibilityModeResponse,
-    UIVisibilityRequest,
-    UIVisibilityResponse,
-    UIState,
-    InsightGenerationRequest,
-    InsightGenerationResponse,
-    InvisibilityError,
-    InsightData,
-    RecordingData,
-    RecordingSessionRequest,
-    RecordingSessionResponse,
-    SessionStatusResponse,
-    SecurityStatusResponse,
-    SecurityStatus,
-    SessionData,
-    SystemConfig,
-    PerformanceMetrics
-)
-
-from quick_respond.schemas import (
-    QuickRespondRequest,
-    QuickRespondResponse,
-    SimplifyRequest,
-    SimplifyResponse,
-    MeetingContext as QuickRespondMeetingContext,
-    KeyInsight as QuickRespondKeyInsight,
-    UrgencyLevel,
-    AnalysisType as QuickRespondAnalysisType,
-    MeetingType,
-    MeetingStatus,
-    ParticipantInfo,
-    ScreenContent,
-    MeetingMetrics,
-    StreamingResponse as QuickRespondStreamingResponse,
-    BatchAnalysisRequest,
-    BatchAnalysisResponse,
-    ErrorResponse as QuickRespondErrorResponse,
-    HealthCheckResponse as QuickRespondHealthCheckResponse,
-    WebSocketMessage as QuickRespondWebSocketMessage,
-    OllamaConfig,
-    QuickRespondConfig,
-    ModelPrompts,
-    APIResponse as QuickRespondAPIResponse,
-    PaginatedResponse,
-    AdvancedAnalysisRequest,
-    AdvancedAnalysisResponse,
-    SessionAnalytics,
-    UsageMetrics,
-    WebhookEvent,
-    WebhookResponse
-)
-
-# Import services
-from app.quick_respond.service import (
-    QuickRespondService,
-)
-
-from app.voice_recognition.services import (
-    VoiceProcessingService,
-    AudioService
-)
-
-from app.key_insights.services import KeyInsightsService
-
-
-from app.handFree.service import (
-    HandsFreeService)  
-
-from app.image_recognition.service import(
-    CameraService,
-    ExpressionDetectionService,
-    ChatService,
-    ScreenRecordingService,
-    AIAnalysisService,
-    PermissionService
-)
-
-from app.summarization.service import(
-    SummarizationService,
-)
-
-from app.MainFeature.service import(
-    InvisibilityService,
-)
-
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
-logger = logging.getLogger(__name__)
-
-# ==============================================
-# FIXED: Database Connection Implementation
-# ==============================================
-
-async def create_database_connection():
-    """Create PostgreSQL database connection"""
-    try:
-        database_url = os.getenv("DATABASE_URL", "postgresql://user:password@localhost/interview_ai")
-        return await asyncpg.create_pool(database_url)
-    except Exception as e:
-        logger.warning(f"Database connection failed: {e}. Using in-memory storage.")
-        return None
-
-
-UPSTASH_REDIS_URL = "your-upstash-url"  # e.g. "redis://default:pass@host:port"
-
-async def create_redis_connection() -> Redis:
-    r = redis.from_url(
-        UPSTASH_REDIS_URL,
-        encoding="utf-8",
-        decode_responses=True
-    )
-    # Simple connectivity check
-    await r.ping()
-    print("✅ Connected to Redis!")
-    return r
-
-async def create_file_storage_connection():
-    """Create file storage connection"""
-    try:
-        # Mock file storage - replace with actual implementation
-        class MockFileStorage:
-            async def upload(self, path: str, data: bytes):
-                # Save to local storage
-                file_path = Path("storage") / path
-                file_path.parent.mkdir(parents=True, exist_ok=True)
-                with open(file_path, "wb") as f:
-                    f.write(data)
-                return str(file_path)
-            
-            async def download(self, path: str):
-                file_path = Path("storage") / path
-                if file_path.exists():
-                    with open(file_path, "rb") as f:
-                        return f.read()
-                return None
-            
-            async def close(self):
-                pass
-        
-        return MockFileStorage()
-    except Exception as e:
-        logger.warning(f"File storage connection failed: {e}")
-        return None
-
-async def create_vector_database_connection():
-    """Create vector database connection"""
-    try:
-        # Mock vector DB - replace with actual implementation (ChromaDB, etc.)
-        class MockVectorDB:
-            async def store_embedding(self, id: str, embedding: list, metadata: dict):
-                pass
-            
-            async def search(self, query_embedding: list, limit: int = 10):
-                return []
-            
-            async def close(self):
-                pass
-        
-        return MockVectorDB()
-    except Exception as e:
-        logger.warning(f"Vector database connection failed: {e}")
-        return None
-
-# ==============================================
-# FIXED: Enhanced Storage Manager Implementation
-# ==============================================
-
-class StorageManager:
-    def __init__(self):
-        # In-memory storage (current)
-        self.sessions = {}
-        self.recordings = {}
-        self.analyses = {}
-        self.insights = {}
-        self.chat_sessions = {}
-        self.voice_sessions = {}
-        self.camera_sessions = {}
-        self.hands_free_sessions = {}
-        
-        # Database connections
-        self.db = None
-        self.redis_cache = None
-        self.file_storage = None
-        self.vector_db = None
-        
-    async def initialize(self):
-        """Initialize all storage systems"""
-        logger.info("Initializing storage systems...")
-        
-        # Database connections
-        self.db = await create_database_connection()
-        self.redis_cache = await create_redis_connection()
-        self.file_storage = await create_file_storage_connection()
-        self.vector_db = await create_vector_database_connection()
-        
-        # Initialize database tables
-        await self.create_tables()
-        
-        return True
-    
-    # Database operations with fallback to in-memory storage
-    async def get_session(self, session_id: str):
-        try:
-            if self.db:
-                result = await self.db.fetchrow("SELECT * FROM sessions WHERE id = $1", session_id)
-                return dict(result) if result else None
-        except Exception as e:
-            logger.warning(f"Database query failed, using in-memory: {e}")
-        
-        return self.sessions.get(session_id)
-        
-    async def save_session(self, session_id: str, data: dict):
-        try:
-            if self.db:
-                await self.db.execute(
-                    "INSERT INTO sessions (id, data, created_at) VALUES ($1, $2, $3) ON CONFLICT (id) DO UPDATE SET data = $2",
-                    session_id, json.dumps(data), datetime.utcnow()
-                )
-        except Exception as e:
-            logger.warning(f"Database save failed, using in-memory: {e}")
-        
-        self.sessions[session_id] = data
-    
-    async def save_recording(self, recording_id: str, recording_data: dict):
-        try:
-            if self.db:
-                await self.db.execute(
-                    "INSERT INTO recordings (id, data, created_at) VALUES ($1, $2, $3)",
-                    recording_id, json.dumps(recording_data), datetime.utcnow()
-                )
-        except Exception as e:
-            logger.warning(f"Database save failed: {e}")
-        
-        self.recordings[recording_id] = recording_data
-    
-    async def save_analysis(self, analysis_id: str, analysis_data: dict):
-        try:
-            if self.db:
-                await self.db.execute(
-                    "INSERT INTO analyses (id, data, created_at) VALUES ($1, $2, $3)",
-                    analysis_id, json.dumps(analysis_data), datetime.utcnow()
-                )
-        except Exception as e:
-            logger.warning(f"Database save failed: {e}")
-        
-        self.analyses[analysis_id] = analysis_data
-    
-    async def save_chat_message(self, session_id: str, message: dict):
-        try:
-            if self.db:
-                await self.db.execute(
-                    "INSERT INTO chat_messages (session_id, message, timestamp) VALUES ($1, $2, $3)",
-                    session_id, json.dumps(message), datetime.utcnow()
-                )
-        except Exception as e:
-            logger.warning(f"Database save failed: {e}")
-        
-        if session_id not in self.chat_sessions:
-            self.chat_sessions[session_id] = []
-        self.chat_sessions[session_id].append(message)
-    
-    async def save_transcription(self, session_id: str, transcription: dict):
-        try:
-            if self.db:
-                await self.db.execute(
-                    "INSERT INTO transcriptions (session_id, text, confidence, timestamp) VALUES ($1, $2, $3, $4)",
-                    session_id, transcription['text'], transcription['confidence'], datetime.utcnow()
-                )
-        except Exception as e:
-            logger.warning(f"Database save failed: {e}")
-    
-    async def save_meeting_summary(self, meeting_id: str, summary: dict):
-        try:
-            if self.db:
-                await self.db.execute(
-                    "INSERT INTO meeting_summaries (meeting_id, summary, created_at) VALUES ($1, $2, $3)",
-                    meeting_id, json.dumps(summary), datetime.utcnow()
-                )
-        except Exception as e:
-            logger.warning(f"Database save failed: {e}")
-    
-    async def save_key_insights(self, session_id: str, insights: list):
-        try:
-            if self.db:
-                await self.db.execute(
-                    "INSERT INTO key_insights (session_id, insights, created_at) VALUES ($1, $2, $3)",
-                    session_id, json.dumps(insights), datetime.utcnow()
-                )
-        except Exception as e:
-            logger.warning(f"Database save failed: {e}")
-        
-        self.insights[session_id] = insights
-    
-    async def save_audio_file(self, file_id: str, audio_data: bytes):
-        try:
-            if self.file_storage:
-                return await self.file_storage.upload(f"audio/{file_id}.wav", audio_data)
-        except Exception as e:
-            logger.warning(f"File storage save failed: {e}")
-        return None
-    
-    async def save_screenshot(self, screenshot_id: str, image_data: bytes):
-        try:
-            if self.file_storage:
-                return await self.file_storage.upload(f"screenshots/{screenshot_id}.png", image_data)
-        except Exception as e:
-            logger.warning(f"File storage save failed: {e}")
-        return None
-    
-    async def save_recording_file(self, recording_id: str, video_data: bytes):
-        try:
-            if self.file_storage:
-                return await self.file_storage.upload(f"recordings/{recording_id}.mp4", video_data)
-        except Exception as e:
-            logger.warning(f"File storage save failed: {e}")
-        return None
-    
-    # Cache operations (Redis)
-    async def cache_session_data(self, session_id: str, data: dict, ttl: int = 3600):
-        try:
-            if self.redis_cache:
-                await self.redis_cache.setex(f"session:{session_id}", ttl, json.dumps(data))
-        except Exception as e:
-            logger.warning(f"Cache save failed: {e}")
-    
-    async def get_cached_session_data(self, session_id: str):
-        try:
-            if self.redis_cache:
-                cached = await self.redis_cache.get(f"session:{session_id}")
-                return json.loads(cached) if cached else None
-        except Exception as e:
-            logger.warning(f"Cache get failed: {e}")
-        return None
-    
-    # SQL table creation with proper error handling
-    async def create_tables(self):
-        """Create all necessary database tables"""
-        if not self.db:
-            logger.info("No database connection, skipping table creation")
-            return
-        
-        tables = [
-            """
-            CREATE TABLE IF NOT EXISTS sessions (
-                id TEXT PRIMARY KEY,
-                data JSONB NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-            """,
-            """
-            CREATE TABLE IF NOT EXISTS recordings (
-                id TEXT PRIMARY KEY,
-                data JSONB NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-            """,
-            """
-            CREATE TABLE IF NOT EXISTS analyses (
-                id TEXT PRIMARY KEY,
-                data JSONB NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-            """,
-            """
-            CREATE TABLE IF NOT EXISTS chat_messages (
-                id SERIAL PRIMARY KEY,
-                session_id TEXT NOT NULL,
-                message JSONB NOT NULL,
-                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-            """,
-            """
-            CREATE TABLE IF NOT EXISTS transcriptions (
-                id SERIAL PRIMARY KEY,
-                session_id TEXT NOT NULL,
-                text TEXT NOT NULL,
-                confidence FLOAT,
-                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-            """,
-            """
-            CREATE TABLE IF NOT EXISTS meeting_summaries (
-                id SERIAL PRIMARY KEY,
-                meeting_id TEXT NOT NULL,
-                summary JSONB NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-            """,
-            """
-            CREATE TABLE IF NOT EXISTS key_insights (
-                id SERIAL PRIMARY KEY,
-                session_id TEXT NOT NULL,
-                insights JSONB NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-            """
-        ]
-        
-        try:
-            for table_sql in tables:
-                await self.db.execute(table_sql)
-            logger.info("Database tables created successfully")
-        except Exception as e:
-            logger.error(f"Failed to create tables: {e}")
-    
-    async def cleanup(self):
-        """Cleanup database connections"""
-        try:
-            if self.db:
-                await self.db.close()
-            if self.redis_cache:
-                await self.redis_cache.close()
-            if self.file_storage:
-                await self.file_storage.close()
-            if self.vector_db:
-                await self.vector_db.close()
-        except Exception as e:
-            logger.error(f"Storage cleanup error: {e}")
-
-# ==============================================
-# FIXED: Enhanced Service Manager Implementation
-# ==============================================
-
-class ServiceManager:
-    def __init__(self):
-        self.summarization_service = None
-        self.quick_respond_service = None
-        self.voice_service = None
-        self.audio_service = None
-        self.camera_service = None
-        self.expression_service = None
-        self.chat_service = None
-        self.recording_service = None
-        self.permission_service = None
-        self.ai_service = None
-        self.hands_free_service = None
-        self.insights_service = None
-        self.invisibility_service = None
-        
-    async def initialize_all(self):
-        """Initialize all services with proper dependencies"""
-        logger.info("Initializing all services...")
-        
-        try:
-            # Import services dynamically to avoid circular imports
-            from app.voice_recognition.services import VoiceProcessingService, AudioService
-            from app.key_insights.services import KeyInsightsService
-            from app.handFree.service import HandsFreeService
-            from app.image_recognition.service import (
-                CameraService, ExpressionDetectionService, ChatService,
-                PermissionService, ScreenRecordingService, AIAnalysisService
-            )
-            from app.summarization.service import SummarizationService
-            from app.MainFeature.service import InvisibilityService
-            from app.quick_respond.service import QuickRespondService
-            
-            # Initialize services with dependencies
-            self.voice_service = VoiceProcessingService()
-            self.audio_service = AudioService()
-            self.camera_service = CameraService()
-            self.expression_service = ExpressionDetectionService()
-            self.chat_service = ChatService()
-            self.permission_service = PermissionService()
-            self.recording_service = ScreenRecordingService()
-            self.ai_service = AIAnalysisService()
-            self.hands_free_service = HandsFreeService()
-            self.quick_respond_service = QuickRespondService()
-            self.insights_service = KeyInsightsService()
-            self.summarization_service = SummarizationService()
-            self.invisibility_service = InvisibilityService()
-            
-            # Initialize services that need async setup
-            await self._initialize_async_services()
-            
-            logger.info("All services initialized successfully")
-            return True
-            
-        except ImportError as e:
-            logger.warning(f"Service import failed: {e}. Creating mock services.")
-            await self._create_mock_services()
-            return True
-        except Exception as e:
-            logger.error(f"Service initialization failed: {e}")
-            await self._create_mock_services()
-            return False
-    
-    async def _initialize_async_services(self):
-        """Initialize services that need async setup"""
-        services_with_async_init = [
-            self.voice_service,
-            self.audio_service,
-            self.quick_respond_service,
-            self.hands_free_service
-        ]
-        
-        for service in services_with_async_init:
-            if hasattr(service, 'initialize'):
-                try:
-                    await service.initialize()
-                except Exception as e:
-                    logger.warning(f"Service {service.__class__.__name__} initialization failed: {e}")
-    
-    async def _create_mock_services(self):
-        """Create mock services if real services fail to initialize"""
-        class MockService:
-            async def __getattribute__(self, name):
-                if name.startswith('_'):
-                    return object.__getattribute__(self, name)
-                
-                async def mock_method(*args, **kwargs):
-                    logger.info(f"Mock service method called: {name}")
-                    return {"status": "mock", "message": f"Mock response for {name}"}
-                
-                return mock_method
-        
-        # Assign mock services
-        for service_name in ['voice_service', 'audio_service', 'camera_service', 
-                           'expression_service', 'chat_service', 'recording_service',
-                           'permission_service', 'ai_service', 'hands_free_service',
-                           'quick_respond_service', 'insights_service', 
-                           'summarization_service', 'invisibility_service']:
-            setattr(self, service_name, MockService())
-
-# ==============================================
-# FIXED: Global Storage and Service Manager
-# ==============================================
-
-storage_manager = StorageManager()
-service_manager = ServiceManager()
-
-# ==============================================
-# FIXED: Enhanced WebSocket Connection Manager
-# ==============================================
-
-class ConnectionManager:
-    def __init__(self):
-        self.active_connections: Dict[str, List[WebSocket]] = {}
-        self.connection_metadata: Dict[WebSocket, Dict] = {}
-
-    async def connect(self, websocket: WebSocket, session_id: str = None):
-        await websocket.accept()
-        
-        if session_id:
-            if session_id not in self.active_connections:
-                self.active_connections[session_id] = []
-            self.active_connections[session_id].append(websocket)
-        
-        self.connection_metadata[websocket] = {
-            "session_id": session_id,
-            "connected_at": datetime.utcnow(),
-            "message_count": 0
-        }
-
-    def disconnect(self, websocket: WebSocket):
-        metadata = self.connection_metadata.get(websocket, {})
-        session_id = metadata.get("session_id")
-        
-        if session_id and session_id in self.active_connections:
-            if websocket in self.active_connections[session_id]:
-                self.active_connections[session_id].remove(websocket)
-            
-            if not self.active_connections[session_id]:
-                del self.active_connections[session_id]
-        
-        if websocket in self.connection_metadata:
-            del self.connection_metadata[websocket]
-
-    async def send_personal_message(self, message: str, websocket: WebSocket):
-        try:
-            await websocket.send_text(message)
-            if websocket in self.connection_metadata:
-                self.connection_metadata[websocket]["message_count"] += 1
-        except Exception as e:
-            logger.warning(f"Failed to send personal message: {e}")
-            self.disconnect(websocket)
-
-    async def send_to_session(self, message: str, session_id: str):
-        """Send message to all connections for a specific session"""
-        if session_id not in self.active_connections:
-            return
-        
-        disconnected = []
-        for connection in self.active_connections[session_id]:
-            try:
-                await connection.send_text(message)
-                if connection in self.connection_metadata:
-                    self.connection_metadata[connection]["message_count"] += 1
-            except:
-                disconnected.append(connection)
-        
-        for conn in disconnected:
-            self.disconnect(conn)
-
-    async def broadcast(self, message: str):
-        all_connections = []
-        for session_connections in self.active_connections.values():
-            all_connections.extend(session_connections)
-        
-        disconnected = []
-        for connection in all_connections:
-            try:
-                await connection.send_text(message)
-                if connection in self.connection_metadata:
-                    self.connection_metadata[connection]["message_count"] += 1
-            except:
-                disconnected.append(connection)
-        
-        for conn in disconnected:
-            self.disconnect(conn)
-    
-    def get_session_connections(self, session_id: str) -> List[WebSocket]:
-        """Get all connections for a session"""
-        return self.active_connections.get(session_id, [])
-    
-    def get_connection_stats(self) -> Dict:
-        """Get connection statistics"""
-        total_connections = sum(len(conns) for conns in self.active_connections.values())
-        return {
-            "total_sessions": len(self.active_connections),
-            "total_connections": total_connections,
-            "connections_by_session": {k: len(v) for k, v in self.active_connections.items()}
-        }
-
-manager = ConnectionManager()
-
-# ==============================================
-# FIXED: Consistent API Response Standards
-# ==============================================
-
-from pydantic import BaseModel
-
-class StandardAPIResponse(BaseModel):
-    success: bool
-    data: Optional[Dict] = None
-    message: str
-    timestamp: datetime = datetime.utcnow()
-    errors: Optional[List[str]] = None
-    session_id: Optional[str] = None
-
-def create_success_response(data=None, message="Success", session_id=None):
-    return StandardAPIResponse(
-        success=True,
-        data=data,
-        message=message,
-        session_id=session_id
-    )
-
-def create_error_response(message="Error", errors=None, session_id=None):
-    return StandardAPIResponse(
-        success=False,
-        message=message,
-        errors=errors or [],
-        session_id=session_id
-    )
-
-# Service initialization functions with better error handling
-async def initialize_ollama_connection():
-    """Initialize connection to Ollama with Nous Hermes model"""
-    try:
-        # Test Ollama connection
-        response = requests.get("http://localhost:11434/api/tags", timeout=5)
-        if response.status_code == 200:
-            models = response.json().get("models", [])
-            hermes_models = [m for m in models if "nous-hermes" in m.get("name", "").lower()]
-            if hermes_models:
-                logger.info(f"✅ Ollama connected. Found Nous Hermes models: {[m['name'] for m in hermes_models]}")
-            else:
-                logger.warning("⚠️ Ollama connected but Nous Hermes model not found")
-        else:
-            raise Exception(f"Ollama not responding: {response.status_code}")
-    except Exception as e:
-        logger.error(f"❌ Failed to connect to Ollama: {e}")
-        raise
-
-async def initialize_VoiceProcessingService():
-    """Initialize Voice Processing Service"""
-    try:
-        logger.info("✅ Voice Processing Service initialized")
-    except Exception as e:
-        logger.error(f"❌ Failed to initialize Voice Processing Service: {e}")
-        raise
-
-async def initialize_core_services():
-    """Initialize all core services"""
-    try:
-        logger.info("✅ All core services initialized")
->>>>>>> 91363704a1edbd3248250121ce7a4b90fac292f9
     except Exception as e:
         logger.error(f"❌ Failed to initialize core services: {e}")
         raise
 
+
 async def cleanup_services():
-<<<<<<< HEAD
     """Cleanup services and resources"""
     try:
         # Cleanup voice service
@@ -950,6 +95,23 @@ app = FastAPI(
     redoc_url="/redoc"
 )
 
+# Initialize services
+voice_service = VoiceProcessingService()
+audio_service = AudioService()
+camera_service = CameraService()
+expression_service = ExpressionDetectionService()
+chat_service = ChatService()
+permission_service = PermissionService()
+recording_service = ScreenRecordingService()
+ai_service = AIAnalysisService()
+hands_free_service = HandsFreeService()
+quick_respond_service = QuickRespondService()
+insights_service = KeyInsightsService()
+summarization_service = SummarizationService()
+invisibility_service = InvisibilityService()
+
+
+
 # ==============================================
 # FIXED: Frontend Integration with Fallback
 # ==============================================
@@ -996,7 +158,9 @@ app.add_middleware(
     allowed_hosts=trusted_hosts
 )
 
+# ==============================================
 # CORS Middleware - Single instance with proper configuration
+# ==============================================
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
@@ -1016,30 +180,36 @@ app.add_middleware(
     expose_headers=["X-Session-ID", "X-Response-Time"]
 )
 
-######################################
-
+# ==============================================
+# ROUTER DEFINITIONS (single place)
+# ==============================================
 summarization_router = APIRouter(prefix="/api/v1/summarization", tags=["Summarization"])
 quick_respond_router = APIRouter(prefix="/api/v1/quick-respond", tags=["Quick Respond"])
 voice_router = APIRouter(prefix="/api/v1/voice", tags=["Voice Recognition"])
 camera_router = APIRouter(prefix="/api/v1/camera", tags=["Camera"])
 expression_router = APIRouter(prefix="/api/v1/expression", tags=["Expression"])
+chat_router = APIRouter(prefix="/api/v1/chat", tags=["Chat"])
+recording_router = APIRouter(prefix="/api/v1/recording", tags=["Screen Recording"])
 hands_free_router = APIRouter(prefix="/api/v1/hands-free", tags=["Hands-Free"])
 key_insights_router = APIRouter(prefix="/api/v1/key-insights", tags=["Key Insights"])
-main_feature_router = APIRouter(prefix="/api/v1/invisibility", tags=["Invisibility Mode"])
+invisibility_router = APIRouter(prefix="/api/v1/invisibility", tags=["Invisibility Mode"])
 
-# Include all routers in the app
+# Include routers once
 app.include_router(summarization_router)
 app.include_router(quick_respond_router)
 app.include_router(voice_router)
 app.include_router(camera_router)
 app.include_router(expression_router)
+app.include_router(chat_router)
+app.include_router(recording_router)
 app.include_router(hands_free_router)
 app.include_router(key_insights_router)
-app.include_router(main_feature_router)
+app.include_router(invisibility_router)
 
 # ==============================================
 # FRONTEND MOUNTING - AFTER ALL ROUTERS
 # ==============================================
+
 
 frontend_dist = Path(__file__).parent / "frontend" / "dist"
 
@@ -1258,7 +428,7 @@ async def global_exception_handler(request: Request, exc: Exception):
 # SUMMARIZATION ROUTES - PROPERLY INTEGRATED
 # ====================================================================
 
-@app.post("/api/v1/summarization/upload-audio", response_model=AudioUploadResponse, tags=["Summarization"])
+@app.post("@summarization_router/upload-audio", response_model=AudioUploadResponse, tags=["Summarization"])
 async def upload_meeting_audio(
     audio_file: UploadFile = File(...),
     meeting_id: Optional[str] = None
@@ -1284,7 +454,7 @@ async def upload_meeting_audio(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/api/v1/invisibility/sessions/{session_id}/disable")
+@app.post("@invisibility_router/sessions/{session_id}/disable")
 async def disable_invisibility_mode(session_id: str):
     """Disable invisibility mode for a session."""
     try:
@@ -1303,7 +473,7 @@ async def disable_invisibility_mode(session_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.get("/api/v1/invisibility/sessions/{session_id}/status")
+@invisibility_router.get("/invisibility/sessions/{session_id}/status")
 async def get_session_status(session_id: str):
     """Get current status of an invisibility session."""
     try:
@@ -1326,7 +496,7 @@ async def get_session_status(session_id: str):
 
 
 # Recording Endpoints
-@app.post("/api/v1/invisibility/sessions/{session_id}/recording/start")
+@app.post("@invisibility_router/sessions/{session_id}/recording/start")
 async def start_invisible_recording(
     session_id: str,
     screen_recording: bool = True,
@@ -1360,7 +530,7 @@ async def start_invisible_recording(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/api/v1/invisibility/sessions/{session_id}/recording/stop")
+@app.post("@invisibility_router/sessions/{session_id}/recording/stop")
 async def stop_invisible_recording(
     session_id: str,
     background_tasks: BackgroundTasks
@@ -1398,7 +568,7 @@ async def stop_invisible_recording(
 
 
 # UI Component Management Endpoints
-@app.post("/api/v1/invisibility/sessions/{session_id}/ui/hide")
+@app.post("@invisibility_router/sessions/{session_id}/ui/hide")
 async def hide_ui_components(
     session_id: str,
     components_to_hide: List[UIComponentEnum],
@@ -1425,7 +595,7 @@ async def hide_ui_components(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/api/v1/invisibility/sessions/{session_id}/ui/show")
+@app.post("@invisibility_router/sessions/{session_id}/ui/show")
 async def show_ui_components(
     session_id: str,
     components_to_show: List[UIComponentEnum]
@@ -1453,7 +623,7 @@ async def show_ui_components(
 
 
 # Insights Endpoints
-@app.post("/api/v1/invisibility/sessions/{session_id}/insights/generate")
+@app.post("@invisibility_router/sessions/{session_id}/insights/generate")
 async def generate_insights(
     session_id: str,
     insight_types: List[InsightTypeEnum],
@@ -1488,7 +658,7 @@ async def generate_insights(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.get("/api/v1/invisibility/sessions/{session_id}/insights")
+@invisibility_router.get("/invisibility/sessions/{session_id}/insights")
 async def get_session_insights(session_id: str):
     """Retrieve generated insights for a session."""
     try:
@@ -1514,7 +684,7 @@ async def get_session_insights(session_id: str):
 
 
 # Security Endpoints
-@app.get("/api/v1/invisibility/sessions/{session_id}/security")
+@invisibility_router.get("/invisibility/sessions/{session_id}/security")
 async def get_security_status(session_id: str):
     """Check security status to ensure no data leakage."""
     try:
@@ -1573,34 +743,6 @@ async def shutdown_event():
     print("Shutdown complete")
 
 
-# Root endpoint
-@app.get("/")
-async def root():
-    """Root endpoint with API information."""
-    return {
-        "service": "Invisibility Mode API",
-        "version": "1.0.0",
-        "status": "running",
-        "documentation": "/docs",
-        "health_check": "/health"
-    }
-
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(
-        "main:app",
-        host="0.0.0.0",
-        port=8000,
-        reload=True,
-        log_level="info"
-    )
-
-################## SUMMARIZATION###########
-
-summarization_service = SummarizationService()
-
-
 # Dependency for getting current user (implement based on your auth system)
 async def get_current_user(user_id: str = Query(..., description="User ID")):
     """Get current user from request"""
@@ -1609,25 +751,7 @@ async def get_current_user(user_id: str = Query(..., description="User ID")):
     return user_id
 
 
-@app.get("/")
-async def root():
-    """Root endpoint"""
-    return {
-        "message": "Meeting Summarization API",
-        "version": "1.0.0",
-        "endpoints": {
-            "upload_audio": "/api/v1/audio/upload",
-            "analyze_meeting": "/api/v1/meetings/analyze",
-            "generate_summary": "/api/v1/summaries/generate",
-            "real_time_analysis": "/api/v1/meetings/real-time",
-            "get_summary": "/api/v1/summaries/{meeting_id}",
-            "get_user_summaries": "/api/v1/summaries/user",
-            "delete_summary": "/api/v1/summaries/{meeting_id}"
-        }
-    }
-
-
-@app.post("/api/v1/audio/upload", status_code=status.HTTP_201_CREATED)
+@voice_router.post("/audio/upload", status_code=status.HTTP_201_CREATED)
 async def upload_audio(
     file: UploadFile = File(..., description="Audio file to upload"),
     user_id: str = Depends(get_current_user),
@@ -1674,7 +798,7 @@ async def upload_audio(
         raise HTTPException(status_code=500, detail=f"Error uploading audio: {str(e)}")
 
 
-@app.post("/api/v1/meetings/analyze", response_model=MeetingAnalysisResponse)
+@summarization_router.post("/meetings/analyze", response_model=MeetingAnalysisResponse)
 async def analyze_meeting(
     audio_file_path: str = Query(..., description="Path to audio file"),
     user_id: str = Depends(get_current_user),
@@ -1720,7 +844,7 @@ async def analyze_meeting(
         raise HTTPException(status_code=500, detail=f"Error analyzing meeting: {str(e)}")
 
 
-@app.post("/api/v1/summaries/generate", response_model=SummarizationResponse)
+@app.post("@summarization_router/generate", response_model=SummarizationResponse)
 async def generate_summary(
     content: str = Query(..., description="Meeting content/transcript to summarize"),
     summary_type: SummaryType = Query(SummaryType.DETAILED, description="Type of summary"),
@@ -1781,7 +905,7 @@ async def generate_summary(
         raise HTTPException(status_code=500, detail=f"Error generating summary: {str(e)}")
 
 
-@app.post("/api/v1/meetings/real-time", response_model=MeetingAnalysisResponse)
+@summarization_router.post("/meetings/real-time", response_model=MeetingAnalysisResponse)
 async def real_time_analysis(
     audio_chunk_path: str = Query(..., description="Path to audio chunk"),
     user_id: str = Depends(get_current_user),
@@ -1961,26 +1085,6 @@ async def general_exception_handler(request, exc):
             "timestamp": datetime.utcnow().isoformat()
         }
     )
-
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(
-        "main:app",
-        host="0.0.0.0",
-        port=8000,
-        reload=True,
-        log_level="info"
-    )
-
-#################VOICE RECOGNITION##########
-camera_service = CameraService()
-expression_service = ExpressionDetectionService()
-chat_service = ChatService()
-recording_service = ScreenRecordingService()
-ai_analysis_service = AIAnalysisService()
-recording_enum_service = RecordingService()
-
 
 
 # ==================== CAMERA ENDPOINTS ====================
@@ -2419,15 +1523,6 @@ async def shutdown_event():
     logger.info("Shutting down Smart Camera & Recording API...")
     # Add cleanup logic here if needed
 
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
-
-######################hands free services##############
-
-hands_free_service = HandsFreeService()
-
 # Active WebSocket connections
 active_websockets: Dict[str, WebSocket] = {}
 
@@ -2436,7 +1531,7 @@ active_websockets: Dict[str, WebSocket] = {}
 # SESSION MANAGEMENT ENDPOINTS
 # ============================================================================
 
-@app.post("/api/v1/sessions/create")
+@hands_free_router.post("/sessions/create")
 async def create_session(
     user_id: str,
     default_mic_id: str,
@@ -2465,7 +1560,7 @@ async def create_session(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/api/v1/sessions/{session_id}/configure-audio")
+@hands_free_router.post("/sessions/{session_id}/configure-audio")
 async def configure_audio(session_id: str, mic_id: str):
     """Configure audio input for the session"""
     try:
@@ -2483,7 +1578,7 @@ async def configure_audio(session_id: str, mic_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/api/v1/sessions/{session_id}/initialize-ai")
+@hands_free_router.post("/sessions/{session_id}/initialize-ai")
 async def initialize_ai(session_id: str):
     """Initialize AI systems for the session"""
     try:
@@ -2501,7 +1596,7 @@ async def initialize_ai(session_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/api/v1/sessions/{session_id}/activate")
+@hands_free_router.post("/sessions/{session_id}/activate")
 async def activate_hands_free(session_id: str):
     """Activate hands-free mode"""
     try:
@@ -2519,7 +1614,7 @@ async def activate_hands_free(session_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/api/v1/sessions/{session_id}/pause")
+@hands_free_router.post("/sessions/{session_id}/pause")
 async def pause_session(session_id: str):
     """Emergency pause hands-free mode"""
     try:
@@ -2535,7 +1630,7 @@ async def pause_session(session_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/api/v1/sessions/{session_id}/resume")
+@hands_free_router.post("/sessions/{session_id}/resume")
 async def resume_session(session_id: str):
     """Resume hands-free mode"""
     try:
@@ -2551,7 +1646,7 @@ async def resume_session(session_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/api/v1/sessions/{session_id}/stop")
+@hands_free_router.post("/sessions/{session_id}/stop")
 async def stop_session(session_id: str):
     """Stop session and get summary"""
     try:
@@ -2574,7 +1669,7 @@ async def stop_session(session_id: str):
 # SESSION STATUS AND INSIGHTS ENDPOINTS
 # ============================================================================
 
-@app.get("/api/v1/sessions/{session_id}/status")
+@hands_free_router.post("/sessions/{session_id}/generate-response")
 async def get_session_status(session_id: str):
     """Get current session status"""
     try:
@@ -2587,7 +1682,7 @@ async def get_session_status(session_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.get("/api/v1/sessions/{session_id}/insights")
+@hands_free_router.get("/sessions/{session_id}/insights")
 async def get_session_insights(session_id: str):
     """Get comprehensive session insights"""
     try:
@@ -2600,7 +1695,7 @@ async def get_session_insights(session_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.put("/api/v1/sessions/{session_id}/settings")
+@hands_free_router.put("/sessions/{session_id}/settings")
 async def update_session_settings(session_id: str, settings: SessionSettings):
     """Update session settings"""
     try:
@@ -2622,7 +1717,7 @@ async def update_session_settings(session_id: str, settings: SessionSettings):
 # RESPONSE GENERATION ENDPOINT
 # ============================================================================
 
-@app.post("/api/v1/sessions/{session_id}/generate-response")
+@hands_free_router.post("/sessions/{session_id}/generate-response")
 async def generate_response(
     session_id: str,
     question: str,
@@ -2648,7 +1743,7 @@ async def generate_response(
 # FACIAL ANALYSIS ENDPOINT
 # ============================================================================
 
-@app.post("/api/v1/sessions/{session_id}/analyze-facial")
+@hands_free_router.post("/sessions/{session_id}/analyze-facial")
 async def analyze_facial_expression(
     session_id: str,
     frame: UploadFile = File(...)
@@ -2834,20 +1929,6 @@ async def system_status():
 # ROOT ENDPOINT
 # ============================================================================
 
-@app.get("/")
-async def root():
-    """Root endpoint"""
-    return {
-        "service": "Hands-Free Interview Assistant API",
-        "version": "1.0.0",
-        "status": "operational",
-        "endpoints": {
-            "docs": "/docs",
-            "health": "/api/v1/health",
-            "status": "/api/v1/status"
-        }
-    }
-
 
 # ============================================================================
 # APPLICATION STARTUP AND SHUTDOWN EVENTS
@@ -2875,51 +1956,7 @@ async def shutdown_event():
     logger.info("Shutdown complete")
 
 
-# ============================================================================
-# RUN APPLICATION
-# ============================================================================
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(
-        "main:app",
-        host="0.0.0.0",
-        port=8000,
-        reload=True,
-        log_level="info"
-    )
-
-
-################KEEEYYY INSIGHTS############
-
-insights_service = KeyInsightsService()
-
-
-@app.get("/")
-async def root():
-    """Root endpoint with API information"""
-    return {
-        "message": "Key Insights API",
-        "version": "1.0.0",
-        "status": "operational",
-        "endpoints": {
-            "health": "/health",
-            "generate_insights": "/api/v1/insights/generate",
-            "get_insights": "/api/v1/insights/{meeting_id}",
-            "insights_by_type": "/api/v1/insights/{meeting_id}/type/{insight_type}",
-            "clear_cache": "/api/v1/cache/clear"
-        }
-    }
-
-
-    
-    return JSONResponse(
-        status_code=status.HTTP_200_OK,
-        content=health_data
-    )
-
-
-@app.post("/api/v1/insights/generate", response_model=KeyInsightResponse)
+@app.post("@key_insights_router/generate", response_model=KeyInsightResponse)
 async def generate_insights(
     request: KeyInsightRequest,
     image: Optional[UploadFile] = File(None)
@@ -3162,6 +2199,39 @@ async def general_exception_handler(request, exc):
             "details": str(exc)
         }
     )
+    
+    
+# ==============================================
+# ROOT & HEALTH ENDPOINTS (only one global copy)
+# ==============================================
+
+@app.get("/")
+async def root():
+    """Root endpoint with overall API information"""
+    return {
+        "service": "Interview AI Backend",
+        "version": "2.0.0",
+        "docs": "/docs",
+        "health": "/api/v1/health"
+    }
+
+@app.get("/api/v1/health")
+async def health_check():
+    """Unified health check for all services"""
+    return {
+        "summarization": "ok",
+        "voice": "ok",
+        "camera": "ok",
+        "expression": "ok",
+        "chat": "ok",
+        "recording": "ok",
+        "analysis": "ok",
+        "hands_free": "ok",
+        "key_insights": "ok",
+        "invisibility": "ok"
+    }
+
+
 
 
 # Startup event
@@ -3190,15 +2260,6 @@ async def shutdown_event():
     await insights_service.clear_cache_safe()
 
 
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(
-        "main:app",
-        host="0.0.0.0",
-        port=8000,
-        reload=True,
-        log_level="info"
-    )
 #########VOICE RECOGNITION############
 
 voice_service = VoiceProcessingService()
@@ -3592,7 +2653,7 @@ async def cleanup_system():
 # WEBHOOK ROUTES FOR EXTERNAL INTEGRATIONS  
 # ====================================================================
 
-@app.post("/api/v1/webhooks/meeting/started", tags=["Webhooks"])
+@quick_respond_router.post("/webhooks/meeting/started", tags=["Webhooks"])
 async def webhook_meeting_started(request: Dict[str, Any]):
     """Webhook endpoint for when a meeting starts"""
     try:
@@ -3632,7 +2693,7 @@ async def webhook_meeting_started(request: Dict[str, Any]):
         logger.error(f"Webhook meeting started error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/api/v1/webhooks/meeting/ended", tags=["Webhooks"])
+@quick_respond_router.post("/webhooks/meeting/ended", tags=["Webhooks"])
 async def webhook_meeting_ended(request: Dict[str, Any]):
     """Webhook endpoint for when a meeting ends"""
     try:
@@ -3982,20 +3043,6 @@ logger = logging.getLogger(__name__)
 # Global state for interview sessions
 interview_sessions: Dict[str, Dict[str, Any]] = {}
 
-# Initialize services
-voice_service = VoiceProcessingService()
-audio_service = AudioService()
-camera_service = CameraService()
-expression_service = ExpressionDetectionService()
-chat_service = ChatService()
-permission_service = PermissionService()
-recording_service = ScreenRecordingService()
-ai_service = AIAnalysisService()
-hands_free_service = HandsFreeService()
-quick_respond_service = QuickRespondService()
-insights_service = KeyInsightsService()
-summarization_service = SummarizationService()
-invisibility_service = InvisibilityService()
 
 # WebSocket connection manager
 class ConnectionManager:
@@ -4073,7 +3120,7 @@ async def get_current_session(request: Request) -> str:
 # ====================================================================
 
 # Audio Service Routes (were referenced but not implemented)
-@app.post("/api/v1/audio/calibrate", response_model=CalibrationResponse, tags=["Audio Processing"])
+@voice_router.post("/audio/calibrate", response_model=CalibrationResponse, tags=["Audio Processing"])
 async def calibrate_audio(request: CalibrationRequest):
     """Audio Calibration endpoint - measures background noise and sets optimal levels"""
     try:
@@ -4092,7 +3139,7 @@ async def calibrate_audio(request: CalibrationRequest):
         logger.error(f"Calibration failed: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Audio calibration failed: {str(e)}")
 
-@app.post("/api/v1/audio/test-record", response_model=AudioTestResponse, tags=["Audio Processing"])
+@voice_router.post("/audio/test-record", response_model=AudioTestResponse, tags=["Audio Processing"])
 async def test_audio_recording(request: AudioTestRequest):
     """Test audio recording endpoint - records a test clip and validates audio quality"""
     try:
@@ -4122,7 +3169,7 @@ async def get_chat_messages(session_id: str, limit: int = 50):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get messages: {str(e)}")
 
-@app.post("/api/v1/chat/message/{session_id}", tags=["Chat"])
+@chat_router.post("/chat/message/{session_id}", tags=["Chat"])
 async def add_chat_message(session_id: str, message: ChatMessage):
     """Add a new chat message"""
     try:
@@ -4159,7 +3206,7 @@ async def check_recording_permissions():
         raise HTTPException(status_code=500, detail=f"Failed to check permissions: {str(e)}")
 
 # File Upload Routes for Screenshots
-@app.post("/api/v1/recording/upload-screenshot", tags=["Screen Recording"])
+@recording_router.post("/recording/upload-screenshot", tags=["Screen Recording"])
 async def upload_screenshot(file: UploadFile = File(...), question: Optional[str] = None):
     """Upload and analyze a screenshot file"""
     try:
