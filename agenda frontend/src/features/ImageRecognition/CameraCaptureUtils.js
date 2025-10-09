@@ -2,10 +2,8 @@
  * Utils for camera-based expression detection
  */
 
-import { CameraCapture } from "../../services/imageService";
-import { ScreenCapture } from "../../services/imageService";
-import { captureScreenAndAnalyze } from "../../services/imageService";
-import { captureCameraAndAnalyze } from "../../services/imageService";
+import { CameraCapture, ScreenCapture } from "../../services/imageService";
+import { captureScreenAndAnalyze, captureCameraAndAnalyze  } from "../../services/imageService";
 
 analyzeImage(file)
   .then(response => {
