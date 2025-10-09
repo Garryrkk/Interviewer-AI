@@ -54,10 +54,6 @@ export default function CameraCapture() {
         audio: false,
       });
       setStream(mediaStream);
-      if (videoRef.current) {
-        videoRef.current.srcObject = mediaStream;
-        await videoRef.current.play();
-      }
       setRunning(true);
 
       const generatedSessionId = `session-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
@@ -75,6 +71,11 @@ export default function CameraCapture() {
         if (response.ok) {
           const sessionData = await response.json();
           setSessionId(sessionData.session_id);
+          
+          if (videoRef.current && sessionStatus?.status === 'active') {
+            videoRef.current.srcObject = mediaStream;
+            await videoRef.current.play();
+          }
 
           try {
             const testResponse = await fetch(`/camera/session/${sessionData.session_id}/test`, {
@@ -195,14 +196,16 @@ export default function CameraCapture() {
       
       setExpression(expr);
 
-      setMessages((m) => [
-        ...m,
-        { 
-          id: crypto.randomUUID(), 
-          from: "system", 
-          text: `Expression detected: ${expr.label} (${expr.confidence})` 
-        },
-      ]);
+      if (expr.label) {
+        setMessages((m) => [
+          ...m,
+          { 
+            id: crypto.randomUUID(), 
+            from: "system", 
+            text: `Expression detected: ${expr.label} (${expr.confidence})` 
+          },
+        ]);
+      }
 
       if (expr.label === "confused" && parseFloat(expr.confidence) > 0.6) {
         setMessages((prev) => {
@@ -271,6 +274,14 @@ export default function CameraCapture() {
               </div>
               
               <div className="bg-slate-900/80 p-4 rounded-lg mb-6 relative overflow-hidden">
+                {!running && (
+                  <div className="w-full h-48 bg-slate-800 rounded-lg flex items-center justify-center">
+                    <div className="text-center">
+                      <Activity size={48} className="text-slate-600 mx-auto mb-3 animate-spin" />
+                      <p className="text-slate-500 text-sm">Starting camera and waiting for backend session...</p>
+                    </div>
+                  </div>
+                )}
                 <video 
                   ref={videoRef} 
                   className="w-full h-48 bg-slate-800 rounded-lg object-cover"
@@ -280,14 +291,6 @@ export default function CameraCapture() {
                     display: running ? 'block' : 'none',
                   }}
                 />
-                {!running && (
-                  <div className="w-full h-48 bg-slate-800 rounded-lg flex items-center justify-center">
-                    <div className="text-center">
-                      <Camera size={48} className="text-slate-600 mx-auto mb-3" />
-                      <p className="text-slate-500 text-sm">Camera feed will appear here</p>
-                    </div>
-                  </div>
-                )}
                 
                 {processing && (
                   <div className="absolute inset-0 bg-blue-600/10 rounded-lg flex items-center justify-center">
@@ -466,7 +469,7 @@ export default function CameraCapture() {
               </div>
             </div>
             <div className="text-slate-400 text-sm">
-              Detection Interval: 2.0s | Session: {sessionId ? sessionId.substring(0, 8) + '...' : 'None'}
+              Detection Interval: 2.0s | Backend session: {sessionId ? sessionId.substring(0, 8) + '...' : 'pending'}
             </div>
           </div>
         </div>
