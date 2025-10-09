@@ -107,11 +107,11 @@ export async function ScreenCapture() {
  * @returns {Promise<Object>} analysis result
  */
 export async function captureScreenAndAnalyze() {
-  const screenBlob = await captureScreen();
+  const screenBlob = await ScreenCapture();
   return analyzeImage(screenBlob);
 }
 
 export async function captureCameraAndAnalyze() {
-  const cameraBlob = await captureFromCamera();
+  const cameraBlob = await CameraCapture();
   return analyzeImage(cameraBlob);
 }
