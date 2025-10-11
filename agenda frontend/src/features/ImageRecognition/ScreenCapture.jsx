@@ -1,29 +1,21 @@
 import React, { useState, useEffect } from 'react';
 import { Play, Pause, Square, Eye, CheckCircle, XCircle, AlertTriangle, Monitor, Circle, Activity, Wifi, WifiOff, Camera, Zap } from 'lucide-react';
-import { ScreenCapture } from '../../services/imageService';
-import { captureScreenAndAnalyze } from '../../services/imageService';
 import { ScreenCapture } from './ScreenCaptureUtils';
 import { captureScreenAndAnalyze } from './ScreenCaptureUtils';
 import { meetingService } from './ScreenCaptureUtils';
 
+import { API_BASE_URL, callEndpoint } from "../../services/apiConfig";
+// api-configuration.js
+const ENV = "development"; // or "production"
 
-// Screen capture only
-ScreenCapture()
-  .then(blob => {
-    console.log("Screen captured Blob:", blob);
-  })
-  .catch(err => {
-    console.error("Screen capture error:", err);
-  });
+const BASE_URLS = {
+  development: "http://127.0.0.1:8000",
+  production: "https://api.myapp.com",
+};
 
-// Screen capture + analyze
-captureScreenAndAnalyze()
-  .then(result => {
-    console.log("Analysis result:", result);
-  })
-  .catch(err => {
-    console.error("Analysis error:", err);
-  });
+export const API_BASE_URL = BASE_URLS[ENV];
+
+
 
 // Using meetingService instance methods
 meetingService.getUserSummaries()

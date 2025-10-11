@@ -1,67 +1,21 @@
 import React, { useState, useEffect } from 'react';
 import { Play, Square, Eye, EyeOff, Settings, Shield, Activity, Download, Trash2, RefreshCw } from 'lucide-react';
 import { InvisibilityService, SessionManager, ConfigurationValidator, UIStateManager } from './invisibilityService.js';
-import { HiddenAnswers } from '../../services/mainFeature.js';
-import { pollHiddenSuggestions } from '../../services/mainFeature.js';
 import {InvisibilityService} from './invisibilityService.js';
 
-invisibility.enableInvisibilityMode({
-  recording: { screenRecording: true, voiceRecording: true },
-  ui: { theme: 'dark' },
-  security: { encrypt: true },
-  sessionName: 'MySession',
-  metadata: { project: 'Test' }
-})
-.then(response => {
-  console.log("Invisibility Mode Enabled:", response);
-})
-.catch(err => {
-  console.error("Enable Error:", err);
-});
+import { API_BASE_URL, callEndpoint } from "../../services/apiConfig";
+// api-configuration.js
+const ENV = "development"; // or "production"
 
-// Start recording
-invisibility.startRecording({ realTimeInsights: true })
-.then(response => {
-  console.log("Recording Started:", response);
-})
-.catch(err => {
-  console.error("Start Recording Error:", err);
-});
+const BASE_URLS = {
+  development: "http://127.0.0.1:8000",
+  production: "https://api.myapp.com",
+};
 
-// Stop recording
-invisibility.stopRecording()
-.then(response => {
-  console.log("Recording Stopped:", response);
-})
-.catch(err => {
-  console.error("Stop Recording Error:", err);
-});
+export const API_BASE_URL = BASE_URLS[ENV];
 
-// Disable invisibility mode
-invisibility.disableInvisibilityMode()
-.then(response => {
-  console.log("Invisibility Mode Disabled:", response);
-})
-.catch(err => {
-  console.error("Disable Error:", err);
-});
 
-HiddenAnswers({ question: "What's the AI insight?", context: "meeting-notes" })
-  .then(response => {
-    console.log("HiddenAnswers API Response:", response);
-  })
-  .catch(err => {
-    console.error("HiddenAnswers API Error:", err);
-  });
 
-// 🔹 Example 2 — calling pollHiddenSuggestions
-pollHiddenSuggestions("abc123")
-  .then(response => {
-    console.log("pollHiddenSuggestions API Response:", response);
-  })
-  .catch(err => {
-    console.error("pollHiddenSuggestions API Error:", err);
-  });
 
 // Legacy API wrapper for backward compatibility
 class InvisibilityAPI {

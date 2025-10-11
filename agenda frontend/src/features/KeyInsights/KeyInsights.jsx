@@ -1,35 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { Upload, FileText, Brain, Clock, History, Trash2, Eye, BarChart3, RefreshCw, CheckCircle, AlertCircle } from 'lucide-react';
-import { keyInsightsAPI } from '../../services/aiService';
+import {InvisibilityService} from './invisibilityService.js';
 
-const keyInsightsAPI = new KeyInsightsAPIService();
+import { API_BASE_URL, callEndpoint } from "../../services/apiConfig";
+// api-configuration.js
+const ENV = "development"; // or "production"
 
-// Get all insight types
-keyInsightsAPI.getInsightTypes()
-  .then(types => {
-    console.log("Insight Types:", types);
-  })
-  .catch(err => {
-    console.error("API Error:", err);
-  });
+const BASE_URLS = {
+  development: "http://127.0.0.1:8000",
+  production: "https://api.myapp.com",
+};
 
-// Get a sample insight
-keyInsightsAPI.getSampleInsight()
-  .then(sample => {
-    console.log("Sample Insight:", sample);
-  })
-  .catch(err => {
-    console.error("API Error:", err);
-  });
+export const API_BASE_URL = BASE_URLS[ENV];
 
-
-KeyInsights("This is the text I want insights for")
-  .then(response => {
-    console.log("API Response:", response);
-  })
-  .catch(err => {
-    console.error("API Error:", err);
-  });
 
 // API Service Class
 class KeyInsightsAPI {

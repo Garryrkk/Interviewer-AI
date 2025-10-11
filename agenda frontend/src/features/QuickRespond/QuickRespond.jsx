@@ -1,36 +1,16 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Upload, Play, Square, Settings, Users, BarChart3, Clock, AlertTriangle, CheckCircle, XCircle, Camera, Mic, FileText, Download, RefreshCw, Trash2, Plus } from 'lucide-react';
 import { QuickRespond } from '../../services/aiService';
-import {MeetingAnalysisService } from './quickRespondUtils.js';
+import { API_BASE_URL, callEndpoint } from "../../services/apiConfig";
+// api-configuration.js
+const ENV = "development"; // or "production"
 
-const meetingService = new MeetingAnalysisService();
+const BASE_URLS = {
+  development: "http://127.0.0.1:8000",
+  production: "https://api.myapp.com",
+};
 
-// Example: quickRespond
-meetingService.quickRespond({ text: "Summarize this meeting" })
-  .then(response => {
-    console.log("Quick respond result:", response);
-  })
-  .catch(err => {
-    console.error("Quick respond error:", err);
-  });
-
-// Example: analyze a screenshot (assume you have a File object `screenshotFile`)
-meetingService.analyzeScreenshot(screenshotFile, "Meeting about product launch")
-  .then(result => {
-    console.log("Screenshot analysis result:", result);
-  })
-  .catch(err => {
-    console.error("Screenshot analysis error:", err);
-  });
-
-// Example: batch analyze multiple screenshots (assume you have FileList `files`)
-meetingService.batchAnalyzeScreenshots(files, "Weekly team meeting")
-  .then(batchResult => {
-    console.log("Batch analysis result:", batchResult);
-  })
-  .catch(err => {
-    console.error("Batch analysis error:", err);
-  });
+export const API_BASE_URL = BASE_URLS[ENV];
 
 QuickRespond("This is my user prompt")
   .then(response => {

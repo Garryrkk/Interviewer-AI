@@ -1,29 +1,15 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Mic, MicOff, Play, Square, Volume2, Settings, Loader, CheckCircle, AlertCircle, TestTube, Gauge, Upload, FileAudio } from 'lucide-react';
-import { startLiveVoiceRecognition } from '../../services/voiceService';
-import { VoiceProcessing } from '../../services/voiceService';
-import { VoiceRecognition } from '../../services/voiceService';
-import { VoiceProcessingService } from './VoiceProcessingUtils';
+import { API_BASE_URL, callEndpoint } from "../../services/apiConfig";
+// api-configuration.js
+const ENV = "development"; // or "production"
 
-VoiceProcessing();
-VoiceRecognition();
+const BASE_URLS = {
+  development: "http://127.0.0.1:8000",
+  production: "https://api.myapp.com",
+};
 
-const voiceService = new VoiceProcessingService({ baseUrl: 'http://localhost:8000' });
-
-voiceService.initializeSession('user_123', 'meeting_456')
-  .then(response => {
-    console.log('Session started:', response);
-  })
-  .catch(err => {
-    console.error('Error starting session:', err);
-  });
-
-const recognition = startLiveVoiceRecognition((text) => {
-  console.log("Live Transcript:", text);
-});
-
-// stop when you want
-recognition.stop();
+export const API_BASE_URL = BASE_URLS[ENV];
 
 // API Service Class with ALL endpoints
 class VoiceProcessingAPI {

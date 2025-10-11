@@ -1,6 +1,16 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Camera, Play, Square, Activity, MessageSquare, Eye, Brain, Zap } from 'lucide-react';
 import { captureCameraFrame, blobToBase64 } from "./CameraCaptureUtils";
+import { API_BASE_URL, callEndpoint } from "../../services/apiConfig";
+// api-configuration.js
+const ENV = "development"; // or "production"
+
+const BASE_URLS = {
+  development: "http://127.0.0.1:8000",
+  production: "https://api.myapp.com",
+};
+
+export const API_BASE_URL = BASE_URLS[ENV];
 
 export default function CameraCapture() {
   const videoRef = useRef(null);
