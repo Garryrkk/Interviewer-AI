@@ -793,7 +793,7 @@ async def initialize_ollama_connection():
         logger.info("✅ Services cleaned up successfully")
     except Exception as e:
         logger.error(f"❌ Error during service cleanup: {e}")
-=======
+        
     """Cleanup all services"""
     try:
         await storage_manager.cleanup()
