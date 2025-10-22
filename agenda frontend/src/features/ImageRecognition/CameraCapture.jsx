@@ -1,96 +1,16 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Camera, Play, Square, Activity, MessageSquare, Eye, Brain, Zap } from 'lucide-react';
-import { analyzeImage, captureCameraAndAnalyze, captureScreenAndAnalyze } from "../../services/imageService";
-import { CameraCapture } from "../../services/imageService";
-import { ScreenCapture } from "../../services/imageService";
-import { captureScreenAndAnalyze } from "../../services/imageService";
-import { captureCameraAndAnalyze } from "../../services/imageService";
-import { captureCameraFrame } from "./CameraCaptureUtils";
-import { blobToBase64 } from "./CameraCaptureUtils";
-import { detectExpression } from "./CameraCaptureUtils";
+import { captureCameraFrame, blobToBase64 } from "./CameraCaptureUtils";
+import { API_BASE_URL, callEndpoint } from "../../services/apiConfig";
+// api-configuration.js
+const ENV = "development"; // or "production"
 
-analyzeImage(file)
-  .then(response => {
-    console.log("Image Analysis Response:", response);
-  })
-  .catch(err => {
-    console.error("Image Analysis Error:", err);
-  });
+const BASE_URLS = {
+  development: "http://127.0.0.1:8000",
+  production: "https://api.myapp.com",
+};
 
-  CameraCapture()
-  .then(blob => {
-    console.log("Captured Camera Image Blob:", blob);
-  })
-  .catch(err => {
-    console.error("Camera Capture Error:", err);
-  });
-
-  ScreenCapture()
-  .then(blob => {
-    console.log("Captured Screen Blob:", blob);
-  })
-  .catch(err => {
-    console.error("Screen Capture Error:", err);
-  });
-
-  captureScreenAndAnalyze()
-  .then(result => {
-    console.log("Screen Analysis Result:", result);
-  })
-  .catch(err => {
-    console.error("Screen + Analyze Error:", err);
-  });
-
-  captureCameraAndAnalyze()
-  .then(result => {
-    console.log("Camera Analysis Result:", result);
-  })
-  .catch(err => {
-    console.error("Camera + Analyze Error:", err);
-  });
-
-  
-export async function captureCameraFrame(videoEl) {
-  if (!videoEl) return null;
-
-  const canvas = document.createElement("canvas");
-  canvas.width = videoEl.videoWidth || 640;
-  canvas.height = videoEl.videoHeight || 480;
-  const ctx = canvas.getContext("2d");
-  ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
-
-  const blob = await new Promise((res) => canvas.toBlob(res, "image/jpeg", 0.8));
-  return blob;
-}
-
-export async function blobToBase64(blob) {
-  return new Promise((resolve, reject) => {
-    if (!blob) return resolve(null);
-    const reader = new FileReader();
-    reader.onloadend = () => resolve(reader.result.split(",")[1]);
-    reader.onerror = reject;
-    reader.readAsDataURL(blob);
-  });
-}
-
-/**
- * detectExpression
- * Mock detection: randomly returns "happy", "confused", or "stressed"
- * Replace this with a real ML/vision API.
- */
-export async function detectExpression(base64Image) {
-  await new Promise((r) => setTimeout(r, 500)); // simulate processing
-
-  const labels = [
-    { label: "happy", confidence: Math.random().toFixed(2) },
-    { label: "confused", confidence: Math.random().toFixed(2) },
-    { label: "stressed", confidence: Math.random().toFixed(2) },
-  ];
-
-  // Pick max
-  const expr = labels.reduce((a, b) => (parseFloat(a.confidence) > parseFloat(b.confidence) ? a : b));
-  return expr;
-}
+export const API_BASE_URL = BASE_URLS[ENV];
 
 export default function CameraCapture() {
   const videoRef = useRef(null);
@@ -108,7 +28,6 @@ export default function CameraCapture() {
   const statusCheckInterval = useRef(null);
 
   useEffect(() => {
-    // Load available camera devices on mount
     loadCameraDevices();
     return () => {
       stopStream();
@@ -120,31 +39,49 @@ export default function CameraCapture() {
 
   async function loadCameraDevices() {
     try {
-      const response = await fetch('/camera/devices');
-      if (!response.ok) {
-        throw new Error('Failed to fetch camera devices');
-      }
-      const data = await response.json();
-      setDevices(data.devices || []);
-      console.log(`Loaded ${data.count} camera devices`);
+      const deviceList = await navigator.mediaDevices.enumerateDevices();
+      const videoDevices = deviceList.filter(device => device.kind === 'videoinput');
+      setDevices(videoDevices.map((device, index) => ({
+        id: device.deviceId,
+        name: device.label || `Camera ${index + 1}`
+      })));
+      console.log(`Loaded ${videoDevices.length} camera devices`);
     } catch (err) {
       console.error("Failed to load camera devices:", err);
-      // Set a default device if API fails
-      setDevices([{ id: '0', name: 'Default Camera' }]);
+      setDevices([{ id: 'default', name: 'Default Camera' }]);
     }
   }
 
   async function startStream() {
     try {
-      // First, send request to backend
-      const backendResponse = await fetch('/start_stream', {
+      // Start camera session via backend - using query parameters
+      const deviceId = devices[0]?.id || '0';
+      const resolution = 'MEDIUM';
+      const fps = 30;
+      
+      const response = await fetch(`/camera/session/start?device_id=${encodeURIComponent(deviceId)}&resolution=${resolution}&fps=${fps}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: 'someId' })
+        headers: { 'Content-Type': 'application/json' }
       });
       
-      if (!backendResponse.ok) {
-        throw new Error('Backend denied camera access');
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || 'Failed to start camera session');
+      }
+
+      const sessionData = await response.json();
+      setSessionId(sessionData.session_id);
+
+      // Test camera connection
+      try {
+        const testResponse = await fetch(`/camera/session/${sessionData.session_id}/test`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' }
+        });
+        const testResult = await testResponse.json();
+        console.log('Camera test result:', testResult);
+      } catch (err) {
+        console.warn('Camera test failed:', err);
       }
 
       // Start local media stream
@@ -155,28 +92,32 @@ export default function CameraCapture() {
       setStream(mediaStream);
       if (videoRef.current) {
         videoRef.current.srcObject = mediaStream;
-        videoRef.current.play().catch(() => { });
-      }
-      setRunning(true);
-
-      // Start expression monitoring - using query parameters
-      const monitorResponse = await fetch(`/expression/monitoring/start?session_id=${encodeURIComponent(sessionData.session_id)}&interval_seconds=2`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
-      });
-
-      if (monitorResponse.ok) {
-        const monitorData = await monitorResponse.json();
-        setMonitoringId(monitorData.monitoring_id);
-        console.log('Started monitoring:', monitorData.monitoring_id);
-      } else {
-        console.warn('Failed to start monitoring, but continuing...');
+        videoRef.current.play().catch(() => {});
       }
 
-      // Check session status periodically
+      try {
+        const monitorResponse = await fetch(`/expression/monitoring/start?session_id=${encodeURIComponent(generatedSessionId)}&interval_seconds=2`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' }
+        });
+
+        if (monitorResponse.ok) {
+          const monitorData = await monitorResponse.json();
+          setMonitoringId(monitorData.monitoring_id);
+          console.log('Started monitoring:', monitorData.monitoring_id);
+        } else {
+          console.warn('Failed to start monitoring, but continuing...');
+        }
+      } catch (err) {
+        console.warn('Monitoring start failed:', err);
+      }
+
+      if (intervalRef.current) clearInterval(intervalRef.current);
+      if (statusCheckInterval.current) clearInterval(statusCheckInterval.current);
+
       statusCheckInterval.current = setInterval(async () => {
         try {
-          const statusResponse = await fetch(`/camera/session/${sessionData.session_id}/status`);
+          const statusResponse = await fetch(`/camera/session/${sessionId}/status`);
           if (statusResponse.ok) {
             const status = await statusResponse.json();
             setSessionStatus(status);
@@ -186,7 +127,6 @@ export default function CameraCapture() {
         }
       }, 5000);
 
-      // Run expression detection every 2s
       intervalRef.current = setInterval(() => {
         if (!detectorLockRef.current) detectFromCamera();
       }, 2000);
@@ -198,12 +138,23 @@ export default function CameraCapture() {
 
   async function stopStream() {
     try {
-      // Send request to backend to stop camera
-      await fetch('/stopStream', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: 'someId' })
-      });
+      // Stop expression monitoring
+      if (monitoringId) {
+        await fetch(`/expression/monitoring/${monitoringId}/stop`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' }
+        });
+        setMonitoringId(null);
+      }
+
+      // Stop camera session
+      if (sessionId) {
+        await fetch(`/camera/session/${sessionId}/stop`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' }
+        });
+        setSessionId(null);
+      }
     } catch (err) {
       console.error("Backend stop request failed:", err);
     }
@@ -220,24 +171,6 @@ export default function CameraCapture() {
     }
   }
 
-  async function captureCameraFrame(video) {
-    const canvas = document.createElement('canvas');
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    const ctx = canvas.getContext('2d');
-    ctx.drawImage(video, 0, 0);
-    return new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg'));
-  }
-
-  async function blobToBase64(blob) {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onloadend = () => resolve(reader.result.split(',')[1]);
-      reader.onerror = reject;
-      reader.readAsDataURL(blob);
-    });
-  }
-
   async function detectFromCamera() {
     if (detectorLockRef.current || !sessionId) return;
     detectorLockRef.current = true;
@@ -247,33 +180,49 @@ export default function CameraCapture() {
       const frameBlob = await captureCameraFrame(videoRef.current);
       const b64 = await blobToBase64(frameBlob);
 
-      // Expression detection (mock for now)
-      const expr = await detectExpression(b64);
+      // Call backend expression detection endpoint
+      const response = await fetch(`/expression/detect/${sessionId}?confidence_threshold=0.5`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          frame_data: b64
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || 'Expression detection failed');
+      }
+
+      const result = await response.json();
+      const expr = {
+        label: result.expression || result.label || 'neutral',
+        confidence: result.confidence ? result.confidence.toString() : '0.00'
+      };
+      
       setExpression(expr);
 
 
-      // Add to chat log
-      setMessages((m) => [
-        ...m,
-        { 
-          id: crypto.randomUUID(), 
-          from: "system", 
-          text: `Expression detected: ${expr.label} (${expr.confidence})` 
-        },
-      ]);
+      if (expr.label) {
+        setMessages((m) => [
+          ...m,
+          { 
+            id: crypto.randomUUID(), 
+            from: "system", 
+            text: `Expression detected: ${expr.label} (${expr.confidence})` 
+          },
+        ]);
+      }
 
-      // If confused → simplify answer
       if (expr.label === "confused" && parseFloat(expr.confidence) > 0.6) {
-        const latestAI = messages.filter((x) => x.from === "ai").slice(-1)[0];
-        if (latestAI) {
-          // Simulate AI response based on confusion detection
-          const reply = `Let me simplify that: ${latestAI.text.substring(0, 50)}...`;
-          
-          setMessages((m) => [
-            ...m,
-            { id: crypto.randomUUID(), from: "ai", text: reply },
-          ]);
-        }
+        setMessages((prev) => {
+          const latestAI = prev.filter((x) => x.from === "ai").slice(-1)[0];
+          if (!latestAI) return prev;
+          return [
+            ...prev,
+            { id: crypto.randomUUID(), from: "ai", text: `Let me simplify that: ${latestAI.text.substring(0, 50)}...` },
+          ];
+        });
       }
     } catch (err) {
       console.error("Camera detect error:", err);
@@ -286,7 +235,6 @@ export default function CameraCapture() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-slate-100 p-8">
       <div className="max-w-7xl mx-auto space-y-8">
-        {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-4">
             <div className="w-12 h-12 bg-gradient-to-r from-blue-600 to-purple-600 rounded-xl flex items-center justify-center">
@@ -314,12 +262,11 @@ export default function CameraCapture() {
           </div>
         </div>
 
-        {/* Main Content Grid */}
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
-
+          
           {/* Camera Feed Section */}
           <div className="xl:col-span-2 grid grid-cols-1 lg:grid-cols-2 gap-6">
-
+            
             {/* Camera Controls & Feed */}
             <div className="bg-slate-800/50 backdrop-blur p-6 rounded-xl border border-slate-700">
               <div className="flex items-center justify-between mb-6">
@@ -332,11 +279,11 @@ export default function CameraCapture() {
                   {running ? 'LIVE' : 'OFFLINE'}
                 </div>
               </div>
-
+              
               {/* Video Container */}
               <div className="bg-slate-900/80 p-4 rounded-lg mb-6 relative overflow-hidden">
-                <video
-                  ref={videoRef}
+                <video 
+                  ref={videoRef} 
                   className="w-full h-48 bg-slate-800 rounded-lg object-cover"
                   muted
                   playsInline
@@ -352,7 +299,7 @@ export default function CameraCapture() {
                     </div>
                   </div>
                 )}
-
+                
                 {/* Processing Overlay */}
                 {processing && (
                   <div className="absolute inset-0 bg-blue-600/10 rounded-lg flex items-center justify-center">
@@ -364,7 +311,6 @@ export default function CameraCapture() {
                 )}
               </div>
 
-              {/* Camera Controls */}
               <div className="grid grid-cols-1 gap-3">
                 <button
                   onClick={running ? stopStream : startStream}
@@ -399,7 +345,6 @@ export default function CameraCapture() {
                 )}
               </div>
               
-              {/* Session Status Info */}
               {sessionStatus && (
                 <div className="mt-4 p-3 bg-slate-900/60 rounded-lg">
                   <div className="text-xs space-y-1">
@@ -420,7 +365,6 @@ export default function CameraCapture() {
               )}
             </div>
 
-            {/* Expression Analysis */}
             <div className="bg-slate-800/50 backdrop-blur p-6 rounded-xl border border-slate-700">
               <h3 className="text-xl font-semibold mb-6 text-slate-200 flex items-center">
                 <Brain className="mr-3" size={20} />
@@ -442,7 +386,7 @@ export default function CameraCapture() {
                         <span className="text-slate-200 font-semibold">{expression.confidence}</span>
                       </div>
                     </div>
-
+                    
                     {/* Confidence Bar */}
                     <div className="space-y-2">
                       <div className="flex justify-between text-sm">
@@ -470,7 +414,6 @@ export default function CameraCapture() {
             </div>
           </div>
 
-          {/* Chat/Messages Panel */}
           <div className="bg-slate-800/50 backdrop-blur p-6 rounded-xl border border-slate-700">
             <h3 className="text-xl font-semibold mb-6 text-slate-200 flex items-center justify-between">
               <div className="flex items-center">
@@ -515,7 +458,6 @@ export default function CameraCapture() {
           </div>
         </div>
 
-        {/* Status Bar */}
         <div className="bg-slate-800/30 backdrop-blur p-4 rounded-xl border border-slate-700">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-6">
@@ -533,7 +475,7 @@ export default function CameraCapture() {
               </div>
             </div>
             <div className="text-slate-400 text-sm">
-              Detection Interval: 2.0s | Session: {sessionId ? sessionId.substring(0, 8) + '...' : 'None'}
+              Detection Interval: 2.0s | Backend session: {sessionId ? sessionId.substring(0, 8) + '...' : 'pending'}
             </div>
           </div>
         </div>

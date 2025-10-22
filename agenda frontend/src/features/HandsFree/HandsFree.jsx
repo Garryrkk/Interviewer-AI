@@ -1,36 +1,17 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Mic, MicOff, Video, VideoOff, Pause, Play, Square, Settings, Activity, Eye, Brain, Heart, Upload, RefreshCw, Database } from 'lucide-react';
-import { HandsFreeMode } from '../../services/aiService';
-import {HandsFreeInterviewService} from './HandsFreeUtils'
 
-const interviewService = new HandsFreeInterviewService('http://127.0.0.1:8000');
+import { API_BASE_URL, callEndpoint } from "../../services/apiConfig";
+// api-configuration.js
+const ENV = "development"; // or "production"
 
-// Start a session
-interviewService.startSession({ user_id: 'user_123' })
-  .then(data => {
-    console.log('Session started:', data);
-  })
-  .catch(err => {
-    console.error('Session start error:', err);
-  });
+const BASE_URLS = {
+  development: "http://localhost:8000",
+  production: "https://api.myapp.com",
+};
 
-// Activate hands-free mode
-interviewService.activateHandsFreeMode()
-  .then(data => {
-    console.log('Hands-free activated:', data);
-  })
-  .catch(err => {
-    console.error('Hands-free activation error:', err);
-  });
+export const API_BASE_URL = BASE_URLS[ENV];
 
-// Get session insights
-interviewService.getSessionInsights()
-  .then(insights => {
-    console.log('Insights:', insights);
-  })
-  .catch(err => {
-    console.error('Insights error:', err);
-  });
 
 const HandsFreeInterviewSystem = () => {
   const [apiMode, setApiMode] = useState('original'); // 'original' or 'handsfree'
@@ -78,14 +59,6 @@ const HandsFreeInterviewSystem = () => {
   // ORIGINAL API ENDPOINTS
   // ==========================================================================
 const context = { meetingId: "123", action: "start" };
-
-HandsFreeMode(context)
-  .then(response => {
-    console.log("API Response:", response);
-  })
-  .catch(err => {
-    console.error("API Error:", err);
-  });
 
   const createSessionOriginal = async () => {
     try {

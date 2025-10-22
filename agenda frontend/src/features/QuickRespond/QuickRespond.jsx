@@ -1,5 +1,28 @@
 import React, { useState, useRef, useEffect } from 'react';
+<<<<<<< HEAD
 import { Upload, Play, Square, Settings, Users, BarChart3, Clock, AlertTriangle, CheckCircle, XCircle, Camera, Mic, FileText, Download, RefreshCw } from 'lucide-react';
+=======
+import { Upload, Play, Square, Settings, Users, BarChart3, Clock, AlertTriangle, CheckCircle, XCircle, Camera, Mic, FileText, Download, RefreshCw, Trash2, Plus } from 'lucide-react';
+import { QuickRespond } from '../../services/aiService';
+import { API_BASE_URL, callEndpoint } from "../../services/apiConfig";
+// api-configuration.js
+const ENV = "development"; // or "production"
+
+const BASE_URLS = {
+  development: "http://127.0.0.1:8000",
+  production: "https://api.myapp.com",
+};
+
+export const API_BASE_URL = BASE_URLS[ENV];
+
+QuickRespond("This is my user prompt")
+  .then(response => {
+    console.log("API Response:", response);
+  })
+  .catch(err => {
+    console.error("API Error:", err);
+  });
+>>>>>>> dc48a3c9bb6b60e86081e19b5a58e753bc2d8ceb
 
 // Main Dashboard Component
 const MeetingAnalysisDashboard = () => {

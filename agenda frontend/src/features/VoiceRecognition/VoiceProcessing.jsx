@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+<<<<<<< HEAD
 import { Mic, MicOff, Play, Square, Volume2, Settings, Loader, CheckCircle, AlertCircle } from 'lucide-react';
 import {VoiceProcessingAPI} from './VoicePreoputils'
 import {VoiceRecognition} from '../../services/voiceService'
@@ -68,6 +69,19 @@ export function VoiceProcessing() {
       }, 1000);
     });
   };
+=======
+import { Mic, MicOff, Play, Square, Volume2, Settings, Loader, CheckCircle, AlertCircle, TestTube, Gauge, Upload, FileAudio } from 'lucide-react';
+import { API_BASE_URL, callEndpoint } from "../../services/apiConfig";
+// api-configuration.js
+const ENV = "development"; // or "production"
+
+const BASE_URLS = {
+  development: "http://127.0.0.1:8000",
+  production: "https://api.myapp.com",
+};
+
+export const API_BASE_URL = BASE_URLS[ENV];
+>>>>>>> dc48a3c9bb6b60e86081e19b5a58e753bc2d8ceb
 
   const startRecording = async () => { 
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true }); 

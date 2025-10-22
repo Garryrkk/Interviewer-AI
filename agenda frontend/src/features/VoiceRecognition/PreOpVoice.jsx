@@ -1,15 +1,25 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { AudioService } from './VoicePreoputils';
+<<<<<<< HEAD
 import { PreOpVoice } from '../../services/voiceService';
+=======
+import { API_BASE_URL, callEndpoint } from "../../services/apiConfig";
+// api-configuration.js
+const ENV = "development"; // or "production"
+
+const BASE_URLS = {
+  development: "http://127.0.0.1:8000",
+  production: "https://api.myapp.com",
+};
+
+export const API_BASE_URL = BASE_URLS[ENV];
+
+
+
+>>>>>>> dc48a3c9bb6b60e86081e19b5a58e753bc2d8ceb
 // For demo purposes, we'll include the AudioService inline
 
-transcribeAudio(audioBlob)
-  .then(response => {
-    console.log("API Response:", response);
-  })
-  .catch(err => {
-    console.error("API Error:", err);
-  });
+
 
 class AudioService {
   constructor() {

@@ -1,14 +1,15 @@
 import React, { useState, useCallback, useRef } from 'react';
 import { Upload, Mic, FileAudio, Loader2, Play, Pause, Download, Trash2, Eye, Clock, Users, Target } from 'lucide-react';
-import { Summarization } from '../../services/aiService';
+import { API_BASE_URL, callEndpoint } from "../../services/apiConfig";
+// api-configuration.js
+const ENV = "development"; // or "production"
 
-Summarization("This is the full transcript or meeting notes")
-  .then(response => {
-    console.log("API Response:", response);
-  })
-  .catch(err => {
-    console.error("API Error:", err);
-  });
+const BASE_URLS = {
+  development: "http://127.0.0.1:8000",
+  production: "https://api.myapp.com",
+};
+
+export const API_BASE_URL = BASE_URLS[ENV];
   
 const summarizationService = {
   // Audio Upload Endpoints
