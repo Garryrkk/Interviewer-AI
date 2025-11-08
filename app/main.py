@@ -917,7 +917,7 @@ app.include_router(chat_router)
 app.include_router(recording_router)
 app.include_router(hands_free_router)
 app.include_router(key_insights_router)
-app.include_router(main_feature_router)
+app.include_router(invisibility_router)
 
 # ==============================================
 # FRONTEND MOUNTING - AFTER ALL ROUTERS
@@ -1146,7 +1146,7 @@ invisibility_service = InvisibilityService()
 
 
 # Session Management Endpoints
-@app.post("/api/v1/invisibility/sessions/enable")
+@invisibility_router.post("/invisibility/sessions/enable")
 async def enable_invisibility_mode(
     recording_config: RecordingConfig,
     ui_config: UIConfig,
@@ -1173,7 +1173,7 @@ async def enable_invisibility_mode(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("@invisibility_router/sessions/{session_id}/disable")
+@invisibility_router.post("/sessions/{session_id}/disable")
 async def disable_invisibility_mode(session_id: str):
     """Disable invisibility mode for a session."""
     try:
@@ -1215,7 +1215,7 @@ async def get_session_status(session_id: str):
 
 
 # Recording Endpoints
-@app.post("@invisibility_router/sessions/{session_id}/recording/start")
+@invisibility_router.post("/sessions/{session_id}/recording/start")
 async def start_invisible_recording(
     session_id: str,
     screen_recording: bool = True,
@@ -1249,7 +1249,7 @@ async def start_invisible_recording(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("@invisibility_router/sessions/{session_id}/recording/stop")
+@invisibility_router.post("/sessions/{session_id}/recording/stop")
 async def stop_invisible_recording(
     session_id: str,
     background_tasks: BackgroundTasks
@@ -1287,7 +1287,7 @@ async def stop_invisible_recording(
 
 
 # UI Component Management Endpoints
-@app.post("@invisibility_router/sessions/{session_id}/ui/hide")
+@invisibility_router.post("/sessions/{session_id}/ui/hide")
 async def hide_ui_components(
     session_id: str,
     components_to_hide: List[UIComponentEnum],
@@ -1314,7 +1314,7 @@ async def hide_ui_components(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("@invisibility_router/sessions/{session_id}/ui/show")
+@invisibility_router.post("/sessions/{session_id}/ui/show")
 async def show_ui_components(
     session_id: str,
     components_to_show: List[UIComponentEnum]
@@ -1342,7 +1342,7 @@ async def show_ui_components(
 
 
 # Insights Endpoints
-@app.post("@invisibility_router/sessions/{session_id}/insights/generate")
+@invisibility_router.post("/sessions/{session_id}/insights/generate")
 async def generate_insights(
     session_id: str,
     insight_types: List[InsightTypeEnum],
@@ -3053,7 +3053,7 @@ class TranscribeUploadRequest(BaseModel):
 
 # ==================== Voice Processing Service Routes ====================
 
-@app.post("/api/v1/voice/session", tags=["Voice Processing"])
+@voice_router("/session", tags=["Voice Processing"])
 async def create_voice_session(request: SessionCreateRequest):
     """Create a new voice processing session"""
     try:
@@ -3070,7 +3070,7 @@ async def create_voice_session(request: SessionCreateRequest):
         logger.error(f"Failed to create session: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/api/v1/voice/session/{session_id}/status", tags=["Voice Processing"])
+@voice_router("/session/{session_id}/status", tags=["Voice Processing"])
 async def get_session_status(session_id: str):
     """Get current session status"""
     try:
@@ -3080,7 +3080,7 @@ async def get_session_status(session_id: str):
         logger.error(f"Failed to get session status: {str(e)}")
         raise HTTPException(status_code=404, detail=str(e))
 
-@app.delete("/api/v1/voice/session/{session_id}", tags=["Voice Processing"])
+@voice_router("/session/{session_id}", tags=["Voice Processing"])
 async def end_voice_session(session_id: str):
     """End voice session and cleanup resources"""
     try:
@@ -3093,7 +3093,7 @@ async def end_voice_session(session_id: str):
         logger.error(f"Failed to end session: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/api/v1/voice/session/{session_id}/microphone/status", tags=["Voice Processing"])
+@voice_router("/session/{session_id}/microphone/status", tags=["Voice Processing"])
 async def check_microphone_status(session_id: str):
     """Check microphone availability and status"""
     try:
@@ -3103,7 +3103,7 @@ async def check_microphone_status(session_id: str):
         logger.error(f"Failed to check microphone: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/api/v1/voice/session/{session_id}/devices", tags=["Voice Processing"])
+@voice_router("/session/{session_id}/devices", tags=["Voice Processing"])
 async def get_audio_devices(session_id: str):
     """Get list of available audio input devices"""
     try:
@@ -3117,7 +3117,7 @@ async def get_audio_devices(session_id: str):
         logger.error(f"Failed to get devices: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/api/v1/voice/session/{session_id}/device/select", tags=["Voice Processing"])
+@voice_router("/session/{session_id}/device/select", tags=["Voice Processing"])
 async def select_audio_device(session_id: str, request: DeviceSelectRequest):
     """Select and connect to a specific audio device"""
     try:
@@ -3127,7 +3127,7 @@ async def select_audio_device(session_id: str, request: DeviceSelectRequest):
         logger.error(f"Failed to select device: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/api/v1/voice/session/{session_id}/device/disable", tags=["Voice Processing"])
+@voice_router("/session/{session_id}/device/disable", tags=["Voice Processing"])
 async def disable_microphone(session_id: str):
     """Disable microphone for the session"""
     try:
@@ -3140,7 +3140,7 @@ async def disable_microphone(session_id: str):
         logger.error(f"Failed to disable microphone: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/api/v1/voice/session/{session_id}/process", tags=["Voice Processing"])
+@voice_router("/session/{session_id}/process", tags=["Voice Processing"])
 async def process_audio(session_id: str, file: UploadFile = File(...)):
     """Process audio data: analyze quality, transcribe, and prepare for AI response"""
     try:
@@ -3155,7 +3155,7 @@ async def process_audio(session_id: str, file: UploadFile = File(...)):
         logger.error(f"Failed to process audio: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/api/v1/voice/session/{session_id}/transcribe", tags=["Voice Processing"])
+@voice_router("/session/{session_id}/transcribe", tags=["Voice Processing"])
 async def transcribe_audio(session_id: str, request: TranscribeRequest):
     """Transcribe audio to text"""
     try:
@@ -3168,7 +3168,7 @@ async def transcribe_audio(session_id: str, request: TranscribeRequest):
         logger.error(f"Failed to transcribe: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/api/v1/voice/session/{session_id}/ai-response", tags=["Voice Processing"])
+@voice_router("/session/{session_id}/ai-response", tags=["Voice Processing"])
 async def generate_ai_response(session_id: str, request: AIResponseRequest):
     """Generate AI response using Ollama"""
     try:
@@ -3183,7 +3183,7 @@ async def generate_ai_response(session_id: str, request: AIResponseRequest):
         logger.error(f"Failed to generate AI response: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/api/v1/voice/session/{session_id}/analyze-voice", tags=["Voice Processing"])
+@voice_router("/session/{session_id}/analyze-voice", tags=["Voice Processing"])
 async def analyze_voice_characteristics(session_id: str, request: TranscribeRequest):
     """Analyze voice characteristics and provide confidence rating"""
     try:
@@ -3196,7 +3196,7 @@ async def analyze_voice_characteristics(session_id: str, request: TranscribeRequ
         logger.error(f"Failed to analyze voice: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/api/v1/voice/session/{session_id}/simplify", tags=["Voice Processing"])
+@voice_router("/session/{session_id}/simplify", tags=["Voice Processing"])
 async def simplify_response(session_id: str, request: SimplifyRequest):
     """Generate a simplified version of the AI response"""
     try:
@@ -4045,7 +4045,7 @@ async def global_exception_handler(request: Request, exc: Exception):
 # SUMMARIZATION ROUTES - PROPERLY INTEGRATED
 # ====================================================================
 
-@app.post("/api/v1/summarization/upload-audio", response_model=AudioUploadResponse, tags=["Summarization"])
+@summarization_router("/upload-audio", response_model=AudioUploadResponse, tags=["Summarization"])
 async def upload_meeting_audio(
     audio_file: UploadFile = File(...),
     meeting_id: Optional[str] = None
@@ -4067,7 +4067,7 @@ async def upload_meeting_audio(
         logger.error(f"Error uploading audio: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to upload audio: {str(e)}")
 
-@app.post("/api/v1/summarization/analyze-meeting", response_model=MeetingAnalysisResponse, tags=["Summarization"])
+@summarization_router("/analyze-meeting", response_model=MeetingAnalysisResponse, tags=["Summarization"])
 async def analyze_meeting_audio(request: MeetingAnalysisRequest):
     """Analyze meeting audio and provide summarization with actionable points"""
     try:
@@ -4084,7 +4084,7 @@ async def analyze_meeting_audio(request: MeetingAnalysisRequest):
         logger.error(f"Error analyzing meeting: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to analyze meeting: {str(e)}")
 
-@app.post("/api/v1/summarization/summarize", response_model=SummarizationResponse, tags=["Summarization"])
+@summarization_router("/summarize", response_model=SummarizationResponse, tags=["Summarization"])
 async def create_summary(request: SummarizationRequest):
     """Create summarization from transcribed text or audio analysis"""
     try:
@@ -4102,7 +4102,7 @@ async def create_summary(request: SummarizationRequest):
         logger.error(f"Error creating summary: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to create summary: {str(e)}")
 
-@app.get("/api/v1/summarization/meeting/{meeting_id}/summary", response_model=SummarizationResponse, tags=["Summarization"])
+@summarization_router("/meeting/{meeting_id}/summary", response_model=SummarizationResponse, tags=["Summarization"])
 async def get_meeting_summary(meeting_id: str):
     """Get existing summary for a meeting"""
     try:
@@ -4122,7 +4122,7 @@ async def get_meeting_summary(meeting_id: str):
         logger.error(f"Error getting meeting summary: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to get meeting summary: {str(e)}")
 
-@app.get("/api/v1/summarization/user/summaries", response_model=List[SummarizationResponse], tags=["Summarization"])
+@summarization_router("/user/summaries", response_model=List[SummarizationResponse], tags=["Summarization"])
 async def get_user_summaries(
     limit: int = 10,
     offset: int = 0
@@ -4164,7 +4164,7 @@ async def delete_meeting_summary(meeting_id: str):
         logger.error(f"Error deleting summary: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to delete summary: {str(e)}")
 
-@app.post("/api/v1/summarization/real-time-analysis", response_model=MeetingAnalysisResponse, tags=["Summarization"])
+@summarization_router("/real-time-analysis", response_model=MeetingAnalysisResponse, tags=["Summarization"])
 async def real_time_meeting_analysis(request: MeetingAnalysisRequest):
     """Real-time analysis of ongoing meeting audio"""
     try:
@@ -4180,7 +4180,7 @@ async def real_time_meeting_analysis(request: MeetingAnalysisRequest):
         logger.error(f"Error in real-time analysis: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to perform real-time analysis: {str(e)}")
 
-@app.post("/api/v1/summarization/batch", response_model=List[SummarizationResponse], tags=["Summarization"])
+@summarization_router("/batch", response_model=List[SummarizationResponse], tags=["Summarization"])
 async def batch_summarize_meetings(request: BatchSummarizationRequest):
     """Batch process multiple meetings for summarization"""
     try:
@@ -4505,7 +4505,7 @@ async def list_items(
         timestamp=datetime.utcnow()
     )
 
-@app.post("/api/v1/quick-respond/analyze-screenshot", response_model=QuickRespondResponse, tags=["Quick Respond"])
+@quick_respond_router("/analyze-screenshot", response_model=QuickRespondResponse, tags=["Quick Respond"])
 async def analyze_meeting_screenshot(
     screenshot: UploadFile = File(...),
     meeting_context: Optional[str] = None,
@@ -4533,7 +4533,7 @@ async def analyze_meeting_screenshot(
         logger.error(f"Quick respond screenshot analysis error: {e}")
         raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
 
-@app.post("/api/v1/quick-respond/analyze-screenshot/stream", tags=["Quick Respond"])
+@quick_respond_router("/analyze-screenshot/stream", tags=["Quick Respond"])
 async def analyze_meeting_screenshot_stream(
     screenshot: UploadFile = File(...),
     meeting_context: Optional[str] = None,
@@ -4596,7 +4596,7 @@ async def create_model_prompt(prompt: ModelPrompts):
 async def get_all_model_prompts():
     return []
 
-@app.post("/api/v1/quick-respond/simplify", response_model=SimplifyResponse, tags=["Quick Respond"])
+@quick_respond_router("/simplify", response_model=SimplifyResponse, tags=["Quick Respond"])
 async def simplify_analysis_response(request: SimplifyRequest):
     """Simplify a complex analysis response"""
     try:
@@ -4607,7 +4607,7 @@ async def simplify_analysis_response(request: SimplifyRequest):
         logger.error(f"Quick respond simplify error: {e}")
         raise HTTPException(status_code=500, detail=f"Simplification failed: {str(e)}")
 
-@app.post("/api/v1/quick-respond/batch-analyze", response_model=BatchAnalysisResponse, tags=["Quick Respond"])
+@quick_respond_router("/batch-analyze", response_model=BatchAnalysisResponse, tags=["Quick Respond"])
 async def batch_analyze_screenshots(
     screenshots: List[UploadFile] = File(...),
     meeting_context: Optional[str] = None
@@ -4718,7 +4718,7 @@ async def health_check():
         response_time_ms=50
     )
 
-@app.get("/api/v1/quick-respond/health", response_model=QuickRespondHealthCheckResponse, tags=["Quick Respond"])
+@quick_respond_router("/health", response_model=QuickRespondHealthCheckResponse, tags=["Quick Respond"])
 async def quick_respond_health_check():
     """Check if LLAVA/Ollama services are available for Quick Respond"""
     try:
@@ -4729,7 +4729,7 @@ async def quick_respond_health_check():
         logger.error(f"Quick respond health check error: {e}")
         raise HTTPException(status_code=503, detail=f"Service unavailable: {str(e)}")
 
-@app.post("/api/v1/quick-respond/context/update", tags=["Quick Respond"])
+@quick_respond_router("/context/update", tags=["Quick Respond"])
 async def update_meeting_context(context: QuickRespondMeetingContext):
     """Update meeting context for better analysis"""
     try:
@@ -4751,7 +4751,7 @@ async def clear_meeting_context():
         logger.error(f"Quick respond context clear error: {e}")
         raise HTTPException(status_code=500, detail=f"Context clearing failed: {str(e)}")
 
-@app.post("/api/v1/quick-respond/advanced-analyze", response_model=AdvancedAnalysisResponse, tags=["Quick Respond"])
+@quick_respond_router("/advanced-analyze", response_model=AdvancedAnalysisResponse, tags=["Quick Respond"])
 async def advanced_analysis(request: AdvancedAnalysisRequest):
     """Perform advanced analysis with custom options"""
     try:
@@ -4787,7 +4787,7 @@ async def advanced_analysis(request: AdvancedAnalysisRequest):
         logger.error(f"Quick respond advanced analysis error: {e}")
         raise HTTPException(status_code=500, detail=f"Advanced analysis failed: {str(e)}")
 
-@app.get("/api/v1/quick-respond/analytics/{session_id}", response_model=SessionAnalytics, tags=["Quick Respond"])
+@quick_respond_router("/analytics/{session_id}", response_model=SessionAnalytics, tags=["Quick Respond"])
 async def get_session_analytics(session_id: str):
     """Get analytics for a specific session"""
     try:
@@ -4810,7 +4810,7 @@ async def get_session_analytics(session_id: str):
         logger.error(f"Quick respond analytics error: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get analytics: {str(e)}")
 
-@app.get("/api/v1/quick-respond/metrics", response_model=UsageMetrics, tags=["Quick Respond"])
+@quick_respond_router("/metrics", response_model=UsageMetrics, tags=["Quick Respond"])
 async def get_usage_metrics():
     """Get overall system usage metrics"""
     try:
@@ -4836,7 +4836,7 @@ async def get_usage_metrics():
 # VOICE RECOGNITION ROUTES - ENHANCED INTEGRATION
 # ====================================================================
 
-@app.post("/api/v1/voice/session/start", response_model=VoiceSessionResponse, tags=["Voice Recognition"])
+@voice_router("/session/start", response_model=VoiceSessionResponse, tags=["Voice Recognition"])
 async def voice_start_session(request: VoiceSessionRequest):
     """Voice Recognition: Start a new voice session"""
     try:
@@ -4851,7 +4851,7 @@ async def voice_start_session(request: VoiceSessionRequest):
         logger.error(f"Voice session start error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/api/v1/voice/microphone/status/{session_id}", response_model=MicrophoneStatusResponse, tags=["Voice Recognition"])
+@voice_router("/microphone/status/{session_id}", response_model=MicrophoneStatusResponse, tags=["Voice Recognition"])
 async def voice_microphone_status(session_id: str):
     """Voice Recognition: Check microphone status"""
     try:
@@ -4868,7 +4868,7 @@ async def voice_microphone_status(session_id: str):
         logger.error(f"Microphone status error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/api/v1/voice/devices/{session_id}", response_model=DeviceListResponse, tags=["Voice Recognition"])
+@voice_router("/devices/{session_id}", response_model=DeviceListResponse, tags=["Voice Recognition"])
 async def voice_list_devices(session_id: str):
     """Voice Recognition: List available audio input devices"""
     try:
@@ -4883,7 +4883,7 @@ async def voice_list_devices(session_id: str):
         logger.error(f"Device list error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/api/v1/voice/device/select", tags=["Voice Recognition"])
+@voice_router("/device/select", tags=["Voice Recognition"])
 async def voice_select_device(request: DeviceSelectionRequest):
     """Voice Recognition: Select and connect to a specific audio device"""
     try:
@@ -4898,7 +4898,7 @@ async def voice_select_device(request: DeviceSelectionRequest):
         logger.error(f"Device selection error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/api/v1/voice/microphone/toggle", tags=["Voice Recognition"])
+@voice_router("/microphone/toggle", tags=["Voice Recognition"])
 async def voice_toggle_microphone(request: MicrophoneStatusRequest):
     """Voice Recognition: Toggle microphone on/off"""
     try:
@@ -4935,7 +4935,7 @@ async def voice_toggle_microphone(request: MicrophoneStatusRequest):
         logger.error(f"Microphone toggle error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/api/v1/voice/audio/process", response_model=AudioProcessingResponse, tags=["Voice Recognition"])
+@voice_router("/audio/process", response_model=AudioProcessingResponse, tags=["Voice Recognition"])
 async def voice_process_audio(session_id: str, audio_file: UploadFile = File(...)):
     """Voice Recognition: Process uploaded audio"""
     try:
@@ -4957,7 +4957,7 @@ async def voice_process_audio(session_id: str, audio_file: UploadFile = File(...
         logger.error(f"Audio process error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/api/v1/voice/transcribe", response_model=TranscriptionResponse, tags=["Voice Recognition"])
+@voice_router("/transcribe", response_model=TranscriptionResponse, tags=["Voice Recognition"])
 async def voice_transcribe(request: AudioProcessingRequest):
     """Voice Recognition: Transcribe audio to text"""
     try:
@@ -4974,7 +4974,7 @@ async def voice_transcribe(request: AudioProcessingRequest):
         logger.error(f"Transcription error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/api/v1/voice/ai/respond", response_model=AIResponseResponse, tags=["Voice Recognition"])
+@voice_router("/ai/respond", response_model=AIResponseResponse, tags=["Voice Recognition"])
 async def voice_ai_response(request: AIResponseRequest):
     """Voice Recognition: Get AI-generated response"""
     try:
@@ -4996,7 +4996,7 @@ async def voice_ai_response(request: AIResponseRequest):
         logger.error(f"AI response error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/api/v1/voice/analyze", response_model=VoiceAnalysisResponse, tags=["Voice Recognition"])
+@voice_router("/analyze", response_model=VoiceAnalysisResponse, tags=["Voice Recognition"])
 async def voice_analyze(request: AudioProcessingRequest):
     """Voice Recognition: Analyze voice confidence and provide feedback"""
     try:
@@ -5013,7 +5013,7 @@ async def voice_analyze(request: AudioProcessingRequest):
         logger.error(f"Voice analysis error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/api/v1/voice/simplify", response_model=AIResponseResponse, tags=["Voice Recognition"])
+@voice_router("/simplify", response_model=AIResponseResponse, tags=["Voice Recognition"])
 async def voice_simplify(request: SimplifiedAnswerRequest):
     """Voice Recognition: Simplify AI response"""
     try:
@@ -5044,7 +5044,7 @@ async def voice_end_session(session_id: str):
         logger.error(f"End session error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/api/v1/voice/session/{session_id}/status", tags=["Voice Recognition"])
+@voice_router("/session/{session_id}/status", tags=["Voice Recognition"])
 async def voice_session_status(session_id: str):
     """Voice Recognition: Get session status"""
     try:
@@ -5342,7 +5342,7 @@ async def run_camera_test(config: Optional[CameraConfig] = None):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Camera test failed: {str(e)}")
     
-@app.get("/api/v1/camera/devices", response_model=List[CameraDevice], tags=["Camera"])
+@camera_router("/devices", response_model=List[CameraDevice], tags=["Camera"])
 async def get_available_cameras():
     """Get list of available camera devices"""
     try:
@@ -5351,7 +5351,7 @@ async def get_available_cameras():
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get cameras: {str(e)}")
 
-@app.post("/api/v1/camera/session/start", response_model=CameraSessionResponse, tags=["Camera"])
+@camera_router("/session/start", response_model=CameraSessionResponse, tags=["Camera"])
 async def start_camera_session(request: CameraSessionRequest):
     """Start a camera session with specified device"""
     try:
@@ -5364,7 +5364,7 @@ async def start_camera_session(request: CameraSessionRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to start camera session: {str(e)}")
 
-@app.post("/api/v1/camera/session/stop/{session_id}", tags=["Camera"])
+@camera_router("/session/stop/{session_id}", tags=["Camera"])
 async def stop_camera_session(session_id: str):
     """Stop an active camera session"""
     try:
@@ -5376,7 +5376,7 @@ async def stop_camera_session(session_id: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to stop camera session: {str(e)}")
 
-@app.get("/api/v1/camera/session/status/{session_id}", response_model=CameraStatusResponse, tags=["Camera"])
+@camera_router("/session/status/{session_id}", response_model=CameraStatusResponse, tags=["Camera"])
 async def get_camera_status(session_id: str):
     """Get status of a camera session"""
     try:
@@ -5388,7 +5388,7 @@ async def get_camera_status(session_id: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get camera status: {str(e)}")
 
-@app.get("/api/v1/camera/stream/{session_id}", tags=["Camera"])
+@camera_router("/stream/{session_id}", tags=["Camera"])
 async def get_camera_stream(session_id: str):
     """Get camera stream for a session"""
     try:
@@ -5400,7 +5400,7 @@ async def get_camera_stream(session_id: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get camera stream: {str(e)}")
 
-@app.post("/api/v1/camera/test/{session_id}", tags=["Camera"])
+@camera_router("/test/{session_id}", tags=["Camera"])
 async def test_camera_connection(session_id: str):
     """Test camera connection and capture a test frame"""
     try:
@@ -5413,7 +5413,7 @@ async def test_camera_connection(session_id: str):
 # EXPRESSION DETECTION ROUTES - ENHANCED INTEGRATION
 # ====================================================================
 
-@app.post("/api/v1/expression/detect", response_model=ExpressionDetectionResponse, tags=["Expression Detection"])
+@expression_router("/detect", response_model=ExpressionDetectionResponse, tags=["Expression Detection"])
 async def detect_expression(request: ExpressionDetectionRequest):
     """Detect facial expression from camera frame"""
     try:
@@ -5426,7 +5426,7 @@ async def detect_expression(request: ExpressionDetectionRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Expression detection failed: {str(e)}")
 
-@app.post("/api/v1/expression/start-monitoring/{session_id}", tags=["Expression Detection"])
+@expression_router("/start-monitoring/{session_id}", tags=["Expression Detection"])
 async def start_expression_monitoring(session_id: str, interval_seconds: int = 2):
     """Start continuous expression monitoring for a camera session"""
     try:
@@ -5438,7 +5438,7 @@ async def start_expression_monitoring(session_id: str, interval_seconds: int = 2
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to start monitoring: {str(e)}")
 
-@app.post("/api/v1/expression/stop-monitoring/{monitoring_id}", tags=["Expression Detection"])
+@expression_router("/stop-monitoring/{monitoring_id}", tags=["Expression Detection"])
 async def stop_expression_monitoring(monitoring_id: str):
     """Stop expression monitoring"""
     try:
@@ -5817,7 +5817,7 @@ async def create_system_status(status: SystemStatusMessage):
 async def get_system_statuses():
     return []
 
-@app.post("/api/v1/hands-free/session/start", response_model=HandsFreeSessionResponse, tags=["Hands-Free"])
+@hands_free_router("/session/start", response_model=HandsFreeSessionResponse, tags=["Hands-Free"])
 async def hands_free_start_session(request: HandsFreeSessionRequest):
     """Hands-Free: Start a new automated interview session"""
     try:
@@ -5840,7 +5840,7 @@ async def hands_free_start_session(request: HandsFreeSessionRequest):
         logger.error(f"Hands-free session start error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/api/v1/hands-free/session/{session_id}/activate", tags=["Hands-Free"])
+@hands_free_router("/session/{session_id}/activate", tags=["Hands-Free"])
 async def hands_free_activate(session_id: str):
     """Hands-Free: Activate automation mode"""
     try:
@@ -5849,7 +5849,7 @@ async def hands_free_activate(session_id: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/api/v1/hands-free/session/{session_id}/status", response_model=SessionStatus, tags=["Hands-Free"])
+@hands_free_router("/session/{session_id}/status", response_model=SessionStatus, tags=["Hands-Free"])
 async def hands_free_status(session_id: str):
     """Hands-Free: Get session status"""
     try:
@@ -5857,7 +5857,7 @@ async def hands_free_status(session_id: str):
     except Exception as e:
         raise HTTPException(status_code=404, detail=str(e))
 
-@app.post("/api/v1/hands-free/session/{session_id}/manual-response", tags=["Hands-Free"])
+@hands_free_router("/session/{session_id}/manual-response", tags=["Hands-Free"])
 async def hands_free_manual_response(session_id: str, request: InterviewResponseRequest):
     """Hands-Free: Generate manual interview response (fallback mode)"""
     try:
@@ -5870,7 +5870,7 @@ async def hands_free_manual_response(session_id: str, request: InterviewResponse
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.put("/api/v1/hands-free/session/{session_id}/settings", tags=["Hands-Free"])
+@hands_free_router("/session/{session_id}/settings", tags=["Hands-Free"])
 async def hands_free_update_settings(session_id: str, settings: SessionSettings):
     """Hands-Free: Update session settings"""
     try:
@@ -5879,7 +5879,7 @@ async def hands_free_update_settings(session_id: str, settings: SessionSettings)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/api/v1/hands-free/session/{session_id}"
+@hands_free_router("/session/{session_id}"
 "/insights", response_model=SessionInsights, tags=["Hands-Free"])
 async def hands_free_insights(session_id: str):
     """Hands-Free: Get session insights"""
@@ -5888,7 +5888,7 @@ async def hands_free_insights(session_id: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/api/v1/hands-free/system/health", response_model=SystemHealthCheck, tags=["Hands-Free"])
+@hands_free_router("/system/health", response_model=SystemHealthCheck, tags=["Hands-Free"])
 async def hands_free_health():
     """Hands-Free: System health check"""
     try:
@@ -5896,7 +5896,7 @@ async def hands_free_health():
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/api/v1/hands-free/session/{session_id}/stop", tags=["Hands-Free"])
+@hands_free_router("/session/{session_id}/stop", tags=["Hands-Free"])
 async def hands_free_stop(session_id: str):
     """Hands-Free: Stop session and cleanup"""
     try:
@@ -5923,7 +5923,7 @@ async def get_sample_key_insight():
     )
     return sample
 
-@app.post("/api/v1/key-insights/analyze", response_model=KeyInsightResponse, tags=["Key Insights"])
+@key_insights_router("/analyze", response_model=KeyInsightResponse, tags=["Key Insights"])
 async def key_insights_analyze(request: KeyInsightRequest, image_file: Optional[UploadFile] = File(None)):
     """Key Insights: Generate insights from meeting context and optional image"""
     try:
@@ -5948,7 +5948,7 @@ async def key_insights_analyze(request: KeyInsightRequest, image_file: Optional[
         logger.error(f"Key Insights analyze error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/api/v1/key-insights/status/{insight_id}", tags=["Key Insights"])
+@key_insights_router("/status/{insight_id}", tags=["Key Insights"])
 async def key_insights_status(insight_id: str):
     """Key Insights: Get analysis status"""
     try:
@@ -5957,7 +5957,7 @@ async def key_insights_status(insight_id: str):
         logger.error(f"Key Insights status error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/api/v1/key-insights/history/{meeting_id}", tags=["Key Insights"])
+@key_insights_router("/history/{meeting_id}", tags=["Key Insights"])
 async def key_insights_history(meeting_id: str):
     """Key Insights: Get all insights history for a meeting"""
     try:
@@ -5979,7 +5979,7 @@ async def key_insights_delete(insight_id: str):
         logger.error(f"Key Insights delete error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/api/v1/key-insights/batch-analyze", response_model=List[KeyInsightResponse], tags=["Key Insights"])
+@key_insights_router("/batch-analyze", response_model=List[KeyInsightResponse], tags=["Key Insights"])
 async def key_insights_batch_analyze(
     meeting_contexts: List[str],
     image_files: Optional[List[UploadFile]] = File(None)
@@ -6165,7 +6165,7 @@ async def get_session_data():
     """
     return SessionData(session_id="dummy", user="placeholder")
 
-@app.post("/api/v1/invisibility/mode/enable", response_model=InvisibilityModeResponse, tags=["Invisibility Mode"])
+@invisibility_router.post("/invisibility/mode/enable", response_model=InvisibilityModeResponse, tags=["Invisibility Mode"])
 async def enable_invisibility_mode(request: InvisibilityModeRequest, background_tasks: BackgroundTasks):
     """Enable invisibility mode for the interview AI assistant"""
     try:
@@ -6196,7 +6196,7 @@ async def enable_invisibility_mode(request: InvisibilityModeRequest, background_
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to enable invisibility mode: {str(e)}")
 
-@app.post("/api/v1/invisibility/mode/disable", response_model=InvisibilityModeResponse, tags=["Invisibility Mode"])
+@invisibility_router.post("/invisibility/mode/disable", response_model=InvisibilityModeResponse, tags=["Invisibility Mode"])
 async def disable_invisibility_mode(session_id: str, background_tasks: BackgroundTasks):
     """Disable invisibility mode and restore normal UI visibility"""
     try:
@@ -6219,7 +6219,7 @@ async def disable_invisibility_mode(session_id: str, background_tasks: Backgroun
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to disable invisibility mode: {str(e)}")
 
-@app.post("/api/v1/invisibility/recording/start", response_model=RecordingSessionResponse, tags=["Invisibility Mode"])
+@invisibility_router.post("/invisibility/recording/start", response_model=RecordingSessionResponse, tags=["Invisibility Mode"])
 async def start_invisible_recording(request: RecordingSessionRequest, background_tasks: BackgroundTasks):
     """Start invisible recording session with specified configuration"""
     try:
@@ -6245,7 +6245,7 @@ async def start_invisible_recording(request: RecordingSessionRequest, background
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to start invisible recording: {str(e)}")
 
-@app.post("/api/v1/invisibility/ui/hide", response_model=UIVisibilityResponse, tags=["Invisibility Mode"])
+@invisibility_router.post("/invisibility/ui/hide", response_model=UIVisibilityResponse, tags=["Invisibility Mode"])
 async def hide_ui_components(request: UIVisibilityRequest):
     """Hide specified UI components to maintain invisibility during screen sharing"""
     try:
@@ -6266,7 +6266,7 @@ async def hide_ui_components(request: UIVisibilityRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to hide UI components: {str(e)}")
 
-@app.get("/api/v1/invisibility/session/{session_id}/status", response_model=SessionStatusResponse, tags=["Invisibility Mode"])
+@invisibility_router.get("/invisibility/session/{session_id}/status", response_model=SessionStatusResponse, tags=["Invisibility Mode"])
 async def get_invisibility_session_status(session_id: str):
     """Get current status of invisibility session including recording and UI state"""
     try:
@@ -6292,7 +6292,7 @@ async def get_invisibility_session_status(session_id: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get session status: {str(e)}")
 
-@app.post("/api/v1/invisibility/insights/generate", response_model=InsightGenerationResponse, tags=["Invisibility Mode"])
+@invisibility_router.post("/invisibility/insights/generate", response_model=InsightGenerationResponse, tags=["Invisibility Mode"])
 async def generate_background_insights(request: InsightGenerationRequest, background_tasks: BackgroundTasks):
     """Generate AI insights from captured data without showing progress to interviewer"""
     try:
@@ -6315,7 +6315,7 @@ async def generate_background_insights(request: InsightGenerationRequest, backgr
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to start insight generation: {str(e)}")
 
-@app.get("/api/v1/invisibility/insights/{session_id}", tags=["Invisibility Mode"])
+@invisibility_router.get("/invisibility/insights/{session_id}", tags=["Invisibility Mode"])
 async def get_generated_insights(session_id: str):
     """Retrieve generated insights for a completed invisibility session"""
     try:
@@ -6354,7 +6354,7 @@ async def cleanup_invisibility_session(session_id: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to cleanup session: {str(e)}")
 
-@app.get("/api/v1/invisibility/system/performance", response_model=PerformanceMetrics, tags=["Invisibility Mode"])
+@invisibility_router.get("/invisibility/system/performance", response_model=PerformanceMetrics, tags=["Invisibility Mode"])
 async def get_performance_metrics():
     """Get system performance metrics for invisibility mode"""
     try:
